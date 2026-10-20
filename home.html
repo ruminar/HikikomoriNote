@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ひきこもりnote</title>
+  <link rel="stylesheet" href="src/home.css">
+  <script defer src="src/common.js"></script>
+  <script defer src="src/platform/browser-api.js"></script>
+  <script defer src="src/home.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div><h1>ひきこもりnote</h1><p class="muted">枠を超えたら落選したので、殻を作りました。</p></div>
+      <button id="normal" class="secondary" disabled>通常のnoteを表示（OFF）</button>
+    </header>
+    <p id="mode" class="muted">設定とホームの転送状態を確認しています…</p>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section>
+      <h2>自分の記事</h2>
+      <p id="user-status">下の設定でnoteユーザー名を登録してください。</p>
+      <b><a id="profile" hidden>公開プロフィールで自分の記事を見る</a></b>
+      <p class="muted">v0.1.0では記事一覧を取得せず、公開プロフィールをご案内します。</p>
+      <p class="muted">投稿・下書き管理・ログインは「通常のnoteを表示（OFF）」から、note公式画面で操作してください。</p>
+    </section>
+    <section>
+      <h2>ユーザー設定</h2>
+      <form id="settings">
+        <label for="note-user">noteユーザー名 または 公開プロフィールURL</label>
+        <input id="note-user" type="text" maxlength="256" autocomplete="off" spellcheck="false" placeholder="例：ruminar または https://note.com/ruminar" disabled>
+        <p class="muted">空欄で保存すると登録を解除します。ブラウザ内にのみ保存します。</p>
+        <button id="save" type="submit" disabled>ユーザー設定を保存</button>
+      </form>
+    </section>
+    <button id="enable" hidden disabled>ひきこもりnoteをONにする</button>
+    <button id="retry" class="secondary">状態を再確認</button>
+    <p class="muted">OFFから再開するときは、ブラウザの拡張アイコンからこの画面を開けます。</p>
+    <footer>非公式拡張 · v0.1.0 · note株式会社とは関係ありません。<br>この画面は拡張内にあり、noteの通常ホームを読み込みません。障害時は拡張を無効化すると通常のnoteを利用できます。</footer>
+  </main>
+</body>
+</html>

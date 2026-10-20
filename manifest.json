@@ -3,7 +3,16 @@
   "name": "ひきこもりnote",
   "version": "0.1.0",
   "description": "枠を超えたら落選したので、殻を作りました。noteのホームを自分用に整える非公式拡張です。",
-  "permissions": ["storage"],
+  "permissions": ["storage", "declarativeNetRequestWithHostAccess"],
+  "host_permissions": ["https://note.com/*"],
+  "background": { "service_worker": "src/background.js" },
+  "action": { "default_title": "ひきこもりnoteを開く" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none';"
+  },
+  "web_accessible_resources": [
+    { "resources": ["home.html"], "matches": ["https://note.com/*"] }
+  ],
   "icons": {
   "16": "icons/icon16.png",
   "32": "icons/icon32.png",
@@ -14,8 +23,7 @@
     {
       "matches": ["https://note.com/*"],
       "js": ["src/common.js", "src/platform/browser-api.js", "src/content.js"],
-      "css": ["src/content.css"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ]
 }

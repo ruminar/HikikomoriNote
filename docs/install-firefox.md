@@ -1,0 +1,33 @@
+# ひきこもりnote v0.1.0 — Firefox版の試用手順
+
+対象はデスクトップ版Firefox 140以降です。このZIPは**未署名の開発・試用版**です。Firefoxの通常版に恒久インストールする配布物ではありません。
+
+## 一時的に読み込む
+
+1. Firefox版ZIPをダウンロードして、任意のフォルダに解凍します。
+2. Firefoxで `about:debugging#/runtime/this-firefox` を開きます。
+3. 「一時的なアドオンを読み込む」を押し、解凍したフォルダの `manifest.json` を選びます。
+4. ブラウザの拡張機能メニューから「ひきこもりnote」を開きます。
+5. 「設定と転送状態を確認しました。」が表示されることを確認します。サイトへのアクセス権限が必要な場合は `https://note.com` へのアクセスを許可します。
+6. noteユーザー名または公開プロフィールURLを保存します。
+7. `https://note.com/` を開くか、プロフィールのnoteロゴを押すと専用ホームへ移動します。
+
+Firefoxを終了すると一時アドオンは外れます。再度試すときは同じ手順で読み込んでください。恒久インストールや設定永続性を検証する方法ではありません。設定の移行・保持をこの一時読込だけで保証しないでください。
+
+「通常のnoteを表示（OFF）」で通常ホームを開けます。再開は拡張アイコンから専用ホームを開いてONにします。動作に問題がある場合は `about:debugging` から拡張を削除し、noteを再読み込みします。
+
+## noteから継続利用向けに配布する場合
+
+Firefox通常版で継続利用してもらうには、Mozillaの署名を受けたXPIが必要です。AMOのストア掲載なし（自己配布／unlisted）の署名を選べば、署名済みXPIをnoteの配布案内から提供できます。署名・申請はこの版では未実施です。ZIPの拡張子を `.xpi` に変えても署名済みにはなりません。
+
+- [Mozilla：一時インストール](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/)
+- [Mozilla：署名と配布](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/)
+- [Mozilla：自己配布](https://extensionworkshop.com/documentation/publish/self-distribution/)
+
+## この版の機能と確認状況
+
+noteの通常ホームへの移動を拡張専用ホームに転送し、ユーザー名の保存・公開プロフィールへのリンク・ON/OFFを提供します。記事一覧取得、タグ収集、AI、スキ操作はありません。note全体の通信を遮断するものではなく、プロフィールや記事、別URLのAPIへの通信は継続します。
+
+非公式拡張です。Cookie・認証情報・記事本文を収集しません。設定はブラウザ内に保存します。
+
+Firefox実機の動作・通信・権限の確認は未実施です。Chrome/Edgeは作者より動作確認済みとの報告がありますが、Firefox版は別途確認が必要です。
