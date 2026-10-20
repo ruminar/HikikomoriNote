@@ -1,0 +1,4 @@
+/* 通常DOMは削除せず、専用ホームが完成した間だけ隠す。 */
+html[data-hikikomori-note-home="active"] > body {
+  display: none !important;
+}
