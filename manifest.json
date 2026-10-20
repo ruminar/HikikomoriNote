@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "ひきこもりnote",
+  "name": "__MSG_extensionName__",
+  "default_locale": "ja",
   "version": "0.1.0",
-  "description": "枠を超えたら落選したので、殻を作りました。noteのホームを自分用に整える非公式拡張です。",
+  "description": "__MSG_extensionDescription__",
   "permissions": ["storage", "declarativeNetRequestWithHostAccess"],
   "host_permissions": ["https://note.com/*"],
   "background": { "service_worker": "src/background.js" },

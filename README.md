@@ -81,6 +81,7 @@ ON時はホームURLそのものへの事前取得など、文書以外のリク
 ## 構成・検証
 
 - `manifest.json`：Chrome/Edge向けManifest V3。
+- `_locales/ja/messages.json`：拡張名・説明の日本語定義。ストアで日本語を検出するために使用します。
 - `manifests/firefox.json`：Firefox向けの背景処理・拡張ID・最低版・データ収集なしの宣言を上書きする生成用定義。
 - `src/common.js`：URL判定、ユーザー名検証、設定の正規化。
 - `src/platform/browser-api.js`：ブラウザ拡張APIのアダプター。
@@ -95,7 +96,7 @@ ON時はホームURLそのものへの事前取得など、文書以外のリク
 ./scripts/check.ps1
 ```
 
-または `node --test`。自動テスト28件が成功しています。テストのDOM・APIは代替実装であり、note実サイトの描画・SPA・通信転送の実動作を保証しません。2026-10-20に作者からChrome/Edgeの基本機能が動作したとの報告がありました。今回のアイコンによるON復帰、通信の詳細や再起動などの確認項目は別途確認が必要です。Firefox実機の受け入れ確認は未実施です。
+または `node --test`。自動テスト29件が成功しています。テストのDOM・APIは代替実装であり、note実サイトの描画・SPA・通信転送の実動作を保証しません。2026-10-20に作者からChrome/Edgeの基本機能が動作したとの報告がありました。今回のアイコンによるON復帰、通信の詳細や再起動などの確認項目は別途確認が必要です。Firefox実機の受け入れ確認は未実施です。
 
 実装時に参照した公式資料：[コンテンツスクリプト](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts)、[storage](https://developer.chrome.com/docs/extensions/reference/api/storage)、[通信前の転送ルール](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest)、[拡張ページの公開範囲](https://developer.chrome.com/docs/extensions/reference/manifest/web-accessible-resources)。利用・公開前には[noteの最新規約](https://note.com/terms)と実際の挙動を再確認してください。ストア公開や規約適合性の確認完了を示すものではありません。
 

@@ -9,6 +9,26 @@ const { pathToFileURL } = require("node:url");
 const root = path.resolve(__dirname, "..");
 const packager = () => import(pathToFileURL(path.join(root, "scripts/package.mjs")).href);
 const flush = () => new Promise(resolve => setImmediate(resolve));
+test("両ブラウザの日本語メタデータが既存表示のまま解決でき、配布物にも含まれる", async t => {
+  const { createManifest, buildPackage } = await packager();
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), "hikikomori-note-locale-test-"));
+  assert.equal(path.dirname(temp), path.resolve(os.tmpdir()));
+  t.after(() => fs.rm(temp, { recursive: true, force: true }));
+  for (const browser of ["chromium", "firefox"]) {
+    const manifest = await createManifest(browser);
+    assert.equal(manifest.default_locale, "ja");
+    const output = await buildPackage(browser, temp);
+    const messages = JSON.parse(await fs.readFile(path.join(output, "_locales", manifest.default_locale, "messages.json"), "utf8"));
+    for (const [field, expected] of [
+      ["name", "ひきこもりnote"],
+      ["description", "枠を超えたら落選したので、殻を作りました。noteのホームを自分用に整える非公式拡張です。"]
+    ]) {
+      const match = /^__MSG_(.+)__$/.exec(manifest[field]);
+      assert.ok(match, `${field}が言語参照になっていること`);
+      assert.equal(messages[match[1]].message, expected);
+    }
+  }
+});
 test("FirefoxのManifestだけ背景処理・ID・データ収集宣言を変更し、Chromium版は維持", async () => {
   const { createManifest } = await packager();
   const chromium = await createManifest("chromium");
