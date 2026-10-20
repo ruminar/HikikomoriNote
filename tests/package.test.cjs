@@ -57,6 +57,8 @@ test("Firefox Event Page：importScriptsなし・browser名前空間だけで起
   assert.deepEqual(activeRules.addRules, []);
   assert.equal(onMessage({ type: "get-state" }, { id: "runtime-uuid", url: getURL("home.html") }, () => {}), false);
   onAction(); await flush(); assert.equal(opened, getURL("home.html"));
+  assert.equal(stored.enabled, true); assert.equal(stored.noteUserId, "ruminar");
+  assert.equal(activeRules.addRules.length, 2);
 });
 test("両ブラウザの配布フォルダはmanifest直下・必要ファイルのみで再生成可能", async t => {
   const { buildPackage, runtimeFiles } = await packager();

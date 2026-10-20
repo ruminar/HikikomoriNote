@@ -51,7 +51,7 @@ Firefox向けのManifest V3版を追加しています。機能はEdge/Chrome版
 - 登録したユーザーの公開プロフィールから、自分の記事を開けます。
 - ユーザー名とON/OFFをブラウザ内の拡張専用ストレージに保存します。
 - 「通常のnoteを表示（OFF）」は転送ルールの解除と保存が成功してから通常ホームを開きます。
-- OFFからの再開はブラウザの拡張アイコンで専用ホームを開き、「ひきこもりnoteをONにする」を押します。
+- OFFからの再開はブラウザの拡張アイコンを押すだけです。ONの保存と転送適用を完了してから専用ホームを開きます。画面下部に別のONボタンはありません。
 - プロフィール・記事・編集・ログイン・購入・設定など、ホーム以外のURLは転送しません。
 
 **記事一覧の自動取得は未対応です。** noteの実DOMが未確認のため、仕様F-02のフォールバックとして公開プロフィールへのリンクを提供します。投稿・下書き管理はOFFにして公式ホームから操作してください。タグ登録・タグ収集・キャッシュ・AI・スキ操作はこの版に含めません。
@@ -83,7 +83,7 @@ ON時はホームURLそのものへの事前取得など、文書以外のリク
 ./scripts/check.ps1
 ```
 
-または `node --test`。自動テスト25件が成功しています。テストのDOM・APIは代替実装であり、note実サイトの描画・SPA・通信転送の実動作を保証しません。2026-10-20に作者からChrome/Edgeの基本機能が動作したとの報告がありました。通信の詳細や再起動などの確認項目は別途確認が必要です。Firefox実機の受け入れ確認は未実施です。
+または `node --test`。自動テスト28件が成功しています。テストのDOM・APIは代替実装であり、note実サイトの描画・SPA・通信転送の実動作を保証しません。2026-10-20に作者からChrome/Edgeの基本機能が動作したとの報告がありました。今回のアイコンによるON復帰、通信の詳細や再起動などの確認項目は別途確認が必要です。Firefox実機の受け入れ確認は未実施です。
 
 実装時に参照した公式資料：[コンテンツスクリプト](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts)、[storage](https://developer.chrome.com/docs/extensions/reference/api/storage)、[通信前の転送ルール](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest)、[拡張ページの公開範囲](https://developer.chrome.com/docs/extensions/reference/manifest/web-accessible-resources)。利用・公開前には[noteの最新規約](https://note.com/terms)と実際の挙動を再確認してください。ストア公開や規約適合性の確認完了を示すものではありません。
 

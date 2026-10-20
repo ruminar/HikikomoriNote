@@ -169,14 +169,14 @@ test("ストレージ読込失敗・拡張無効時はnoteの操作を妨げな�
 });
 function homeFixture(options = {}) {
   const nodes = new Map();
-  for (const id of ["normal", "mode", "status", "profile", "user-status", "note-user", "save", "settings", "enable", "retry"]) nodes.set(id, {
+  for (const id of ["normal", "mode", "status", "profile", "user-status", "note-user", "save", "settings", "retry"]) nodes.set(id, {
     value: "", disabled: true, hidden: false, removeAttribute(name) { delete this[name]; }, focus() { this.focused = true; }
   });
   const moves = [], patches = [];
-  let state = { enabled: true, noteUserId: "ruminar" };
+  let state = { enabled: true, noteUserId: "ruminar", ...options.state };
   const c = context({
-    document: { getElementById: id => nodes.get(id), querySelectorAll: () => ["normal", "note-user", "save", "enable", "retry"].map(id => nodes.get(id)) },
-    location: { assign: url => moves.push(url) },
+    document: { getElementById: id => nodes.get(id), querySelectorAll: () => ["normal", "note-user", "save", "retry"].map(id => nodes.get(id)) },
+    location: { assign: url => moves.push(url), hash: options.hash ?? "" },
     HikikomoriNotePlatform: {
       getState: async () => { if (options.stateError) throw new Error("state failed"); return state; },
       save: async patch => {
@@ -223,7 +223,13 @@ test("背景処理は専用ホームからのメッセージだけを受理し�
     HikikomoriNoteBackgroundPlatform: {
       onInstalled(fn) { installs = fn; }, onStartup(fn) { startups = fn; }, onAction(fn) { action = fn; },
       onMessage(fn) { handler = fn; }, isHomeSender: sender => sender.url === "extension-home",
-      openHome: async () => { opened++; }
+      openHome: async failed => {
+        assert.equal(failed, false);
+        assert.equal(f.value.enabled, true);
+        assert.equal(f.rules.length, 2);
+        assert.equal(f.value.noteUserId, "");
+        opened++;
+      }
     }
   });
   c.HikikomoriNoteRouting = { createController: () => f.controller };
@@ -233,7 +239,34 @@ test("背景処理は専用ホームからのメッセージだけを受理し�
   assert.equal(answer, undefined);
   assert.equal(handler({ type: "save-settings", patch: { enabled: false } }, { url: "extension-home" }, value => { answer = value; }), true);
   await flush(); assert.equal(answer.ok, true); assert.equal(f.rules.length, 0);
-  installs(); startups(); action(); await flush(); assert.equal(opened, 1); assert.equal(f.rules.length, 0);
+  installs(); startups(); action(); await flush(); assert.equal(opened, 1); assert.equal(f.rules.length, 2);
+});
+test("アイコンのON保存が失敗した時も専用ホームを開き、失敗の印を渡す", async () => {
+  let action, opened;
+  const f = controllerFixture({ enabled: false, noteUserId: "ruminar" }, { storeError: true });
+  const c = context({
+    importScripts() {},
+    HikikomoriNoteBackgroundPlatform: {
+      onInstalled() {}, onStartup() {}, onMessage() {},
+      onAction(fn) { action = fn; },
+      openHome: async failed => { opened = failed; }
+    }
+  });
+  c.HikikomoriNoteRouting = { createController: () => f.controller };
+  vm.runInContext(source("src/background.js"), c); await flush();
+  action(); await flush();
+  assert.equal(opened, true); assert.equal(f.value.enabled, false); assert.deepEqual(f.rules, []);
+});
+test("OFFの専用ホームを直接開いてもONへ変更せず、アイコンからの再開を案内", async () => {
+  const f = homeFixture({ state: { enabled: false } }); await flush();
+  assert.equal(f.patches.length, 0);
+  assert.match(f.nodes.get("mode").textContent, /拡張アイコン/);
+  assert.equal(source("home.html").includes('id="enable"'), false);
+});
+test("アイコンからのON切替失敗を画面に表示", async () => {
+  const f = homeFixture({ state: { enabled: false }, hash: "#activation-failed" }); await flush();
+  assert.match(f.nodes.get("status").textContent, /ONへの切り替えに失敗/);
+  assert.equal(f.patches.length, 0);
 });
 test("アダプターは自拡張のhome.htmlだけを設定メッセージ送信元と認める", () => {
   const c = context({ chrome: { runtime: { id: "test", getURL: file => `chrome-extension://test/${file}` } } });

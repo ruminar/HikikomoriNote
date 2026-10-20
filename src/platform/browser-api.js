@@ -34,7 +34,9 @@
     onInstalled: listener => api.runtime.onInstalled.addListener(listener),
     onStartup: listener => api.runtime.onStartup.addListener(listener),
     onAction: listener => api.action.onClicked.addListener(listener),
-    openHome: () => api.tabs.create({ url: api.runtime.getURL("home.html") }),
+    openHome: (activationFailed = false) => api.tabs.create({
+      url: api.runtime.getURL("home.html") + (activationFailed ? "#activation-failed" : "")
+    }),
     isHomeSender: sender => sender?.id === api.runtime.id &&
       sender.url?.split(/[?#]/)[0] === api.runtime.getURL("home.html")
   });

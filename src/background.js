@@ -10,7 +10,18 @@ function reconcile() {
 }
 port.onInstalled(reconcile);
 port.onStartup(reconcile);
-port.onAction(() => { void port.openHome().catch(error => console.warn(error)); });
+port.onAction(() => {
+  void (async () => {
+    let activationFailed = false;
+    try { await controller.save({ enabled: true }); }
+    catch (error) {
+      activationFailed = true;
+      console.warn("ひきこもりnote：ONへの切り替えに失敗しました。", error);
+    }
+    // ONの保存・転送適用を終えてから開く。失敗時も専用画面で案内する。
+    await port.openHome(activationFailed);
+  })().catch(error => console.warn(error));
+});
 // note上のコンテンツスクリプトや外部ページには設定変更を許可しない。
 port.onMessage((message, sender, respond) => {
   if (!port.isHomeSender(sender)) return false;

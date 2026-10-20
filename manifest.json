@@ -6,7 +6,7 @@
   "permissions": ["storage", "declarativeNetRequestWithHostAccess"],
   "host_permissions": ["https://note.com/*"],
   "background": { "service_worker": "src/background.js" },
-  "action": { "default_title": "ひきこもりnoteを開く" },
+  "action": { "default_title": "ひきこもりnoteをONにして開く" },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none';"
   },
