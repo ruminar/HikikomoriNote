@@ -3,8 +3,10 @@
   "use strict";
   const settingsKey = "hikikomoriNote.settings.v1";
   function isHome(url) {
-    const parsed = new URL(url);
-    return parsed.origin === "https://note.com" && parsed.pathname === "/";
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === "https://note.com" && parsed.pathname === "/";
+    } catch { return false; }
   }
   function normalizeUserId(value) {
     let id = String(value ?? "").trim();
@@ -22,14 +24,25 @@
     }
     return id;
   }
+  function isDashboard(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === "https://note.com" &&
+        (parsed.pathname === "/dashboard" || parsed.pathname.startsWith("/dashboard/"));
+    } catch { return false; }
+  }
+  function shouldRedirect(url, settings) {
+    return settings?.enabled === true &&
+      (isHome(url) || (settings.dashboardDisabled === true && isDashboard(url)));
+  }
   function readSettings(value) {
     let noteUserId = "";
     try { noteUserId = normalizeUserId(value?.noteUserId); } catch { /* 破損値は空欄へ */ }
-    return { enabled: value?.enabled !== false, noteUserId };
+    return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true };
   }
   function profileUrl(id) {
     const normalized = normalizeUserId(id);
     return normalized ? `https://note.com/${encodeURIComponent(normalized)}` : null;
   }
-  globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, normalizeUserId, readSettings, profileUrl });
+  globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl });
 })();

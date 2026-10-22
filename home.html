@@ -30,6 +30,11 @@
         <label for="note-user">noteユーザー名 または 公開プロフィールURL</label>
         <input id="note-user" type="text" maxlength="256" autocomplete="off" spellcheck="false" placeholder="例：ruminar または https://note.com/ruminar" disabled>
         <p class="muted">空欄で保存すると登録を解除します。ブラウザ内にのみ保存します。</p>
+        <label class="check-option" for="dashboard-disabled">
+          <input id="dashboard-disabled" type="checkbox" aria-describedby="dashboard-help" disabled>
+          ダッシュボードを無効化する
+        </label>
+        <p class="muted" id="dashboard-help">アクセス状況・提案・売上・振込・販売履歴を含むダッシュボード全体への移動を専用ホームへ戻し、note上のダッシュボードボタンを隠します。「通常のnoteを表示（OFF）」では制限を解除します。</p>
         <button id="save" type="submit" disabled>ユーザー設定を保存</button>
       </form>
     </section>

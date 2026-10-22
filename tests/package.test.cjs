@@ -68,7 +68,7 @@ test("Firefox Event Page：importScriptsなし・browser名前空間だけで起
   for (const file of manifest.background.scripts) vm.runInContext(await fs.readFile(path.join(root, file), "utf8"), c, { filename: file });
   await flush();
   assert.equal(activeRules.addRules.length, 2);
-  assert.deepEqual(activeRules.removeRuleIds, [1, 2]);
+  assert.deepEqual(activeRules.removeRuleIds, [1, 2, 3, 4]);
   assert.equal(activeRules.addRules[0].action.redirect.extensionPath, "/home.html");
   const response = await new Promise(resolve => {
     assert.equal(onMessage({ type: "save-settings", patch: { enabled: false, noteUserId: "ruminar" } }, { id, url: getURL("home.html") }, resolve), true);
@@ -89,7 +89,7 @@ test("両ブラウザの配布フォルダはmanifest直下・必要ファイル
   for (const browser of ["chromium", "firefox"]) {
     const output = await buildPackage(browser, temp);
     const manifest = JSON.parse(await fs.readFile(path.join(output, "manifest.json"), "utf8"));
-    assert.equal(manifest.version, "0.1.0");
+    assert.equal(manifest.version, "0.1.1");
     for (const file of [...runtimeFiles, "INSTALL.md"]) assert.ok((await fs.stat(path.join(output, file))).isFile());
     for (const file of manifest.background.scripts ?? [manifest.background.service_worker]) assert.ok((await fs.stat(path.join(output, file))).isFile());
     for (const forbidden of [".git", "tests", "scripts", "README.md"]) await assert.rejects(fs.stat(path.join(output, forbidden)), { code: "ENOENT" });

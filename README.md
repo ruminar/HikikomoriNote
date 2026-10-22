@@ -1,4 +1,4 @@
-# ひきこもりnote v0.1.0
+# ひきこもりnote 0.1.1
 
 **枠を超えたら落選したので、殻を作りました。**
 
@@ -18,6 +18,16 @@ noteのホームを、自分の記事への導線とユーザー設定だけの�
 通常のホームを見たくなったら、いつでも「通常のnoteを表示（OFF）」で戻れます。
 何を見るか、いつ戻るかは、利用者自身が決めます。
 
+## 0.1.1の追加機能
+
+専用ホームのユーザー設定に「ダッシュボードを無効化する」を追加しました。チェックを入れて「ユーザー設定を保存」を押すと、`https://note.com/dashboard` とその配下すべてを専用ホームへ転送し、note上のダッシュボードボタンを非表示にします。アクセス状況・あなたへの提案・バッジ・売上管理・振込管理・販売履歴をまとめて対象にします。
+
+初期状態はチェックなしです。解除して保存すると通常どおり利用できます。「通常のnoteを表示（OFF）」でも制限を解除し、拡張アイコンからONへ戻すと保存済みの設定を再適用します。記事・プロフィール・アカウント設定は対象外です。設定はブラウザ内だけに保存します。
+
+0.1.1は更新申請用の候補です。ダッシュボード機能の実サイトでの手動確認は未記録です。更新後は拡張機能とnoteのタブを再読み込みしてください。変更履歴は [CHANGELOG.md](CHANGELOG.md) に記載しています。
+
+0.1.0はEdge公開済み・Chrome審査通過・Firefox審査待ちです（利用者報告）。0.1.1はまだ各ストアへ提出していません。Firefoxの0.1.0提出物は維持します。
+
 ## ローカル導入
 
 Visual Studio、npmは不要です。Edge/Chromeはこのフォルダをそのまま読み込めます。Firefoxは後述のFirefox用フォルダを使用してください。
@@ -36,12 +46,12 @@ Visual Studio、npmは不要です。Edge/Chromeはこのフォルダをその�
 
 Firefox向けのManifest V3版を追加しています。機能はEdge/Chrome版と同じです。Firefox実機での動作確認はまだです。
 
-1. Firefox版ZIPを解凍するか、下の生成コマンドで `dist/HikikomoriNote-0.1.0-firefox/` を作成します。
+1. Firefox版ZIPを解凍するか、下の生成コマンドで `dist/HikikomoriNote-0.1.1-firefox/` を作成します。
 2. Firefoxで `about:debugging#/runtime/this-firefox` を開きます。
 3. 「一時的なアドオンを読み込む」から、**Firefox用フォルダ内の** `manifest.json` を選びます。リポジトリ直下のManifestはChromium用です。
 4. 拡張アイコンから専用ホームを開き、状態確認後、ユーザー名を保存して使用します。noteへのサイトアクセス権限が必要な場合は許可します。
 
-未署名の一時アドオンはFirefox終了時に外れます。一般利用者に継続利用してもらう配布にはMozillaの署名が必要です。ストアに掲載しない自己配布（unlisted）の署名も選べます。今回は署名・申請を行っていません。[Mozillaの署名と配布](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/)
+未署名の一時アドオンはFirefox終了時に外れます。一般利用者に継続利用してもらう配布にはMozillaの署名が必要です。ストアに掲載しない自己配布（unlisted）の署名も選べます。0.1.0はAMOへ申請済みで審査待ちです。ここで生成する0.1.1 ZIPは未署名・未提出です。[Mozillaの署名と配布](https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/)
 
 詳しい手順：[Firefox版](docs/install-firefox.md)、[Edge/Chrome版](docs/install-chromium.md)。noteに導入手順を書く際にも利用できます。
 
@@ -55,16 +65,16 @@ Firefox向けのManifest V3版を追加しています。機能はEdge/Chrome版
 ./scripts/package.ps1 -Browser firefox
 ```
 
-検証後、`dist/HikikomoriNote-0.1.0-chromium/` と `dist/HikikomoriNote-0.1.0-firefox/` および各フォルダ名のZIPを作成します。ZIP直下に `manifest.json` が入り、必要な実行ファイル・アイコン・ライセンス・各ブラウザ向けの `INSTALL.md` だけを含みます。再実行すると同名の生成フォルダとZIPを置き換えます。FirefoxのZIPは未署名の試用用であり、署名済みXPIではありません。
+検証後、`dist/HikikomoriNote-0.1.1-chromium/` と `dist/HikikomoriNote-0.1.1-firefox/` および各フォルダ名のZIPを作成します。ZIP直下に `manifest.json` が入り、必要な実行ファイル・アイコン・ライセンス・各ブラウザ向けの `INSTALL.md` だけを含みます。再実行すると同名の生成フォルダとZIPを置き換えます。FirefoxのZIPは未署名の試用用であり、署名済みXPIではありません。
 
-## v0.1.0でできること
+## 現在できること
 
 - ON時は `https://note.com/` への通常のページ移動を、通信前のブラウザルールで拡張内の `home.html` へ転送します。クエリ文字列・ハッシュ付きも対象です。アドレスバーは拡張専用URLになります。
 - 登録したユーザーの公開プロフィールから、自分の記事を開けます。
-- ユーザー名とON/OFFをブラウザ内の拡張専用ストレージに保存します。
+- ユーザー名・ON/OFF・ダッシュボード無効化の選択をブラウザ内の拡張専用ストレージに保存します。
 - 「通常のnoteを表示（OFF）」は転送ルールの解除と保存が成功してから通常ホームを開きます。
 - OFFからの再開はブラウザの拡張アイコンを押すだけです。ONの保存と転送適用を完了してから専用ホームを開きます。画面下部に別のONボタンはありません。
-- プロフィール・記事・編集・ログイン・購入・設定など、ホーム以外のURLは転送しません。
+- プロフィール・記事・編集・ログイン・購入・設定は転送しません。ダッシュボードは無効化を選択した場合のみ転送します。
 
 **記事一覧の自動取得は未対応です。** noteの実DOMが未確認のため、仕様F-02のフォールバックとして公開プロフィールへのリンクを提供します。投稿・下書き管理はOFFにして公式ホームから操作してください。タグ登録・タグ収集・キャッシュ・AI・スキ操作はこの版に含めません。
 
@@ -72,7 +82,7 @@ Firefox向けのManifest V3版を追加しています。機能はEdge/Chrome版
 
 権限は `storage`、`declarativeNetRequestWithHostAccess`、ホスト権限 `https://note.com/*` です。保存・転送に使用し、Cookie・認証情報・記事本文を収集しません。背景処理（ChromiumのService Worker／FirefoxのEvent Page）が設定と動的転送ルールをまとめて更新します。ルールはインストール済み拡張のブラウザ再起動後も残り、起動時に保存値と整合させます。Firefoxの一時アドオンは終了時に外れるため、この対象外です。初回導入時は上記の準備完了を確認してから使用してください。
 
-note上では `document_start` のコンテンツスクリプトがホームへの通常クリックを捕捉し、サイト側のSPA処理より先に専用ホームへ移動します。キャンセル可能なNavigationイベントも扱い、履歴等でホームに到着した場合は専用ホームへ移動する補助処理を使います。noteのDOMを隠す旧方式は廃止しました。
+note上では `document_start` のコンテンツスクリプトがホームへの通常クリックを捕捉し、サイト側のSPA処理より先に専用ホームへ移動します。キャンセル可能なNavigationイベントも扱い、履歴等でホームに到着した場合は専用ホームへ移動する補助処理を使います。ホーム全体のDOMを隠す旧方式は廃止しました。0.1.1では、ダッシュボードを無効化した場合に限り、そのURLへのリンクを非表示にします。後から開いたメニューも対象です。
 
 ON時はホームURLそのものへの事前取得など、文書以外のリクエストも遮断します。記事・プロフィールや `/api/` など別URLの通信は対象外です。note側のスクリプトやService Workerによる別URLの先読み、導入前・ルール適用前に始まった通信まで止めるものではありません。「noteへの通信がすべてゼロ」という保証ではありません。OFF時はホームへのアクセスを通常どおり許可します。
 
@@ -86,7 +96,7 @@ ON時はホームURLそのものへの事前取得など、文書以外のリク
 - `src/common.js`：URL判定、ユーザー名検証、設定の正規化。
 - `src/platform/browser-api.js`：ブラウザ拡張APIのアダプター。
 - `home.html` / `src/home.js` / `src/home.css`：拡張内の専用ホームと設定。
-- `src/content.js`：note上のホーム導線とSPA遷移の処理。
+- `src/content.js` / `src/content.css`：note上のホーム導線・SPA遷移と、任意のダッシュボード導線非表示。
 - `src/routing.js` / `src/background.js`：転送ルールと設定の単一書込制御。
 - [仕様書](spec/hikikomori-note_SPEC.md) / [手動確認表](docs/manual-test.md)。
 
@@ -96,7 +106,7 @@ ON時はホームURLそのものへの事前取得など、文書以外のリク
 ./scripts/check.ps1
 ```
 
-または `node --test`。自動テスト29件が成功しています。テストのDOM・APIは代替実装であり、note実サイトの描画・SPA・通信転送の実動作を保証しません。2026-10-20に作者からChrome/Edgeの基本機能が動作したとの報告がありました。今回のアイコンによるON復帰、通信の詳細や再起動などの確認項目は別途確認が必要です。Firefox実機の受け入れ確認は未実施です。
+または `node --test tests/extension.test.cjs tests/package.test.cjs`。自動テスト36件が成功しています。テストのDOM・APIは代替実装であり、note実サイトの描画・SPA・通信転送の実動作を保証しません。2026-10-20に作者からChrome/Edgeの基本機能が動作したとの報告がありました。今回のアイコンによるON復帰、通信の詳細や再起動などの確認項目は別途確認が必要です。Firefox実機の受け入れ確認は未実施です。
 
 実装時に参照した公式資料：[コンテンツスクリプト](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts)、[storage](https://developer.chrome.com/docs/extensions/reference/api/storage)、[通信前の転送ルール](https://developer.chrome.com/docs/extensions/reference/api/declarativeNetRequest)、[拡張ページの公開範囲](https://developer.chrome.com/docs/extensions/reference/manifest/web-accessible-resources)。利用・公開前には[noteの最新規約](https://note.com/terms)と実際の挙動を再確認してください。ストア公開や規約適合性の確認完了を示すものではありません。
 

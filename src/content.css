@@ -1,0 +1,4 @@
+/* 自分で付けた属性のある導線だけを非表示にし、設定解除時は属性を外す。 */
+a[data-hikikomori-note-dashboard-hidden] {
+  display: none !important;
+}

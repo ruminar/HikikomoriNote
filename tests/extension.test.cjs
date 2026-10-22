@@ -47,6 +47,46 @@ test("ユーザー名・プロフィールURLを正規化し、不正URL・HTML�
   for (const value of ["https://evil.test/user", "https://note.com/user/n/abc", "<img>", "../x", "https://note.com@evil.test/user"]) assert.throws(() => core.normalizeUserId(value));
   assert.equal(core.readSettings({ noteUserId: "<script>" }).noteUserId, "");
 });
+test("ダッシュボード判定は本体・配下・query/hashを対象とし、似た名前や外部URLを除外", () => {
+  const core = context().HikikomoriNote;
+  for (const url of ["https://note.com/dashboard", "https://note.com/dashboard/", "https://note.com/dashboard/suggestions", "https://note.com/dashboard/sales/deeper?x=1#tab", "https://note.com/dashboard?x=1#top"]) {
+    assert.equal(core.isDashboard(url), true);
+    assert.equal(core.shouldRedirect(url, { enabled: true, dashboardDisabled: true }), true);
+    assert.equal(core.shouldRedirect(url, { enabled: true, dashboardDisabled: false }), false);
+    assert.equal(core.shouldRedirect(url, { enabled: false, dashboardDisabled: true }), false);
+  }
+  for (const url of ["", undefined, "https://note.com/dashboard-old", "https://note.com/dashboardish/", "https://note.com/settings/account", "https://note.com/api/dashboard", "https://other.test/dashboard", "https://note.com.evil.test/dashboard", "http://note.com/dashboard"]) assert.equal(core.isDashboard(url), false);
+  for (const old of [undefined, {}, { noteUserId: "ruminar" }, { dashboardDisabled: "true" }]) assert.equal(core.readSettings(old).dashboardDisabled, false);
+});
+test("ダッシュボード無効化のDNRは本体と全配下のみを転送・遮断し、OFFでは全ルール解除", () => {
+  const routing = context().HikikomoriNoteRouting;
+  const rules = plain(routing.rules(true, true));
+  assert.equal(rules.length, 4);
+  assert.deepEqual(rules.map(rule => rule.id), [1, 2, 3, 4]);
+  assert.equal(rules[2].action.redirect.extensionPath, "/home.html");
+  assert.deepEqual(rules[2].condition.resourceTypes, ["main_frame"]);
+  assert.equal(rules[3].action.type, "block");
+  const regex = new RegExp(rules[2].condition.regexFilter);
+  for (const url of ["https://note.com/dashboard", "https://note.com/dashboard/", "https://note.com/dashboard/suggestions?x=1", "https://note.com/dashboard#tab"]) assert.equal(regex.test(url), true);
+  for (const url of ["https://note.com/dashboard-x", "https://note.com/settings/account", "https://note.com/api/v1/dashboard", "https://note.com/ruminar/n/test", "https://other.test/dashboard"]) assert.equal(regex.test(url), false);
+  assert.equal(routing.rules(true, false).length, 2);
+  assert.deepEqual(plain(routing.rules(false, true)), []);
+});
+test("ダッシュボード設定を保存・復元し、全体OFF/ONと別タブの部分保存でも選択を維持", async () => {
+  const f = controllerFixture({ enabled: true, noteUserId: "ruminar" });
+  await f.controller.save({ dashboardDisabled: true }); assert.equal(f.rules.length, 4);
+  await Promise.all([f.controller.save({ noteUserId: "other_user" }), f.controller.save({ enabled: false })]);
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true });
+  assert.equal(f.rules.length, 0);
+  const restart = controllerFixture(f.value); await restart.controller.getState(); assert.equal(restart.rules.length, 0);
+  await restart.controller.save({ enabled: true }); assert.equal(restart.rules.length, 4);
+  await restart.controller.save({ dashboardDisabled: false }); assert.equal(restart.rules.length, 2);
+});
+test("ダッシュボード設定の保存に失敗したら以前の制限と設定を復元", async () => {
+  const f = controllerFixture({ enabled: true, dashboardDisabled: true }, { storeError: true });
+  await assert.rejects(f.controller.save({ dashboardDisabled: false }), /store failed/);
+  assert.equal(f.value.dashboardDisabled, true); assert.equal(f.rules.length, 4);
+});
 test("DNR：ホームの文書だけ専用ページへ転送、事前取得もホームURLだけ遮断", () => {
   const rules = plain(context().HikikomoriNoteRouting.rules(true));
   assert.equal(rules[0].action.redirect.extensionPath, "/home.html");
@@ -60,7 +100,7 @@ test("DNR：ホームの文書だけ専用ページへ転送、事前取得も�
 });
 test("既存のユーザー名・OFFを引き継ぎ、再起動後もOFFルールを適用", async () => {
   const f = controllerFixture({ enabled: false, noteUserId: "ruminar" });
-  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar" });
+  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false });
   assert.deepEqual(f.rules, []);
   await f.controller.save({ enabled: true });
   const restart = controllerFixture(f.value); await restart.controller.getState();
@@ -75,7 +115,7 @@ test("OFFはルール解除・保存の順に完了してから成功を返す",
 test("複数タブから同時保存してもON/OFFとユーザー名を上書きし合わない", async () => {
   const f = controllerFixture();
   await Promise.all([f.controller.save({ enabled: false }), f.controller.save({ noteUserId: "ruminar" })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar" });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false });
   assert.deepEqual(f.rules, []);
 });
 test("転送更新失敗時は設定を保存せず、次の操作は再試行できる", async () => {
@@ -96,18 +136,38 @@ test("復旧も失敗した場合は拡張無効化の案内を返す", async ()
 });
 test("設定の型・未知項目・不正ユーザー名はルール更新前に拒否", async () => {
   const f = controllerFixture();
-  for (const patch of [null, [], { enabled: "false" }, { unexpected: true }, { noteUserId: "<script>" }]) await assert.rejects(f.controller.save(patch));
+  for (const patch of [null, [], { enabled: "false" }, { unexpected: true }, { noteUserId: "<script>" }, { dashboardDisabled: "true" }]) await assert.rejects(f.controller.save(patch));
   assert.equal(f.history.length, 0);
 });
 function contentFixture(stored, options = {}) {
   const documentEvents = new Map(), events = new Map(), navigationEvents = new Map();
   const moves = [];
-  let subscriber, tick;
+  let subscriber, tick, mutation;
+  let disconnected = false;
+  const anchors = [];
+  function addAnchor(url) {
+    const attributes = new Map();
+    const anchor = { tagName: "A", href: url, isConnected: true,
+      hasAttribute: key => attributes.has(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      removeAttribute: key => attributes.delete(key)
+    };
+    anchors.push(anchor);
+    return anchor;
+  }
   const home = "chrome-extension://test/home.html";
   const location = { href: options.url ?? "https://note.com/ruminar", assign: url => moves.push(["assign", url]), replace: url => moves.push(["replace", url]) };
   const c = context({
     location,
-    document: { addEventListener: (name, fn) => documentEvents.set(name, fn), removeEventListener: name => documentEvents.delete(name) },
+    document: {
+      addEventListener: (name, fn) => documentEvents.set(name, fn), removeEventListener: name => documentEvents.delete(name),
+      querySelectorAll: () => anchors.filter(anchor => anchor.isConnected && anchor.href)
+    },
+    MutationObserver: class {
+      constructor(callback) { mutation = callback; }
+      observe() {}
+      disconnect() { disconnected = true; }
+    },
     window: {
       addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name),
       navigation: { addEventListener: (name, fn) => navigationEvents.set(name, fn), removeEventListener: name => navigationEvents.delete(name) }
@@ -129,7 +189,9 @@ function contentFixture(stored, options = {}) {
     documentEvents.get("click")?.(event);
     return event;
   }
-  return { c, home, moves, location, events, navigationEvents, documentEvents, click, tick: () => tick?.(), changed: value => subscriber?.(value) };
+  return { c, home, moves, location, events, navigationEvents, documentEvents, click,
+    addAnchor, mutate: () => { if (!disconnected) mutation?.(); },
+    tick: () => tick?.(), changed: value => subscriber?.(value) };
 }
 test("noteロゴの通常クリックはSPA処理の前に専用ホームへ直行", async () => {
   const f = contentFixture(); await flush();
@@ -167,15 +229,45 @@ test("ストレージ読込失敗・拡張無効時はnoteの操作を妨げな�
     assert.equal(f.documentEvents.size, 0);
   }
 });
+test("ダッシュボード導線は後から出るメニューも隠し、設定・OFF・href変更・無効化時に復帰", async () => {
+  const options = {};
+  const f = contentFixture({ dashboardDisabled: true }, options);
+  const marker = "data-hikikomori-note-dashboard-hidden";
+  const dashboard = f.addAnchor("https://note.com/dashboard");
+  const settings = f.addAnchor("https://note.com/settings/account");
+  await flush();
+  assert.equal(dashboard.hasAttribute(marker), true); assert.equal(settings.hasAttribute(marker), false);
+  const submenu = f.addAnchor("https://note.com/dashboard/suggestions?x=1"); f.mutate();
+  assert.equal(submenu.hasAttribute(marker), true);
+  assert.equal(f.click(submenu.href).defaultPrevented, true);
+  dashboard.href = "https://note.com/settings/account"; f.mutate(); assert.equal(dashboard.hasAttribute(marker), false);
+  submenu.href = ""; f.mutate(); assert.equal(submenu.hasAttribute(marker), false);
+  submenu.href = "https://note.com/dashboard/suggestions"; f.mutate(); assert.equal(submenu.hasAttribute(marker), true);
+  f.changed({ enabled: true, dashboardDisabled: false }); assert.equal(submenu.hasAttribute(marker), false);
+  assert.equal(f.click(submenu.href).defaultPrevented, false);
+  f.changed({ enabled: true, dashboardDisabled: true }); assert.equal(submenu.hasAttribute(marker), true);
+  f.changed({ enabled: false, dashboardDisabled: true }); assert.equal(submenu.hasAttribute(marker), false);
+  f.changed({ enabled: true, dashboardDisabled: true });
+  options.invalid = true; f.tick(); assert.equal(submenu.hasAttribute(marker), false);
+});
+test("無効化中にダッシュボード配下へSPA・履歴・直行した場合も専用ホームへ戻す", async () => {
+  const f = contentFixture({ dashboardDisabled: true }, { url: "https://note.com/dashboard/suggestions" }); await flush();
+  assert.deepEqual(f.moves, [["replace", f.home]]);
+  let canceled = false;
+  f.navigationEvents.get("navigate")({ cancelable: true, destination: { url: "https://note.com/dashboard/sales" }, preventDefault() { canceled = true; } });
+  assert.equal(canceled, true);
+  f.location.href = "https://note.com/dashboard?tab=x"; f.events.get("popstate")();
+  assert.equal(f.moves.at(-1)[0], "replace");
+});
 function homeFixture(options = {}) {
   const nodes = new Map();
-  for (const id of ["normal", "mode", "status", "profile", "user-status", "note-user", "save", "settings", "retry"]) nodes.set(id, {
+  for (const id of ["normal", "mode", "status", "profile", "user-status", "note-user", "dashboard-disabled", "save", "settings", "retry"]) nodes.set(id, {
     value: "", disabled: true, hidden: false, removeAttribute(name) { delete this[name]; }, focus() { this.focused = true; }
   });
   const moves = [], patches = [];
   let state = { enabled: true, noteUserId: "ruminar", ...options.state };
   const c = context({
-    document: { getElementById: id => nodes.get(id), querySelectorAll: () => ["normal", "note-user", "save", "retry"].map(id => nodes.get(id)) },
+    document: { getElementById: id => nodes.get(id), querySelectorAll: () => ["normal", "note-user", "dashboard-disabled", "save", "retry"].map(id => nodes.get(id)) },
     location: { assign: url => moves.push(url), hash: options.hash ?? "" },
     HikikomoriNotePlatform: {
       getState: async () => { if (options.stateError) throw new Error("state failed"); return state; },
@@ -208,12 +300,23 @@ test("転送解除失敗時は通常noteへ移動せず、再確認を案内", a
   assert.equal(f.moves.length, 0); assert.match(f.nodes.get("status").textContent, /状態を再確認/);
   assert.equal(f.nodes.get("retry").disabled, false);
 });
-test("ユーザー設定は名前だけを保存し、HTMLや記事URLは拒否", async () => {
+test("ユーザー名とダッシュボード選択を保存し、HTMLや記事URLは拒否", async () => {
   const f = homeFixture(); await flush();
   const submit = () => f.nodes.get("settings").onsubmit({ preventDefault() {} });
   f.nodes.get("note-user").value = "<script>"; submit(); assert.equal(f.patches.length, 0);
   f.nodes.get("note-user").value = "https://note.com/ruminar"; submit(); await flush();
-  assert.deepEqual(f.patches, [{ noteUserId: "ruminar" }]);
+  assert.deepEqual(f.patches, [{ noteUserId: "ruminar", dashboardDisabled: false }]);
+});
+test("ホームの選択を保存し、再表示で復元。保存失敗は成功扱いにしない", async () => {
+  const f = homeFixture({ state: { dashboardDisabled: true } }); await flush();
+  assert.equal(f.nodes.get("dashboard-disabled").checked, true);
+  f.nodes.get("dashboard-disabled").checked = false;
+  f.nodes.get("settings").onsubmit({ preventDefault() {} }); await flush();
+  assert.deepEqual(f.patches, [{ noteUserId: "ruminar", dashboardDisabled: false }]);
+  const failed = homeFixture({ saveError: true }); await flush();
+  failed.nodes.get("dashboard-disabled").checked = true;
+  failed.nodes.get("settings").onsubmit({ preventDefault() {} }); await flush();
+  assert.match(failed.nodes.get("status").textContent, /処理できませんでした/);
 });
 test("背景処理は専用ホームからのメッセージだけを受理し、起動時にも整合", async () => {
   let handler, installs, startups, action, opened = 0;
@@ -275,15 +378,16 @@ test("アダプターは自拡張のhome.htmlだけを設定メッセージ送�
   assert.equal(check({ id: "test", url: "chrome-extension://test/home.html?x=1" }), true);
   for (const sender of [{ id: "test", url: "https://note.com/" }, { id: "other", url: "chrome-extension://test/home.html" }, { id: "test", url: "chrome-extension://test/home.html.evil" }]) assert.equal(check(sender), false);
 });
-test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、旧CSS差替えはない", () => {
+test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホーム全体を隠さない", () => {
   const m = JSON.parse(source("manifest.json"));
-  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.1.0");
+  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.1.1");
   assert.deepEqual(m.permissions, ["storage", "declarativeNetRequestWithHostAccess"]);
   assert.deepEqual(m.host_permissions, ["https://note.com/*"]);
   assert.deepEqual(m.web_accessible_resources, [{ resources: ["home.html"], matches: ["https://note.com/*"] }]);
   assert.equal(m.content_scripts[0].run_at, "document_start");
-  assert.equal(m.content_scripts[0].css, undefined);
-  for (const file of [m.background.service_worker, ...m.content_scripts[0].js, ...Object.values(m.icons), "home.html"]) assert.ok(fs.existsSync(path.join(root, file)));
+  assert.deepEqual(m.content_scripts[0].css, ["src/content.css"]);
+  assert.equal(source("src/content.css").includes("> body"), false);
+  for (const file of [m.background.service_worker, ...m.content_scripts[0].js, ...m.content_scripts[0].css, ...Object.values(m.icons), "home.html"]) assert.ok(fs.existsSync(path.join(root, file)));
   for (const match of source("home.html").matchAll(/(?:src|href)="([^"]+)"/g)) assert.ok(fs.existsSync(path.join(root, match[1])));
   assert.equal(/<script[^>]*>[^<]+<\/script>/.test(source("home.html")), false);
 });

@@ -29,7 +29,7 @@
   globalThis.HikikomoriNoteBackgroundPlatform = Object.freeze({
     load: async () => (await api.storage.local.get(key))[key],
     store: settings => api.storage.local.set({ [key]: settings }),
-    setRules: rules => api.declarativeNetRequest.updateDynamicRules({ removeRuleIds: [1, 2], addRules: rules }),
+    setRules: rules => api.declarativeNetRequest.updateDynamicRules({ removeRuleIds: [1, 2, 3, 4], addRules: rules }),
     onMessage: listener => api.runtime.onMessage.addListener(listener),
     onInstalled: listener => api.runtime.onInstalled.addListener(listener),
     onStartup: listener => api.runtime.onStartup.addListener(listener),

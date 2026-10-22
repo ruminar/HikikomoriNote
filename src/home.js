@@ -6,6 +6,7 @@
   let busy = false;
   function show(settings) {
     byId("note-user").value = settings.noteUserId;
+    byId("dashboard-disabled").checked = settings.dashboardDisabled === true;
     const url = core.profileUrl(settings.noteUserId);
     byId("profile").hidden = !url;
     if (url) byId("profile").href = url;
@@ -24,7 +25,7 @@
       byId("status").textContent = location.hash === "#activation-failed" && !result.enabled
         ? "ONへの切り替えに失敗しました。拡張アイコンを押して再度お試しください。"
         : "設定と転送状態を確認しました。";
-      for (const id of ["normal", "note-user", "save"]) byId(id).disabled = false;
+      for (const id of ["normal", "note-user", "dashboard-disabled", "save"]) byId(id).disabled = false;
     } catch (error) {
       byId("status").textContent = `処理できませんでした。${error.message} 状態を再確認してください。`;
     } finally {
@@ -42,7 +43,7 @@
     let noteUserId;
     try { noteUserId = core.normalizeUserId(byId("note-user").value); }
     catch (error) { byId("status").textContent = error.message; byId("note-user").focus(); return; }
-    void perform(() => platform.save({ noteUserId }));
+    void perform(() => platform.save({ noteUserId, dashboardDisabled: byId("dashboard-disabled").checked }));
   };
   byId("retry").onclick = () => { void perform(() => platform.getState()); };
   platform.subscribe(() => { if (!busy) void perform(() => platform.getState()); });

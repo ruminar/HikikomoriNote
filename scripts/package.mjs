@@ -6,7 +6,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 export const runtimeFiles = [
   "home.html", "LICENSE", "_locales/ja/messages.json",
   "src/common.js", "src/platform/browser-api.js", "src/routing.js",
-  "src/background.js", "src/content.js", "src/home.js", "src/home.css",
+  "src/background.js", "src/content.js", "src/content.css", "src/home.js", "src/home.css",
   "icons/icon16.png", "icons/icon32.png", "icons/icon48.png", "icons/icon128.png"
 ];
 export async function createManifest(browser) {
