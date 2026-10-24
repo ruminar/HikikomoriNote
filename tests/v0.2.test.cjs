@@ -140,6 +140,26 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
 });
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,ui:context.HikikomoriNoteUi.create(doc,win,actions)};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
+
+test('検索URLは検索語・対象・並び順・末尾スラッシュに関わらず専用種別。別パスと外部は対象外',()=>{
+ const {core}=fixture();
+ for(const url of ['https://note.com/search','https://note.com/search/?q=きのころ&context=note&mode=search#results','https://note.com/search?context=user&q=AI'])assert.equal(core.pageKind(url).type,'search');
+ for(const url of ['https://note.com/search/other','https://note.com/searching/child','https://other.test/search?q=AI'])assert.equal(core.pageKind(url),null);
+});
+
+test('検索の左メニューだけを差し替え、検索フォーム・結果タブを維持。タグ追加なし、OFFと重度で復帰',()=>{
+ const f=uiFixture(sidebarHtml+'<form id="search-form"><input></form><nav id="search-tabs"><a href="/search?context=user"></a></nav>'),settings=f.core.readSettings({favoriteTags:['AI']});
+ const aside=f.doc.querySelector('aside'),original=aside.children[0],form=f.doc.getElementById('search-form'),tabs=f.doc.getElementById('search-tabs'),article=f.doc.querySelector('article');
+ for(const url of ['https://note.com/search','https://note.com/search?q=きのころ&context=note&mode=search']){
+  f.ui.update(settings,url);assert.equal(aside.children.length,2);assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),true);
+  const links=aside.children[0].querySelectorAll('a');assert.equal(links[0].textContent,'フォロー中のTL');assert.equal(links[1].href,'https://note.com/tag/AI?mode=new');
+  assert.equal(aside.querySelector('button'),null);assert.equal(form.isConnected,true);assert.equal(tabs.isConnected,true);assert.equal(article.isConnected,true);
+  assert.equal(tabs.hasAttribute('data-hikikomori-note-menu-hidden'),false);
+  for(const patch of [{enabled:false},{legacyMode:true}]){f.ui.update({...settings,...patch},url);assert.equal(aside.children.length,1);assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),false);}
+ }
+ f.ui.update(settings,'https://note.com/search');f.ui.update(settings,'https://note.com/settings');assert.equal(aside.children.length,1);
+ const unknown=uiFixture('<aside class="sticky w-[11.375rem]"><nav></nav></aside>');unknown.ui.update(settings,'https://note.com/search');assert.equal(unknown.doc.querySelector('aside').children.length,1);
+});
 test('実DOM境界に一致するasideだけ差し替え、モード/OFF/記事遷移で公式UIを復帰',()=>{
  const f=uiFixture(sidebarHtml),settings=f.core.readSettings({favoriteTags:['A']});const aside=f.doc.querySelector('aside'),original=aside.children[0],article=f.doc.querySelector('article');
  f.ui.update(settings,'https://note.com/tag/A?mode=new');assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),true);assert.equal(aside.children.length,2);
@@ -296,7 +316,7 @@ test('表示中の日本語タグを左メニューで追加し、二重クリ�
  let settings=f.core.readSettings({});f.ui.update(settings,url);
  const button=f.doc.querySelector('button');assert.match(button.getAttribute('aria-label'),/みじんこ123/);assert.equal(button.disabled,false);
  button.onclick();button.onclick();assert.equal(calls,1);assert.equal(f.doc.querySelector('button').disabled,true);
- complete();await flush();assert.equal(f.doc.querySelector('button').textContent,'このタグは登録済み');assert.equal(f.doc.querySelector('button').disabled,true);
+ complete();await flush();assert.equal(f.doc.querySelector('button'),null);
  assert.equal(f.doc.querySelector('[aria-current="page"]').href,'https://note.com/tag/%E3%81%BF%E3%81%98%E3%82%93%E3%81%93123?mode=new');
  f.ui.update(f.core.readSettings({}),url);assert.equal(f.doc.querySelector('button').disabled,false);
  for(const target of ['https://note.com/following','https://note.com/ruminar/n/n123']){f.ui.update(settings,target);assert.equal(f.doc.querySelector('button'),null);}

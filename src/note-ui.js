@@ -129,11 +129,13 @@
             let normalized;
             try { normalized = core.normalizeTag(page.tag); } catch { /* 空タグ等は登録不可 */ }
             const registered = settings.favoriteTags.includes(normalized);
-            const button = doc.createElement("button"); button.type = "button";
-            button.textContent = registered ? "このタグは登録済み" : adding ? "保存中…" : "タグをお気に入りに追加";
-            button.setAttribute("aria-label", `# ${page.tag}：${button.textContent}`);
-            button.disabled = !normalized || registered || adding || uncertain || Boolean(settings.tagWarning) || !actions.addCurrentTag;
-            button.onclick = () => { void addTag(page.tag); }; menu.append(button);
+            if (!registered) {
+              const button = doc.createElement("button"); button.type = "button";
+              button.textContent = adding ? "保存中…" : "タグをお気に入りに追加";
+              button.setAttribute("aria-label", `# ${page.tag}：${button.textContent}`);
+              button.disabled = !normalized || adding || uncertain || Boolean(settings.tagWarning) || !actions.addCurrentTag;
+              button.onclick = () => { void addTag(page.tag); }; menu.append(button);
+            }
             const status = doc.createElement("span"); status.className = "hikikomori-note-tag-status";
             status.setAttribute("role", "status"); status.textContent = settings.tagWarning || actionMessage;
             menu.append(status);
