@@ -149,6 +149,7 @@
           for (const tag of settings.favoriteTags) {
             const item = doc.createElement("li"), link = doc.createElement("a");
             link.textContent = `# ${tag}`; link.href = core.tagUrl(tag);
+            link.setAttribute("title", `# ${tag}`);
             if (page.type === "tag" && page.tag === tag) link.setAttribute("aria-current", "page");
             item.append(link); list.append(item);
           }
