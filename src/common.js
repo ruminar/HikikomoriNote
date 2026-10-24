@@ -40,7 +40,7 @@
     try { noteUserId = normalizeUserId(value?.noteUserId); } catch { /* 破損値は空欄へ */ }
     const inspected = inspectTags(value?.favoriteTags);
     return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
-      legacyMode: value?.legacyMode === true, favoriteTags: inspected.tags,
+      legacyMode: value?.legacyMode === true, hideArticleRecommendations: value?.hideArticleRecommendations === true, favoriteTags: inspected.tags,
       ...(inspected.warning ? { tagWarning: inspected.warning } : {}) };
   }
   function normalizeTag(value) {
@@ -64,6 +64,12 @@
     return { tags, warning: invalid ? "タグの保存データに異常があります。正常な項目だけ表示しています。タグ編集を停止しました。元のデータを保存してから、開発者へ修復をご相談ください。" : "" };
   }
   function tagUrl(tag) { return `https://note.com/tag/${encodeURIComponent(normalizeTag(tag))}?mode=new`; }
+  function isArticle(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === "https://note.com" && /^\/[a-zA-Z0-9_]+\/n\/n[a-zA-Z0-9]+\/?$/.test(parsed.pathname);
+    } catch { return false; }
+  }
   function pageKind(url) {
     try {
       const parsed = new URL(url);
@@ -82,5 +88,5 @@
     return normalized ? `https://note.com/${encodeURIComponent(normalized)}` : null;
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
-    normalizeTag, inspectTags, tagUrl, pageKind });
+    normalizeTag, inspectTags, tagUrl, pageKind, isArticle });
 })();

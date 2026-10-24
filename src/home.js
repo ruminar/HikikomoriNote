@@ -4,7 +4,7 @@
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
   const tabs = ["main", "tags", "settings"];
-  const fields = { noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", legacyMode: "legacy-mode" };
+  const fields = { noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", legacyMode: "legacy-mode" };
   const dirty = new Set();
   let state, selected = "main", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectTab(name, focus = false) {

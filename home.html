@@ -46,6 +46,8 @@
         <p class="muted">空欄で保存すると登録を解除します。ブラウザ内にのみ保存します。</p>
         <label class="check-option" for="dashboard-disabled"><input id="dashboard-disabled" type="checkbox" aria-describedby="dashboard-help" disabled>ダッシュボードを無効化する</label>
         <p class="muted" id="dashboard-help">アクセス状況・提案・バッジ・売上・振込・販売履歴を含むダッシュボード全体を専用ホームへ戻し、note上のダッシュボードボタンを隠します。</p>
+        <label class="check-option" for="hide-article-recommendations"><input id="hide-article-recommendations" type="checkbox" aria-describedby="recommendations-help" disabled>記事の「あなたへのおすすめ」を非表示にする</label>
+        <p class="muted" id="recommendations-help">記事下のおすすめ欄を隠します。通常・重度の両モードで有効です。チェックを外すか、拡張をOFFにすると元の表示に戻ります。</p>
         <label class="check-option" for="legacy-mode"><input id="legacy-mode" type="checkbox" aria-describedby="legacy-help" disabled>0.1.1モード（重度引きこもりモード）</label>
         <p class="muted" id="legacy-help">拡張を有効にしたまま、タグとフォロー中への独自ナビゲーションを停止します。自分のページへの入口と登録済みのタグは保持します。</p>
         <div class="settings-actions">
@@ -54,7 +56,7 @@
         </div>
       </form>
       <hr>
-      <p class="muted">通常のnoteを表示すると、ホーム転送とダッシュボード制限を解除します。保存済みの設定は保持します。</p>
+      <p class="muted">通常のnoteを表示すると、ホーム転送・ダッシュボード制限・おすすめ欄の非表示を解除します。保存済みの設定は保持します。</p>
       <button id="normal" class="secondary" type="button" disabled>通常のnoteを表示（拡張OFF）</button>
     </section>
     <div id="quick-access" role="group" aria-label="ページへの移動" hidden>

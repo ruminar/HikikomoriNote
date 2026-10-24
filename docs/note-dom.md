@@ -54,6 +54,23 @@ kakiponの実タブリンクで `/all`、`/magazines`、`/likes`、`/archives` �
 
 2026-10-25追記：`/ruminar/followings` と `/ruminar/followers` の両画面で、同じ `aside.w-full.lg:w-96`、h1、avatar、本人のフォロー／フォロワーリンクがあるプロフィール領域を実ブラウザで確認しました。両URLを対象へ追加し、既存と同じ位置・枠付きの「フォロー中のTL」を表示します。ページ番号のクエリでも対象とし、公式のユーザー一覧とページ送りは変更しません。ユーザー一覧の独自取得・保存は追加しません。
 
+## 記事下の「あなたへのおすすめ」
+
+2026-10-25、未ログインの `https://note.com/ruminar/n/n36b92cdcd987` を確認しました。記事本文は `article#note-article` とその内側の `#note-body` にあり、おすすめ枠はその外側、コメント領域の後にある独立したdivです。
+
+```html
+<div class="pt-6 px-4 md:px-0">
+  <div class="flex items-center justify-between">
+    <h2 class="font-bold text-text-primary text-base">あなたへのおすすめ</h2>
+  </div>
+  <aside class="py-4" aria-label="記事" aria-busy="false"></aside>
+</div>
+```
+
+`pt-6` を持つdivの要素の子が2つ（h2のみを含むdivと `aside[aria-label="記事"]`）で、h2の文言が完全一致し、article・#note-bodyの内側でない場合だけ対象にします。おすすめ取得前の空asideでも同じ境界です。専用属性とCSSで枠ごと隠し、設定解除・全体OFF・対象外画面・停止時には属性を外します。通常・重度の両モードで使います。DOMの変化で条件が外れた場合は表示へ戻します。通信の遮断や記事本文の収集はしません。
+
+ログイン後・有料記事・別形式の記事と、拡張を読み込んで設定を切り替える実機確認は未実施です。
+
 ## 自動検証と実機確認の区別
 
 自動テストは上記境界を再現した代替DOMで、重複防止・公式メニュー復帰・モード切り替え・非対象ページを検証します。ブラウザ拡張を実際に読み込んだ後のSPA再描画・通信ルール・ブラウザ別動作の検証は別途必要です。

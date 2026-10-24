@@ -194,3 +194,66 @@ test('後挿入の商品枠に追随し、見出し・構造が違う枠や記�
  section.querySelector('h2').textContent='記事';f.ui.update(settings,'https://note.com/tag/A');assert.equal(section.hasAttribute(marker),false);
  section.querySelector('h2').textContent='関連商品';section.append(f.doc.createElement('article'));f.ui.update(settings,'https://note.com/tag/A');assert.equal(section.hasAttribute(marker),false);
 });
+
+test('記事おすすめ設定は既定で表示。型検証・再起動・OFF・タグ操作でも保存値を維持',async()=>{
+ const f=fixture({favoriteTags:['A']});
+ assert.equal((await f.controller.getState()).hideArticleRecommendations,false);
+ await assert.rejects(f.controller.save({hideArticleRecommendations:'true'}));assert.equal(f.writes,0);
+ await f.controller.save({hideArticleRecommendations:true});
+ await f.controller.tag({type:'ADD_TAG',tag:'B'});
+ await f.controller.save({legacyMode:true,enabled:false});
+ assert.equal((await f.restart().getState()).hideArticleRecommendations,true);assert.deepEqual(f.stored.favoriteTags,['A','B']);assert.equal(f.rules.length,0);
+});
+
+test('記事おすすめ設定の保存失敗は確定せず、設定UIの未保存値を保って再試行できる',async()=>{
+ const f=homeFixture({saveError:true});await flush();const n=f.nodes;
+ const checkbox=n.get('hide-article-recommendations');assert.equal(checkbox.checked,false);
+ checkbox.checked=true;checkbox.fire('change');n.get('settings').fire('submit');await flush();
+ assert.notEqual(f.state.hideArticleRecommendations,true);assert.equal(checkbox.checked,true);assert.match(n.get('status').textContent,/save failed/);
+ f.options.saveError=false;n.get('settings').fire('submit');await flush();
+ assert.equal(f.state.hideArticleRecommendations,true);assert.deepEqual(f.patches,[{hideArticleRecommendations:true},{hideArticleRecommendations:true}]);
+});
+
+test('別タブの記事おすすめ設定を同期し、モードでも表示。未保存入力は部分保存する',async()=>{
+ const f=homeFixture({state:{legacyMode:true}});await flush();const n=f.nodes,checkbox=n.get('hide-article-recommendations');
+ assert.equal(checkbox.disabled,false);f.changed({hideArticleRecommendations:true});assert.equal(checkbox.checked,true);
+ checkbox.checked=false;checkbox.fire('change');f.changed({noteUserId:'remote_user',hideArticleRecommendations:true});
+ assert.equal(checkbox.checked,false);n.get('settings').fire('submit');await flush();
+ assert.deepEqual(f.patches,[{hideArticleRecommendations:false}]);assert.equal(f.state.noteUserId,'remote_user');assert.equal(f.state.legacyMode,true);
+});
+
+const recommendationHtml='<div class="pt-6 px-4 md:px-0"><div><h2></h2></div><aside aria-label="記事"></aside></div>';
+const articleUrl='https://note.com/ruminar/n/n36b92cdcd987';
+const recommendationMarker='data-hikikomori-note-recommendations-hidden';
+test('記事おすすめ枠だけを両モードで隠し、設定解除・全体OFF・画面離脱・停止で戻す',()=>{
+ const f=uiFixture('<article id="note-article"><h2></h2></article><section aria-labelledby="comment"><h2></h2></section>'+recommendationHtml);
+ const article=f.doc.getElementById('note-article'),comment=f.doc.querySelector('section'),region=f.doc.root.children.at(-1);
+ for(const h of f.doc.querySelectorAll('h2'))h.textContent='あなたへのおすすめ';
+ const settings=f.core.readSettings({hideArticleRecommendations:true});
+ f.ui.update({...settings,hideArticleRecommendations:false},articleUrl);assert.equal(region.hasAttribute(recommendationMarker),false);
+ for(const legacyMode of [false,true]){
+  f.ui.update({...settings,legacyMode},articleUrl+'?x=1#comments');assert.equal(region.hasAttribute(recommendationMarker),true);
+  assert.equal(article.hasAttribute(recommendationMarker),false);assert.equal(comment.hasAttribute(recommendationMarker),false);
+  for(const override of [{enabled:false},{hideArticleRecommendations:false}]){
+   f.ui.update({...settings,legacyMode,...override},articleUrl);assert.equal(region.hasAttribute(recommendationMarker),false);
+   f.ui.update({...settings,legacyMode},articleUrl);
+  }
+ }
+ f.ui.update(settings,'https://note.com/tag/A');assert.equal(region.hasAttribute(recommendationMarker),false);
+ f.ui.update(settings,articleUrl);f.ui.stop();assert.equal(region.hasAttribute(recommendationMarker),false);
+});
+
+test('後挿入・構造変更に追随し、記事本文内の同形枠や別サイトは対象外',()=>{
+ const f=uiFixture('<article>'+recommendationHtml+'</article><div id="note-body">'+recommendationHtml+'</div><div id="later"></div>');
+ for(const h of f.doc.querySelectorAll('h2'))h.textContent='あなたへのおすすめ';
+ const settings=f.core.readSettings({hideArticleRecommendations:true});
+ f.ui.update(settings,articleUrl);assert.equal(f.doc.querySelectorAll('['+recommendationMarker+']').length,0);
+ const region=documentFromHtml(recommendationHtml).root.children[0];region.querySelector('h2').textContent='あなたへのおすすめ';
+ f.doc.getElementById('later').append(region);f.ui.update(settings,articleUrl);assert.equal(region.hasAttribute(recommendationMarker),true);
+ region.querySelector('h2').textContent='コメント';f.ui.update(settings,articleUrl);assert.equal(region.hasAttribute(recommendationMarker),false);
+ region.querySelector('h2').textContent='あなたへのおすすめ';region.querySelector('aside').setAttribute('aria-label','その他');f.ui.update(settings,articleUrl);assert.equal(region.hasAttribute(recommendationMarker),false);
+ region.querySelector('aside').setAttribute('aria-label','記事');
+ for(const url of ['https://other.test/ruminar/n/n123','https://note.com/ruminar','https://note.com/ruminar/n/n123/edit','invalid']){
+  f.ui.update(settings,url);assert.equal(region.hasAttribute(recommendationMarker),false);
+ }
+});

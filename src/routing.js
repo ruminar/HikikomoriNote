@@ -43,7 +43,7 @@
       }),
       save: patch => run(async () => {
         if (!patch || typeof patch !== "object" || Array.isArray(patch) ||
-            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "legacyMode"].includes(key))) {
+            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "legacyMode", "hideArticleRecommendations"].includes(key))) {
           throw new Error("設定の形式が正しくありません。");
         }
         if (Object.hasOwn(patch, "enabled") && typeof patch.enabled !== "boolean") {
@@ -55,6 +55,7 @@
           throw new Error("ダッシュボード設定の値が正しくありません。");
         }
         if (Object.hasOwn(patch, "legacyMode") && typeof patch.legacyMode !== "boolean") throw new Error("モード設定の値が正しくありません。");
+        if (Object.hasOwn(patch, "hideArticleRecommendations") && typeof patch.hideArticleRecommendations !== "boolean") throw new Error("おすすめ表示設定の値が正しくありません。");
         const next = { ...previous, ...patch };
         next.noteUserId = core.normalizeUserId(next.noteUserId);
         await port.setRules(rules(next.enabled, next.dashboardDisabled));

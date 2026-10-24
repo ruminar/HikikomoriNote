@@ -76,7 +76,7 @@ test("ダッシュボード設定を保存・復元し、全体OFF/ONと別タ�
   const f = controllerFixture({ enabled: true, noteUserId: "ruminar" });
   await f.controller.save({ dashboardDisabled: true }); assert.equal(f.rules.length, 4);
   await Promise.all([f.controller.save({ noteUserId: "other_user" }), f.controller.save({ enabled: false })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, favoriteTags: [] });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, hideArticleRecommendations: false, favoriteTags: [] });
   assert.equal(f.rules.length, 0);
   const restart = controllerFixture(f.value); await restart.controller.getState(); assert.equal(restart.rules.length, 0);
   await restart.controller.save({ enabled: true }); assert.equal(restart.rules.length, 4);
@@ -100,7 +100,7 @@ test("DNR：ホームの文書だけ専用ページへ転送、事前取得も�
 });
 test("既存のユーザー名・OFFを引き継ぎ、再起動後もOFFルールを適用", async () => {
   const f = controllerFixture({ enabled: false, noteUserId: "ruminar" });
-  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, favoriteTags: [] });
+  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, favoriteTags: [] });
   assert.deepEqual(f.rules, []);
   await f.controller.save({ enabled: true });
   const restart = controllerFixture(f.value); await restart.controller.getState();
@@ -115,7 +115,7 @@ test("OFFはルール解除・保存の順に完了してから成功を返す",
 test("複数タブから同時保存してもON/OFFとユーザー名を上書きし合わない", async () => {
   const f = controllerFixture();
   await Promise.all([f.controller.save({ enabled: false }), f.controller.save({ noteUserId: "ruminar" })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, favoriteTags: [] });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, favoriteTags: [] });
   assert.deepEqual(f.rules, []);
 });
 test("転送更新失敗時は設定を保存せず、次の操作は再試行できる", async () => {

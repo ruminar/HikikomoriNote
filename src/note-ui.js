@@ -1,15 +1,41 @@
-/* 確認済みのナビゲーションと関連商品枠を扱う。詳細はdocs/note-dom.md。 */
+/* 確認済みのナビゲーション・関連商品・記事おすすめ枠を扱う。詳細はdocs/note-dom.md。 */
 (() => {
   "use strict";
   const core = globalThis.HikikomoriNote;
   const owned = "data-hikikomori-note-owned";
   const hidden = "data-hikikomori-note-menu-hidden";
   const productHidden = "data-hikikomori-note-product-hidden";
+  const recommendationsHidden = "data-hikikomori-note-recommendations-hidden";
   const productCard = '[data-aicn-thing-card="true"], [data-testid="aicn-thing-card"]';
   function create(doc, win) {
     let host, menu, signature;
     const originals = new Set();
     const products = new Set();
+    const recommendations = new Set();
+    function isRecommendations(element) {
+      if (element.tagName !== "DIV" || !element.classList.contains("pt-6") ||
+          element.closest("article") || element.closest('[id="note-body"]') || element.children.length !== 2) return false;
+      const [title, list] = element.children;
+      const headings = [...element.querySelectorAll("h2")];
+      return title.tagName === "DIV" && title.children.length === 1 && headings.length === 1 &&
+        title.children[0] === headings[0] && headings[0].textContent.trim() === "あなたへのおすすめ" &&
+        list.tagName === "ASIDE" && list.getAttribute("aria-label") === "記事";
+    }
+    function syncRecommendations(active) {
+      for (const element of recommendations) {
+        if (!active || !element.isConnected || !isRecommendations(element)) {
+          element.removeAttribute(recommendationsHidden); recommendations.delete(element);
+        }
+      }
+      if (!active) return;
+      for (const heading of doc.querySelectorAll("h2")) {
+        if (heading.textContent.trim() !== "あなたへのおすすめ") continue;
+        const element = heading.parentElement?.parentElement;
+        if (element && isRecommendations(element) && !recommendations.has(element)) {
+          element.setAttribute(recommendationsHidden, ""); recommendations.add(element);
+        }
+      }
+    }
     function restore() {
       menu?.remove(); menu = undefined; host = undefined; signature = undefined;
       for (const element of originals) element.removeAttribute(hidden);
@@ -55,6 +81,7 @@
     function update(settings, url) {
       const page = core.pageKind(url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
+      syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       if (!settings.enabled || settings.legacyMode || !page) { restore(); return; }
       const nextHost = page.type === "profile" ? profile(page.user) : sidebar();
       if (!nextHost) { restore(); return; }
@@ -96,7 +123,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, stop() { restore(); syncProducts(false); } });
+    return Object.freeze({ update, stop() { restore(); syncProducts(false); syncRecommendations(false); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create });
 })();
