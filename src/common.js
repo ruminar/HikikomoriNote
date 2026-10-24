@@ -71,7 +71,7 @@
       if (/^\/following\/?$/.test(parsed.pathname)) return { type: "following" };
       const match = /^\/(?:tag|hashtag)\/([^/]+)\/?$/.exec(parsed.pathname);
       if (match) return { type: "tag", tag: decodeURIComponent(match[1]) };
-      const profile = /^\/([a-zA-Z0-9_]+)(?:\/(?:all|magazines|membership|likes|archives)(?:\/[^/]+)*)?\/?$/.exec(parsed.pathname);
+      const profile = /^\/([a-zA-Z0-9_]+)(?:\/(?:all|magazines|membership|likes|archives|followings|followers)(?:\/[^/]+)*)?\/?$/.exec(parsed.pathname);
       const reserved = new Set(["dashboard", "settings", "login", "signup", "api", "notes", "following", "tag", "hashtag", "search", "trend", "contests", "topic", "terms", "notifications", "messages", "new"]);
       if (profile && !reserved.has(profile[1])) return { type: "profile", user: profile[1] };
     } catch { /* 壊れたURLは対象外 */ }

@@ -160,6 +160,11 @@ test('プロフィール情報の先頭に幅を問わず追加し、非表示�
  f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children[0].textContent,'フォロー中のTL');
  assert.equal(aside.children[0].classList.contains('hikikomori-note-profile-navigation'),true);
  f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children.length,2);
+ for(const page of ['followings','followers']){
+  f.ui.update(settings,`https://note.com/ruminar/${page}?page=2`);
+  assert.equal(aside.children.length,2);assert.equal(aside.children[0].textContent,'フォロー中のTL');
+  assert.equal(aside.children[0].querySelector('a').href,'https://note.com/following');
+ }
  f.win.wide=false;f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,2);
  aside.width=0;f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,1);
  aside.width=180;
@@ -170,6 +175,7 @@ test('タグ・プロフィール判定は予約パスや記事・外部URL・�
  const {core}=fixture();
  for(const url of ['https://note.com/settings','https://note.com/dashboard','https://note.com/ruminar/n/id','https://other.test/ruminar','https://note.com/tag/%xx'])assert.equal(core.pageKind(url),null);
  assert.equal(core.pageKind('https://note.com/hashtag/AI?mode=new').tag,'AI');assert.equal(core.pageKind('https://note.com/ruminar/likes').type,'profile');
+ for(const user of ['ruminar','other_user'])for(const page of ['followings','followers'])assert.equal(core.pageKind(`https://note.com/${user}/${page}?page=2`).user,user);
 });
 test('タグの確認済み関連商品sectionだけを隠し、サイドバーなしでもOFF・モード・離脱で復帰',()=>{
  const f=uiFixture('<section id="product"><h2 class="sr-only"></h2><div data-aicn-thing-card="true"></div></section><section id="other"><h2></h2></section><article></article>');
