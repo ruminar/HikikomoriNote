@@ -21,7 +21,6 @@
         element.querySelector('nav[aria-label="急上昇"]') && visible(element));
     }
     function profile(user) {
-      if (!win.matchMedia("(min-width: 1024px)").matches) return undefined;
       return [...doc.querySelectorAll("aside")].find(element =>
         element.classList.contains("lg:w-96") && element.querySelector("h1") &&
         element.querySelector('[data-name="avatar"]') &&
@@ -40,7 +39,9 @@
       const nextSignature = JSON.stringify([page, settings.favoriteTags]);
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
-        menu.setAttribute(owned, ""); menu.className = "hikikomori-note-navigation";
+        menu.setAttribute(owned, "");
+        menu.className = page.type === "profile"
+          ? "hikikomori-note-navigation hikikomori-note-profile-navigation" : "hikikomori-note-navigation";
         menu.setAttribute("aria-label", page.type === "profile" ? "フォロー中のTLへの移動" : "ひきこもりnote ナビゲーション");
         host.prepend(menu);
       }

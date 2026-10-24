@@ -10,3 +10,19 @@ a[data-hikikomori-note-dashboard-hidden] {
 .hikikomori-note-navigation a:hover { background: rgba(128,128,128,.12); }
 .hikikomori-note-navigation a[aria-current="page"] { background: rgba(128,128,128,.18); font-weight: bold; }
 .hikikomori-note-navigation a:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.hikikomori-note-profile-navigation a {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid rgba(128,128,128,.35);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+@media (max-width: 1023px) {
+  .hikikomori-note-profile-navigation { padding-inline: 16px; }
+}

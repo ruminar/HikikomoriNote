@@ -155,11 +155,14 @@ test('DOM再生成後の公式メニューも処理し、構造不一致なら�
  f.ui.update(settings,'https://note.com/tag/A');const later=f.doc.createElement('div');aside.append(later);f.ui.update(settings,'https://note.com/tag/A');assert.equal(later.hasAttribute('data-hikikomori-note-menu-hidden'),true);
  aside.className='changed';f.ui.update(settings,'https://note.com/tag/A');assert.equal(later.hasAttribute('data-hikikomori-note-menu-hidden'),false);assert.equal(aside.children.length,2);
 });
-test('確認済みプロフィール左カラムの先頭だけに追加し、狭い画面・モードで解除',()=>{
+test('プロフィール情報の先頭に幅を問わず追加し、非表示領域やモードでは解除',()=>{
  const f=uiFixture('<aside class="w-full lg:w-96"><div><button data-name="avatar"></button><h1></h1><a href="/ruminar/followings"></a></div></aside>'),settings=f.core.readSettings({});const aside=f.doc.querySelector('aside');
  f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children[0].textContent,'フォロー中のTL');
+ assert.equal(aside.children[0].classList.contains('hikikomori-note-profile-navigation'),true);
  f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children.length,2);
- f.win.wide=false;f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,1);
+ f.win.wide=false;f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,2);
+ aside.width=0;f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,1);
+ aside.width=180;
  f.win.wide=true;f.ui.update(settings,'https://note.com/ruminar');f.ui.update({...settings,legacyMode:true},'https://note.com/ruminar');assert.equal(aside.children.length,1);
  f.ui.update(settings,'https://note.com/ruminar/n/article');assert.equal(aside.children.length,1);
 });
