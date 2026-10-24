@@ -28,9 +28,10 @@ port.onMessage((message, sender, respond) => {
   let operation;
   if (message?.type === "get-state") operation = controller.getState();
   else if (message?.type === "save-settings") operation = controller.save(message.patch);
+  else if (message?.type === "tag-operation") operation = controller.tag(message.patch);
   else return false;
   operation.then(settings => respond({ ok: true, settings }),
-    error => respond({ ok: false, error: error.message || "設定処理に失敗しました。" }));
+    error => respond({ ok: false, error: error.message || "設定処理に失敗しました。", code: error.code || "OPERATION_FAILED" }));
   return true;
 });
 reconcile();

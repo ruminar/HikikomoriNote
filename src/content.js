@@ -3,12 +3,14 @@
   "use strict";
   const core = globalThis.HikikomoriNote;
   const platform = globalThis.HikikomoriNotePlatform;
+  const noteUi = globalThis.HikikomoriNoteUi?.create(document, window);
   let settings;
   let revision = 0;
   let stopped = false;
   let unsubscribe;
   let interval;
   let observer;
+  let scheduled = false;
   const hiddenLinks = new Set();
   const dashboardMarker = "data-hikikomori-note-dashboard-hidden";
   function restoreLinks() {
@@ -37,6 +39,7 @@
     clearInterval(interval);
     observer?.disconnect();
     restoreLinks();
+    noteUi?.stop();
     try { unsubscribe?.(); } catch { /* 拡張の再読み込み */ }
     document.removeEventListener("click", onClick, true);
     window.removeEventListener("popstate", checkHome);
@@ -52,6 +55,16 @@
   }
   function checkHome() {
     if (enabled() && core.shouldRedirect(location.href, settings)) location.replace(platform.homeUrl());
+    if (!stopped && settings) noteUi?.update(settings, location.href);
+  }
+  function scheduleSync(records) {
+    const own = node => node.nodeType === 1 && (node.hasAttribute?.("data-hikikomori-note-owned") || node.closest?.("[data-hikikomori-note-owned]"));
+    if (records?.length && records.every(record => own(record.target) ||
+        (record.type === "childList" && [...record.addedNodes, ...record.removedNodes].length &&
+          [...record.addedNodes, ...record.removedNodes].every(own)))) return;
+    if (scheduled || stopped) return;
+    scheduled = true;
+    queueMicrotask(() => { scheduled = false; if (!stopped) { syncDashboardLinks(); checkHome(); } });
   }
   function onClick(event) {
     if (!enabled() || event.defaultPrevented || event.button !== 0 ||
@@ -86,7 +99,7 @@
       const stored = await platform.load();
       if (stopped) return;
       if (revision === before) settings = core.readSettings(stored);
-      observer = new MutationObserver(syncDashboardLinks);
+      observer = new MutationObserver(scheduleSync);
       observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["href"] });
       syncDashboardLinks();
       checkHome();

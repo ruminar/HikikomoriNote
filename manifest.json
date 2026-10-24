@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
   "default_locale": "ja",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "__MSG_extensionDescription__",
   "permissions": ["storage", "declarativeNetRequestWithHostAccess"],
   "host_permissions": ["https://note.com/*"],
@@ -23,7 +23,7 @@
   "content_scripts": [
     {
       "matches": ["https://note.com/*"],
-      "js": ["src/common.js", "src/platform/browser-api.js", "src/content.js"],
+      "js": ["src/common.js", "src/platform/browser-api.js", "src/note-ui.js", "src/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_start"
     }

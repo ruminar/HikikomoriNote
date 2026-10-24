@@ -9,7 +9,7 @@ const source = file => fs.readFileSync(path.join(root, file), "utf8");
 const plain = value => JSON.parse(JSON.stringify(value));
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function context(extra = {}) {
-  const c = vm.createContext({ URL, console: { warn() {} }, ...extra });
+  const c = vm.createContext({ URL, queueMicrotask, console: { warn() {} }, ...extra });
   for (const file of ["src/common.js", "src/routing.js"]) vm.runInContext(source(file), c);
   return c;
 }
@@ -76,7 +76,7 @@ test("ダッシュボード設定を保存・復元し、全体OFF/ONと別タ�
   const f = controllerFixture({ enabled: true, noteUserId: "ruminar" });
   await f.controller.save({ dashboardDisabled: true }); assert.equal(f.rules.length, 4);
   await Promise.all([f.controller.save({ noteUserId: "other_user" }), f.controller.save({ enabled: false })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, favoriteTags: [] });
   assert.equal(f.rules.length, 0);
   const restart = controllerFixture(f.value); await restart.controller.getState(); assert.equal(restart.rules.length, 0);
   await restart.controller.save({ enabled: true }); assert.equal(restart.rules.length, 4);
@@ -100,7 +100,7 @@ test("DNR：ホームの文書だけ専用ページへ転送、事前取得も�
 });
 test("既存のユーザー名・OFFを引き継ぎ、再起動後もOFFルールを適用", async () => {
   const f = controllerFixture({ enabled: false, noteUserId: "ruminar" });
-  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false });
+  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, favoriteTags: [] });
   assert.deepEqual(f.rules, []);
   await f.controller.save({ enabled: true });
   const restart = controllerFixture(f.value); await restart.controller.getState();
@@ -115,7 +115,7 @@ test("OFFはルール解除・保存の順に完了してから成功を返す",
 test("複数タブから同時保存してもON/OFFとユーザー名を上書きし合わない", async () => {
   const f = controllerFixture();
   await Promise.all([f.controller.save({ enabled: false }), f.controller.save({ noteUserId: "ruminar" })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, favoriteTags: [] });
   assert.deepEqual(f.rules, []);
 });
 test("転送更新失敗時は設定を保存せず、次の操作は再試行できる", async () => {
@@ -237,13 +237,13 @@ test("ダッシュボード導線は後から出るメニューも隠し、設�
   const settings = f.addAnchor("https://note.com/settings/account");
   await flush();
   assert.equal(dashboard.hasAttribute(marker), true); assert.equal(settings.hasAttribute(marker), false);
-  const submenu = f.addAnchor("https://note.com/dashboard/suggestions?x=1"); f.mutate();
+  const submenu = f.addAnchor("https://note.com/dashboard/suggestions?x=1"); f.mutate(); await flush();
   assert.equal(submenu.hasAttribute(marker), true);
   assert.equal(f.click(submenu.href).defaultPrevented, true);
-  dashboard.href = "https://note.com/settings/account"; f.mutate(); assert.equal(dashboard.hasAttribute(marker), false);
-  submenu.href = ""; f.mutate(); assert.equal(submenu.hasAttribute(marker), false);
-  submenu.href = "https://note.com/dashboard/suggestions"; f.mutate(); assert.equal(submenu.hasAttribute(marker), true);
-  f.changed({ enabled: true, dashboardDisabled: false }); assert.equal(submenu.hasAttribute(marker), false);
+  dashboard.href = "https://note.com/settings/account"; f.mutate(); await flush(); assert.equal(dashboard.hasAttribute(marker), false);
+  submenu.href = ""; f.mutate(); await flush(); assert.equal(submenu.hasAttribute(marker), false);
+  submenu.href = "https://note.com/dashboard/suggestions"; f.mutate(); await flush(); assert.equal(submenu.hasAttribute(marker), true);
+  f.changed({ enabled: true, dashboardDisabled: false, legacyMode: false, favoriteTags: [] }); assert.equal(submenu.hasAttribute(marker), false);
   assert.equal(f.click(submenu.href).defaultPrevented, false);
   f.changed({ enabled: true, dashboardDisabled: true }); assert.equal(submenu.hasAttribute(marker), true);
   f.changed({ enabled: false, dashboardDisabled: true }); assert.equal(submenu.hasAttribute(marker), false);
@@ -259,29 +259,8 @@ test("無効化中にダッシュボード配下へSPA・履歴・直行した�
   f.location.href = "https://note.com/dashboard?tab=x"; f.events.get("popstate")();
   assert.equal(f.moves.at(-1)[0], "replace");
 });
-function homeFixture(options = {}) {
-  const nodes = new Map();
-  for (const id of ["normal", "mode", "status", "profile", "user-status", "note-user", "dashboard-disabled", "save", "settings", "retry"]) nodes.set(id, {
-    value: "", disabled: true, hidden: false, removeAttribute(name) { delete this[name]; }, focus() { this.focused = true; }
-  });
-  const moves = [], patches = [];
-  let state = { enabled: true, noteUserId: "ruminar", ...options.state };
-  const c = context({
-    document: { getElementById: id => nodes.get(id), querySelectorAll: () => ["normal", "note-user", "dashboard-disabled", "save", "retry"].map(id => nodes.get(id)) },
-    location: { assign: url => moves.push(url), hash: options.hash ?? "" },
-    HikikomoriNotePlatform: {
-      getState: async () => { if (options.stateError) throw new Error("state failed"); return state; },
-      save: async patch => {
-        patches.push(plain(patch));
-        await options.saveGate;
-        if (options.saveError) throw new Error("save failed");
-        state = { ...state, ...patch }; return state;
-      }, subscribe() {}
-    }
-  });
-  vm.runInContext(source("src/home.js"), c);
-  return { nodes, moves, patches };
-}
+const homeFixture = require("./helpers/home.cjs");
+
 test("専用ホームはnoteへの移動なしで設定とプロフィールを表示", async () => {
   const f = homeFixture(); await flush();
   assert.equal(f.nodes.get("profile").href, "https://note.com/ruminar");
@@ -297,24 +276,24 @@ test("OFFの完了応答前は通常noteを開かず、成功後にだけ移動"
 test("転送解除失敗時は通常noteへ移動せず、再確認を案内", async () => {
   const f = homeFixture({ saveError: true }); await flush();
   f.nodes.get("normal").onclick(); await flush();
-  assert.equal(f.moves.length, 0); assert.match(f.nodes.get("status").textContent, /状態を再確認/);
+  assert.equal(f.moves.length, 0); assert.match(f.nodes.get("status").textContent, /処理できませんでした/);
   assert.equal(f.nodes.get("retry").disabled, false);
 });
 test("ユーザー名とダッシュボード選択を保存し、HTMLや記事URLは拒否", async () => {
   const f = homeFixture(); await flush();
   const submit = () => f.nodes.get("settings").onsubmit({ preventDefault() {} });
-  f.nodes.get("note-user").value = "<script>"; submit(); assert.equal(f.patches.length, 0);
-  f.nodes.get("note-user").value = "https://note.com/ruminar"; submit(); await flush();
-  assert.deepEqual(f.patches, [{ noteUserId: "ruminar", dashboardDisabled: false }]);
+  f.nodes.get("note-user").value = "<script>"; f.nodes.get("note-user").fire("input"); submit(); assert.equal(f.patches.length, 0);
+  f.nodes.get("note-user").value = "https://note.com/ruminar"; f.nodes.get("note-user").fire("input"); submit(); await flush();
+  assert.deepEqual(f.patches, [{ noteUserId: "ruminar" }]);
 });
 test("ホームの選択を保存し、再表示で復元。保存失敗は成功扱いにしない", async () => {
   const f = homeFixture({ state: { dashboardDisabled: true } }); await flush();
   assert.equal(f.nodes.get("dashboard-disabled").checked, true);
-  f.nodes.get("dashboard-disabled").checked = false;
+  f.nodes.get("dashboard-disabled").checked = false; f.nodes.get("dashboard-disabled").fire("change");
   f.nodes.get("settings").onsubmit({ preventDefault() {} }); await flush();
-  assert.deepEqual(f.patches, [{ noteUserId: "ruminar", dashboardDisabled: false }]);
+  assert.deepEqual(f.patches, [{ dashboardDisabled: false }]);
   const failed = homeFixture({ saveError: true }); await flush();
-  failed.nodes.get("dashboard-disabled").checked = true;
+  failed.nodes.get("dashboard-disabled").checked = true; failed.nodes.get("dashboard-disabled").fire("change");
   failed.nodes.get("settings").onsubmit({ preventDefault() {} }); await flush();
   assert.match(failed.nodes.get("status").textContent, /処理できませんでした/);
 });
@@ -380,7 +359,7 @@ test("アダプターは自拡張のhome.htmlだけを設定メッセージ送�
 });
 test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホーム全体を隠さない", () => {
   const m = JSON.parse(source("manifest.json"));
-  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.1.1");
+  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.0");
   assert.deepEqual(m.permissions, ["storage", "declarativeNetRequestWithHostAccess"]);
   assert.deepEqual(m.host_permissions, ["https://note.com/*"]);
   assert.deepEqual(m.web_accessible_resources, [{ resources: ["home.html"], matches: ["https://note.com/*"] }]);
@@ -388,6 +367,6 @@ test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホ�
   assert.deepEqual(m.content_scripts[0].css, ["src/content.css"]);
   assert.equal(source("src/content.css").includes("> body"), false);
   for (const file of [m.background.service_worker, ...m.content_scripts[0].js, ...m.content_scripts[0].css, ...Object.values(m.icons), "home.html"]) assert.ok(fs.existsSync(path.join(root, file)));
-  for (const match of source("home.html").matchAll(/(?:src|href)="([^"]+)"/g)) assert.ok(fs.existsSync(path.join(root, match[1])));
+  for (const match of source("home.html").matchAll(/(?:src|href)="([^"]+)"/g)) if (!match[1].startsWith("https://")) assert.ok(fs.existsSync(path.join(root, match[1])));
   assert.equal(/<script[^>]*>[^<]+<\/script>/.test(source("home.html")), false);
 });

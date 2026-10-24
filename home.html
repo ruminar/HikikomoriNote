@@ -11,36 +11,62 @@
 </head>
 <body>
   <main>
-    <header>
-      <div><h1>ひきこもりnote</h1><p class="muted">枠を超えたら落選したので、殻を作りました。</p></div>
-      <button id="normal" class="secondary" disabled>通常のnoteを表示（OFF）</button>
-    </header>
+    <header><h1>ひきこもりnote</h1><span id="version" class="muted">0.2.0</span></header>
     <p id="mode" class="muted">設定とホームの転送状態を確認しています…</p>
     <p id="status" role="status" aria-live="polite"></p>
-    <section>
-      <h2>自分の記事</h2>
-      <p id="user-status">下の設定でnoteユーザー名を登録してください。</p>
-      <b><a id="profile" hidden>公開プロフィールで自分の記事を見る</a></b>
-      <p class="muted">v0.1.0では記事一覧を取得せず、公開プロフィールをご案内します。</p>
-      <p class="muted">投稿・下書き管理・ログインは「通常のnoteを表示（OFF）」から、note公式画面で操作してください。</p>
+    <p id="tag-warning" class="warning" role="alert" hidden></p>
+    <div id="quick-slot"></div>
+    <nav id="tabs" role="tablist" aria-label="専用ホーム" hidden>
+      <button type="button" id="tab-main" role="tab" aria-controls="panel-main" aria-selected="true">メイン</button>
+      <button type="button" id="tab-tags" role="tab" aria-controls="panel-tags" aria-selected="false" tabindex="-1">お気に入りタグ</button>
+      <button type="button" id="tab-settings" role="tab" aria-controls="panel-settings" aria-selected="false" tabindex="-1">設定</button>
+    </nav>
+    <section id="panel-main" role="tabpanel" aria-labelledby="tab-main" hidden>
+      <h2>お気に入りハッシュタグ</h2>
+      <p id="tags-empty" class="muted">お気に入りタグは未登録です。「お気に入りタグ」タブで追加できます。</p>
+      <ul id="main-tags" class="tag-links"></ul>
     </section>
-    <section>
-      <h2>ユーザー設定</h2>
+    <section id="panel-tags" role="tabpanel" aria-labelledby="tab-tags" hidden>
+      <h2>お気に入りタグ</h2>
+      <p class="muted">追加・削除・並べ替えは操作ごとに保存します。ドラッグ、または上下ボタンで並べ替えできます。</p>
+      <form id="tag-form" class="tag-form">
+        <label for="tag-input">タグ名</label>
+        <input id="tag-input" type="text" autocomplete="off" placeholder="例：ComfyUI" disabled>
+        <button id="add-tag" type="submit" disabled>追加</button>
+      </form>
+      <ul id="edit-tags" class="tag-editor"></ul>
+    </section>
+    <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <div id="legacy-intro" hidden>
+        <p class="catchphrase">枠を超えたら落選したので、殻を作りました。</p>
+        <div id="legacy-quick-slot"></div>
+        <hr>
+      </div>
+      <h2>設定</h2>
       <form id="settings">
         <label for="note-user">noteユーザー名 または 公開プロフィールURL</label>
         <input id="note-user" type="text" maxlength="256" autocomplete="off" spellcheck="false" placeholder="例：ruminar または https://note.com/ruminar" disabled>
         <p class="muted">空欄で保存すると登録を解除します。ブラウザ内にのみ保存します。</p>
-        <label class="check-option" for="dashboard-disabled">
-          <input id="dashboard-disabled" type="checkbox" aria-describedby="dashboard-help" disabled>
-          ダッシュボードを無効化する
-        </label>
-        <p class="muted" id="dashboard-help">アクセス状況・提案・売上・振込・販売履歴を含むダッシュボード全体への移動を専用ホームへ戻し、note上のダッシュボードボタンを隠します。「通常のnoteを表示（OFF）」では制限を解除します。</p>
+        <label class="check-option" for="dashboard-disabled"><input id="dashboard-disabled" type="checkbox" aria-describedby="dashboard-help" disabled>ダッシュボードを無効化する</label>
+        <p class="muted" id="dashboard-help">アクセス状況・提案・バッジ・売上・振込・販売履歴を含むダッシュボード全体を専用ホームへ戻し、note上のダッシュボードボタンを隠します。</p>
+        <label class="check-option" for="legacy-mode"><input id="legacy-mode" type="checkbox" aria-describedby="legacy-help" disabled>0.1.1モード（重度引きこもりモード）</label>
+        <p class="muted" id="legacy-help">拡張を有効にしたまま、タグとフォロー中への独自ナビゲーションを停止します。自分のページへの入口と登録済みのタグは保持します。</p>
         <button id="save" type="submit" disabled>ユーザー設定を保存</button>
       </form>
+      <hr>
+      <p class="muted">通常のnoteを表示すると、ホーム転送とダッシュボード制限を解除します。保存済みの設定は保持します。</p>
+      <button id="normal" class="secondary" type="button" disabled>通常のnoteを表示（拡張OFF）</button>
     </section>
-    <button id="retry" class="secondary">状態を再確認</button>
+    <div id="quick-access" hidden>
+      <h2>クイックアクセス</h2>
+      <a id="profile" hidden>自分のページ</a>
+      <span id="user-status" class="muted"></span>
+      <button id="setup-user" class="secondary" type="button" hidden>ユーザー名を設定する</button>
+      <a id="following" href="https://note.com/following">フォロー中</a>
+    </div>
+    <button id="retry" class="secondary" type="button">状態を再確認</button>
     <p class="muted">ブラウザの拡張アイコンを押すと、ONに戻してこの画面を開きます。</p>
-    <footer>非公式拡張 · v0.1.0 · note株式会社とは関係ありません。<br>この画面は拡張内にあり、noteの通常ホームを読み込みません。障害時は拡張を無効化すると通常のnoteを利用できます。</footer>
+    <footer>非公式拡張 · 0.2.0 · note株式会社とは関係ありません。<br>この画面は拡張内にあり、noteの通常ホームを読み込みません。記事の取得・表示・操作はnote公式画面で行います。</footer>
   </main>
 </body>
 </html>

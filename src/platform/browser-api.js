@@ -4,8 +4,10 @@
   const api = globalThis.browser ?? globalThis.chrome;
   const key = globalThis.HikikomoriNote.settingsKey;
   async function request(type, patch) {
-    const result = await api.runtime.sendMessage({ type, patch });
-    if (!result?.ok) throw new Error(result?.error ?? "拡張の背景処理に接続できません。拡張を再読み込みしてください。");
+    let result;
+    try { result = await api.runtime.sendMessage({ type, patch }); }
+    catch { throw Object.assign(new Error("保存結果を確認できません。状態を再確認してください。操作は自動再送しません。"), { code: "UNCONFIRMED" }); }
+    if (!result?.ok) throw Object.assign(new Error(result?.error ?? "拡張の背景処理に接続できません。状態を再確認してください。"), { code: result?.code ?? "UNCONFIRMED" });
     return result.settings;
   }
   globalThis.HikikomoriNotePlatform = Object.freeze({
@@ -17,6 +19,7 @@
     homeUrl: () => api.runtime.getURL("home.html"),
     getState: () => request("get-state"),
     save: patch => request("save-settings", patch),
+    tag: operation => request("tag-operation", operation),
     subscribe(listener) {
       const onChange = (changes, area) => {
         if (area === "local" && Object.hasOwn(changes, key)) listener(changes[key].newValue);
