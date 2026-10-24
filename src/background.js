@@ -22,14 +22,19 @@ port.onAction(() => {
     await port.openHome(activationFailed);
   })().catch(error => console.warn(error));
 });
-// note上のコンテンツスクリプトや外部ページには設定変更を許可しない。
+// note上では送信元URLのタグ追加だけを許可し、設定変更・削除・並べ替えは専用ホームに限定。
 port.onMessage((message, sender, respond) => {
-  if (!port.isHomeSender(sender)) return false;
   let operation;
-  if (message?.type === "get-state") operation = controller.getState();
-  else if (message?.type === "save-settings") operation = controller.save(message.patch);
-  else if (message?.type === "tag-operation") operation = controller.tag(message.patch);
-  else return false;
+  if (port.isHomeSender(sender)) {
+    if (message?.type === "get-state") operation = controller.getState();
+    else if (message?.type === "save-settings") operation = controller.save(message.patch);
+    else if (message?.type === "tag-operation") operation = controller.tag(message.patch);
+    else return false;
+  } else {
+    const tag = message?.type === "add-current-tag" ? port.currentTag?.(sender) : null;
+    if (tag === null || tag === undefined) return false;
+    operation = controller.tag({ type: "ADD_TAG", tag }, { requireEnabled: true });
+  }
   operation.then(settings => respond({ ok: true, settings }),
     error => respond({ ok: false, error: error.message || "設定処理に失敗しました。", code: error.code || "OPERATION_FAILED" }));
   return true;

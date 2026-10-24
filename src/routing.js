@@ -67,11 +67,12 @@
         }
         return next;
       }),
-      tag: operation => run(async () => {
+      tag: (operation, options = {}) => run(async () => {
         if (!operation || !["ADD_TAG", "REMOVE_TAG", "MOVE_TAG"].includes(operation.type) ||
             Object.keys(operation).some(key => !["type", "tag", "beforeTag"].includes(key))) throw new Error("タグ操作の形式が正しくありません。");
         const raw = await port.load();
         const settings = core.readSettings(raw);
+        if (options.requireEnabled && !settings.enabled) throw failure("拡張OFFではタグを追加できません。", "DISABLED");
         if (settings.legacyMode) throw failure("重度引きこもりモードではタグを編集できません。状態を再確認してください。", "LEGACY_MODE");
         if (settings.tagWarning) throw failure(settings.tagWarning, "INVALID_TAGS");
         const tag = core.normalizeTag(operation.tag);

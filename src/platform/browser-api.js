@@ -20,6 +20,7 @@
     getState: () => request("get-state"),
     save: patch => request("save-settings", patch),
     tag: operation => request("tag-operation", operation),
+    addCurrentTag: () => request("add-current-tag"),
     subscribe(listener) {
       const onChange = (changes, area) => {
         if (area === "local" && Object.hasOwn(changes, key)) listener(changes[key].newValue);
@@ -40,6 +41,11 @@
     openHome: (activationFailed = false) => api.tabs.create({
       url: api.runtime.getURL("home.html") + (activationFailed ? "#activation-failed" : "")
     }),
+    currentTag: sender => {
+      if (sender?.id !== api.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id)) return null;
+      const page = globalThis.HikikomoriNote.pageKind(sender.url);
+      return page?.type === "tag" ? page.tag : null;
+    },
     isHomeSender: sender => sender?.id === api.runtime.id &&
       sender.url?.split(/[?#]/)[0] === api.runtime.getURL("home.html")
   });

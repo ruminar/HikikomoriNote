@@ -12,6 +12,16 @@ a[data-hikikomori-note-dashboard-hidden] {
 .hikikomori-note-navigation a:hover { background: rgba(128,128,128,.12); }
 .hikikomori-note-navigation a[aria-current="page"] { background: rgba(128,128,128,.18); font-weight: bold; }
 .hikikomori-note-navigation a:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.hikikomori-note-navigation button {
+  box-sizing: border-box; width: 100%; margin-top: 8px; padding: 8px;
+  border: 1px solid rgba(128,128,128,.35); border-radius: 8px;
+  background: transparent; color: inherit; font: inherit; font-size: 12px;
+  cursor: pointer; white-space: nowrap;
+}
+.hikikomori-note-navigation button:disabled { opacity: .6; cursor: default; }
+.hikikomori-note-navigation button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.hikikomori-note-tag-status { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.hikikomori-note-tag-status:empty { display: none; }
 .hikikomori-note-profile-navigation a {
   box-sizing: border-box;
   display: flex;

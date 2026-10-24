@@ -3,7 +3,18 @@
   "use strict";
   const core = globalThis.HikikomoriNote;
   const platform = globalThis.HikikomoriNotePlatform;
-  const noteUi = globalThis.HikikomoriNoteUi?.create(document, window);
+  const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
+    async addCurrentTag() {
+      const before = revision;
+      const value = await platform.addCurrentTag();
+      if (!stopped && revision === before) { settings = core.readSettings(value); checkHome(); }
+    },
+    async refresh() {
+      const before = revision;
+      const value = await platform.load();
+      if (!stopped && revision === before) { settings = core.readSettings(value); checkHome(); }
+    }
+  });
   let settings;
   let revision = 0;
   let stopped = false;

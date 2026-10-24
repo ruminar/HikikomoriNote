@@ -138,7 +138,7 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
  const moved=n.get('edit-tags').children;moved[0].fire('dragstart',{dataTransfer:{setData(){}}});moved[2].fire('drop',{clientY:39});await flush();assert.deepEqual(f.state.favoriteTags,['B','A','C']);
  n.get('tabs').fire('keydown',{key:'End'});assert.equal(n.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,n.get('tab-settings'));
 });
-function uiFixture(html){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,ui:context.HikikomoriNoteUi.create(doc,win)};}
+function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,ui:context.HikikomoriNoteUi.create(doc,win,actions)};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 test('実DOM境界に一致するasideだけ差し替え、モード/OFF/記事遷移で公式UIを復帰',()=>{
  const f=uiFixture(sidebarHtml),settings=f.core.readSettings({favoriteTags:['A']});const aside=f.doc.querySelector('aside'),original=aside.children[0],article=f.doc.querySelector('article');
@@ -256,4 +256,66 @@ test('後挿入・構造変更に追随し、記事本文内の同形枠や別�
  for(const url of ['https://other.test/ruminar/n/n123','https://note.com/ruminar','https://note.com/ruminar/n/n123/edit','invalid']){
   f.ui.update(settings,url);assert.equal(region.hasAttribute(recommendationMarker),false);
  }
+});
+
+test('タグページからの追加も同じキューで末尾へ保存し、重複・OFF・モード・保存失敗を拒否',async()=>{
+ const f=fixture({favoriteTags:['A']});
+ await Promise.all([f.controller.tag({type:'ADD_TAG',tag:'みじんこ123'},{requireEnabled:true}),f.controller.tag({type:'ADD_TAG',tag:'B'})]);
+ assert.deepEqual(f.stored.favoriteTags,['A','みじんこ123','B']);
+ await assert.rejects(f.controller.tag({type:'ADD_TAG',tag:'みじんこ123'},{requireEnabled:true}),{code:'CONFLICT'});
+ await f.controller.save({enabled:false});await assert.rejects(f.controller.tag({type:'ADD_TAG',tag:'C'},{requireEnabled:true}),{code:'DISABLED'});
+ await f.controller.save({enabled:true,legacyMode:true});await assert.rejects(f.controller.tag({type:'ADD_TAG',tag:'C'},{requireEnabled:true}),{code:'LEGACY_MODE'});
+ await f.controller.save({legacyMode:false});f.options.fail=true;
+ await assert.rejects(f.controller.tag({type:'ADD_TAG',tag:'C'},{requireEnabled:true}));assert.deepEqual(f.stored.favoriteTags,['A','みじんこ123','B']);
+});
+
+test('コンテンツ送信元は自拡張・noteタグ・最上位タブだけ。URLを安全にデコード',()=>{
+ const context=vm.createContext({URL,chrome:{runtime:{id:'self',getURL:file=>'chrome-extension://self/'+file}}});
+ vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/platform/browser-api.js'),context);
+ const check=context.HikikomoriNoteBackgroundPlatform.currentTag;
+ const sender={id:'self',frameId:0,tab:{id:12},url:'https://note.com/hashtag/%E3%81%BF%E3%81%98%E3%82%93%E3%81%93123?mode=new'};
+ assert.equal(check(sender),'みじんこ123');
+ for(const patch of [{id:'other'},{frameId:1},{tab:undefined},{url:'https://other.test/tag/A'},{url:'https://note.com/ruminar'},{url:'https://note.com/tag/%xx'}])assert.equal(check({...sender,...patch}),null);
+});
+
+test('背景処理は表示中のタグだけを追加し、コンテンツからの任意タグ・削除・設定保存を許可しない',async()=>{
+ const f=fixture();let handler;
+ const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:()=>false,currentTag:sender=>sender.url==='https://note.com/tag/実際のタグ'?'実際のタグ':null};
+ const context=vm.createContext({console,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>f.controller}});
+ vm.runInContext(source('src/background.js'),context);await flush();const sender={url:'https://note.com/tag/実際のタグ'};let answer;
+ for(const type of ['tag-operation','save-settings','get-state'])assert.equal(handler({type,patch:{type:'REMOVE_TAG',tag:'A'}},sender,()=>{}),false);
+ assert.equal(handler({type:'add-current-tag'},{url:'https://other.test/tag/A'},()=>{}),false);
+ assert.equal(handler({type:'add-current-tag',patch:{tag:'偽のタグ'}},sender,value=>{answer=value;}),true);await flush();
+ assert.equal(answer.ok,true);assert.deepEqual(f.stored.favoriteTags,['実際のタグ']);
+ await f.controller.save({enabled:false});handler({type:'add-current-tag'},sender,value=>{answer=value;});await flush();assert.equal(answer.code,'DISABLED');
+});
+
+test('表示中の日本語タグを左メニューで追加し、二重クリックを止めて登録済みを同期',async()=>{
+ let complete,calls=0;const url='https://note.com/hashtag/%E3%81%BF%E3%81%98%E3%82%93%E3%81%93123';
+ const f=uiFixture(sidebarHtml,{async addCurrentTag(){calls++;await new Promise(resolve=>{complete=resolve;});settings=f.core.readSettings({favoriteTags:['みじんこ123']});f.ui.update(settings,url);}});
+ let settings=f.core.readSettings({});f.ui.update(settings,url);
+ const button=f.doc.querySelector('button');assert.match(button.getAttribute('aria-label'),/みじんこ123/);assert.equal(button.disabled,false);
+ button.onclick();button.onclick();assert.equal(calls,1);assert.equal(f.doc.querySelector('button').disabled,true);
+ complete();await flush();assert.equal(f.doc.querySelector('button').textContent,'このタグは登録済み');assert.equal(f.doc.querySelector('button').disabled,true);
+ assert.equal(f.doc.querySelector('[aria-current="page"]').href,'https://note.com/tag/%E3%81%BF%E3%81%98%E3%82%93%E3%81%93123?mode=new');
+ f.ui.update(f.core.readSettings({}),url);assert.equal(f.doc.querySelector('button').disabled,false);
+ for(const target of ['https://note.com/following','https://note.com/ruminar/n/n123']){f.ui.update(settings,target);assert.equal(f.doc.querySelector('button'),null);}
+});
+
+test('追加結果未確認では自動再送せず、再確認が成功するまで別タグでも追加を停止',async()=>{
+ let calls=0,refreshes=0;const f=uiFixture(sidebarHtml,{async addCurrentTag(){calls++;throw Object.assign(Error('保存結果未確認'),{code:'UNCONFIRMED'});},async refresh(){refreshes++;}}),settings=f.core.readSettings({});
+ f.ui.update(settings,'https://note.com/tag/A');f.doc.querySelector('button').onclick();await flush();
+ assert.equal(f.doc.querySelector('button').disabled,true);assert.equal(calls,1);
+ f.ui.update(settings,'https://note.com/tag/B');assert.equal(f.doc.querySelector('button').disabled,true);assert.equal(calls,1);
+ f.doc.querySelectorAll('button')[1].onclick();await flush();assert.equal(refreshes,1);assert.equal(f.doc.querySelector('button').disabled,false);
+});
+
+test('既知の追加失敗は表示して再試行可能。破損タグ・空タグ・OFF・重度では登録しない',async()=>{
+ let calls=0;const f=uiFixture(sidebarHtml,{async addCurrentTag(){calls++;throw Error('保存失敗');}}),settings=f.core.readSettings({});
+ f.ui.update(settings,'https://note.com/tag/A');f.doc.querySelector('button').onclick();await flush();
+ assert.equal(f.doc.querySelector('button').disabled,false);assert.match(f.doc.root.textContent,/保存失敗/);
+ f.ui.update(f.core.readSettings({favoriteTags:['A',null]}),'https://note.com/tag/B');assert.equal(f.doc.querySelector('button').disabled,true);
+ f.ui.update(settings,'https://note.com/tag/%23');assert.equal(f.doc.querySelector('button').disabled,true);
+ for(const patch of [{enabled:false},{legacyMode:true}]){f.ui.update({...settings,...patch},'https://note.com/tag/A');assert.equal(f.doc.querySelector('button'),null);}
+ assert.equal(calls,1);
 });
