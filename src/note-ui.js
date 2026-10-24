@@ -1,16 +1,39 @@
-/* 2026-10-24に確認した左カラムだけを扱う。詳細はdocs/note-dom.md。 */
+/* 確認済みのナビゲーションと関連商品枠を扱う。詳細はdocs/note-dom.md。 */
 (() => {
   "use strict";
   const core = globalThis.HikikomoriNote;
   const owned = "data-hikikomori-note-owned";
   const hidden = "data-hikikomori-note-menu-hidden";
+  const productHidden = "data-hikikomori-note-product-hidden";
+  const productCard = '[data-aicn-thing-card="true"], [data-testid="aicn-thing-card"]';
   function create(doc, win) {
     let host, menu, signature;
     const originals = new Set();
+    const products = new Set();
     function restore() {
       menu?.remove(); menu = undefined; host = undefined; signature = undefined;
       for (const element of originals) element.removeAttribute(hidden);
       originals.clear();
+    }
+    function isProductSection(section) {
+      const headings = [...section.querySelectorAll("h2")];
+      return headings.length === 1 && headings[0].classList.contains("sr-only") &&
+        headings[0].textContent.trim() === "関連商品" && !section.querySelector("article") &&
+        [...section.querySelectorAll(productCard)].some(card => card.closest("section") === section);
+    }
+    function syncProducts(active) {
+      for (const section of products) {
+        if (!active || !section.isConnected || !isProductSection(section)) {
+          section.removeAttribute(productHidden); products.delete(section);
+        }
+      }
+      if (!active) return;
+      for (const card of doc.querySelectorAll(productCard)) {
+        const section = card.closest("section");
+        if (section && isProductSection(section) && !products.has(section)) {
+          section.setAttribute(productHidden, ""); products.add(section);
+        }
+      }
     }
     function visible(element) {
       return element.isConnected && element.getBoundingClientRect().width > 0 && win.getComputedStyle(element).display !== "none";
@@ -31,6 +54,7 @@
     }
     function update(settings, url) {
       const page = core.pageKind(url);
+      syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
       if (!settings.enabled || settings.legacyMode || !page) { restore(); return; }
       const nextHost = page.type === "profile" ? profile(page.user) : sidebar();
       if (!nextHost) { restore(); return; }
@@ -72,7 +96,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, stop: restore });
+    return Object.freeze({ update, stop() { restore(); syncProducts(false); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create });
 })();
