@@ -9,6 +9,7 @@
   const productCard = '[data-aicn-thing-card="true"], [data-testid="aicn-thing-card"]';
   function create(doc, win, actions = {}) {
     let host, menu, signature;
+    let articleFollowing;
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
     function repaint() { if (!disposed && currentSettings) update(currentSettings, currentUrl); }
     async function addTag(tag) {
@@ -31,6 +32,21 @@
     const originals = new Set();
     const products = new Set();
     const recommendations = new Set();
+    function syncArticleFollowing(settings, url) {
+      const article = doc.querySelector('article[id="note-article"]');
+      const show = settings.enabled && !settings.legacyMode && core.isArticle(url) &&
+        win.matchMedia("(min-width: 1100px)").matches && article && visible(article) &&
+        article.getBoundingClientRect().left >= 228 && doc.body;
+      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; return; }
+      if (!articleFollowing?.isConnected) {
+        articleFollowing = doc.createElement("a");
+        articleFollowing.setAttribute(owned, "");
+        articleFollowing.className = "hikikomori-note-article-following";
+        articleFollowing.href = "https://note.com/following";
+        articleFollowing.textContent = "フォロー中のTL";
+        doc.body.append(articleFollowing);
+      }
+    }
     function isRecommendations(element) {
       if (element.tagName !== "DIV" || !element.classList.contains("pt-6") ||
           element.closest("article") || element.closest('[id="note-body"]') || element.children.length !== 2) return false;
@@ -102,6 +118,7 @@
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
       currentSettings = settings; currentUrl = url;
       const page = core.pageKind(url);
+      syncArticleFollowing(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       if (!settings.enabled || settings.legacyMode || !page) { restore(); return; }
@@ -165,7 +182,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, stop() { disposed = true; restore(); syncProducts(false); syncRecommendations(false); } });
+    return Object.freeze({ update, stop() { disposed = true; articleFollowing?.remove(); articleFollowing = undefined; restore(); syncProducts(false); syncRecommendations(false); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create });
 })();

@@ -141,6 +141,29 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,ui:context.HikikomoriNoteUi.create(doc,win,actions)};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
+test('幅のある記事画面は本文外の固定帰還リンクを1つだけ追加し、幅・余白・モード・離脱で除去',()=>{
+ const f=uiFixture('<body><article id="note-article"><div id="note-body"></div></article></body>');
+ f.doc.body=f.doc.querySelector('body');const article=f.doc.getElementById('note-article');let left=270;
+ article.getBoundingClientRect=()=>({left,width:620,top:-500,height:3000});
+ const settings=f.core.readSettings({}),url='https://note.com/ruminar/n/n36b92cdcd987?x=1#body';
+ const links=()=>f.doc.querySelectorAll('[data-hikikomori-note-owned]');
+ f.ui.update(settings,url);assert.equal(links().length,1);assert.equal(links()[0].textContent,'フォロー中のTL');assert.equal(links()[0].href,'https://note.com/following');assert.equal(links()[0].parentElement,f.doc.body);assert.equal(article.children.length,1);
+ f.ui.update(settings,url);assert.equal(links().length,1);
+ f.win.wide=false;f.ui.update(settings,url);assert.equal(links().length,0);f.win.wide=true;
+ left=220;f.ui.update(settings,url);assert.equal(links().length,0);left=270;
+ for(const patch of [{enabled:false},{legacyMode:true}]){f.ui.update(settings,url);f.ui.update({...settings,...patch},url);assert.equal(links().length,0);}
+ f.ui.update(settings,url);f.ui.update(settings,'https://note.com/ruminar');assert.equal(links().length,0);
+ f.ui.update(settings,url);f.ui.stop();assert.equal(links().length,0);
+});
+
+test('記事URLでも本文領域が未挿入・非表示の場合や編集画面では固定ボタンを出さない',()=>{
+ const f=uiFixture('<body></body>');f.doc.body=f.doc.querySelector('body');const settings=f.core.readSettings({});
+ f.ui.update(settings,'https://note.com/ruminar/n/n123');assert.equal(f.doc.body.children.length,0);
+ const article=f.doc.createElement('article');article.setAttribute('id','note-article');f.doc.body.append(article);
+ article.getBoundingClientRect=()=>({left:270,width:0});f.ui.update(settings,'https://note.com/ruminar/n/n123');assert.equal(f.doc.body.children.length,1);
+ article.getBoundingClientRect=()=>({left:270,width:620});f.ui.update(settings,'https://note.com/ruminar/n/n123/edit');assert.equal(f.doc.body.children.length,1);
+});
+
 test('検索URLは検索語・対象・並び順・末尾スラッシュに関わらず専用種別。別パスと外部は対象外',()=>{
  const {core}=fixture();
  for(const url of ['https://note.com/search','https://note.com/search/?q=きのころ&context=note&mode=search#results','https://note.com/search?context=user&q=AI'])assert.equal(core.pageKind(url).type,'search');
