@@ -63,7 +63,7 @@
     }
     return { tags, warning: invalid ? "タグの保存データに異常があります。正常な項目だけ表示しています。タグ編集を停止しました。元のデータを保存してから、開発者へ修復をご相談ください。" : "" };
   }
-  function tagUrl(tag) { return `https://note.com/tag/${encodeURIComponent(normalizeTag(tag))}`; }
+  function tagUrl(tag) { return `https://note.com/tag/${encodeURIComponent(normalizeTag(tag))}?mode=new`; }
   function pageKind(url) {
     try {
       const parsed = new URL(url);

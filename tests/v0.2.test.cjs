@@ -20,7 +20,7 @@ test('タグ正規化は前後空白と#だけ。大小・全半角・内部空�
  assert.equal(core.normalizeTag('  #ComfyUI  '),'ComfyUI');
  for(const tag of ['comfyui','ComfyUI','ＡＩ','AI','a b','a  b','e\u0301','é'])assert.equal(core.normalizeTag(tag),tag);
  for(const tag of ['', '  ', '#  ', null, 3,'\ud800'])assert.throws(()=>core.normalizeTag(tag));
- assert.equal(core.tagUrl('a/b?# x'),'https://note.com/tag/a%2Fb%3F%23%20x');
+ assert.equal(core.tagUrl('a/b?# x'),'https://note.com/tag/a%2Fb%3F%23%20x?mode=new');
 });
 test('旧設定を移行し、タグ・モードがない場合もユーザー名とOFFを維持',async()=>{
  const f=fixture({enabled:false,noteUserId:'ruminar',dashboardDisabled:true});
