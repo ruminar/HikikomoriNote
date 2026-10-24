@@ -10,6 +10,7 @@ label { display: block; font-weight: 600; margin-bottom: 8px; }
 input { width: 100%; max-width: 520px; padding: 12px; border: 1px solid #728579; border-radius: 6px; font: inherit; }
 input[type="checkbox"] { width: auto; margin: 0; accent-color: #285d4b; }
 .check-option { display: flex; align-items: center; gap: 10px; margin: 20px 0 8px; }
+.settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 button, a { font: inherit; }
 button { cursor: pointer; background: #285d4b; color: white; border: 1px solid #285d4b; border-radius: 8px; padding: 10px 18px; }
 button:disabled { opacity: .6; cursor: wait; } .secondary { background: white; color: #285d4b; }
@@ -20,10 +21,8 @@ footer { font-size: 13px; color: #59685e; margin-top: 24px; }
 #tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; border-bottom: 1px solid #cbd4ca; padding-bottom: 12px; }
 #tabs button { background: transparent; color: #285d4b; }
 #tabs button[aria-selected="true"] { background: #285d4b; color: white; }
-#quick-access { padding: 20px 0; }
-#quick-access h2 { font-size: 16px; margin: 0 0 8px; }
-#quick-access a { display: inline-block; margin: 4px 12px 4px 0; padding: 8px 14px; border: 1px solid #b4c4b9; border-radius: 8px; background: white; }
-#user-status { display: block; }
+#quick-access { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+#quick-access a { display: inline-flex; align-items: center; padding: 10px 18px; border: 1px solid #b4c4b9; border-radius: 8px; background: white; text-decoration: none; }
 .catchphrase { font-weight: bold; margin-top: 0; }
 .tag-links { list-style: none; padding: 0; }
 .tag-links li { padding: 8px 0; overflow-wrap: anywhere; }

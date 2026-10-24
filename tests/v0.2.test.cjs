@@ -78,6 +78,8 @@ test('保存失敗ではタグ・モードを確定せず、背景再起動後�
 test('通常の3タブ、重度モードの設定先頭、自分のページとキャッチコピーの切替',async()=>{
  const f=homeFixture({state:{favoriteTags:['A']}});await flush();const n=f.nodes;
  assert.equal(n.get('panel-main').hidden,false);assert.equal(n.get('quick-access').parentElement,n.get('quick-slot'));
+ assert.equal(n.get('panel-main').contains(n.get('quick-access')),true);assert.equal(n.get('profile').textContent,'ruminarのページ');
+ assert.equal(source('home.html').includes('フォロー中のTL'),true);assert.equal(f.document.querySelector('h2'),null);assert.equal(n.has('user-status'),false);
  assert.equal(n.get('legacy-intro').hidden,true);
  n.get('tab-tags').onclick();n.get('tag-input').value='入力途中';n.get('tag-input').focus();
  f.changed({legacyMode:true});
@@ -117,7 +119,17 @@ test('結果未確認時はタグ操作を止め、再取得するまで自動�
  const f=homeFixture({unconfirmed:true});await flush();const n=f.nodes;
  n.get('tag-input').value='A';n.get('tag-form').fire('submit');await flush();
  assert.equal(n.get('add-tag').disabled,true);assert.match(n.get('status').textContent,/未確認/);assert.equal(n.get('tag-input').value,'A');assert.deepEqual(f.state.favoriteTags,[]);
+ assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('settings').contains(n.get('retry')),true);
  f.options.unconfirmed=false;n.get('retry').onclick();await flush();assert.equal(n.get('add-tag').disabled,false);assert.deepEqual(f.state.favoriteTags,[]);
+});
+test('初回の設定読込失敗でも設定タブに再確認を表示し、再試行で復旧できる',async()=>{
+ const f=homeFixture({stateError:true});await flush();const n=f.nodes;
+ assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('tabs').hidden,false);
+ assert.equal(n.get('retry').disabled,false);assert.equal(n.get('save').disabled,true);
+ assert.equal(n.get('save').parentElement,n.get('retry').parentElement);assert.equal(n.get('retry').getAttribute('type'),'button');
+ f.options.stateError=false;n.get('retry').onclick();await flush();
+ assert.equal(n.get('save').disabled,false);assert.equal(n.get('tab-main').hidden,false);
+ assert.equal(n.get('profile').textContent,'ruminarのページ');
 });
 test('上下ボタンとドラッグの移動を保存し、キーボードでタブ選択できる',async()=>{
  const f=homeFixture({state:{favoriteTags:['A','B','C']}});await flush();const n=f.nodes;

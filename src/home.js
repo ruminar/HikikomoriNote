@@ -8,8 +8,8 @@
   const dirty = new Set();
   let state, selected = "main", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectTab(name, focus = false) {
-    if (!state) return;
-    selected = state.legacyMode ? "settings" : name;
+    if (!state && name !== "settings") return;
+    selected = state?.legacyMode ? "settings" : name;
     for (const tab of tabs) {
       byId(`tab-${tab}`).setAttribute("aria-selected", String(tab === selected));
       byId(`tab-${tab}`).tabIndex = tab === selected ? 0 : -1;
@@ -87,9 +87,9 @@
     byId("following").hidden = state.legacyMode;
     const profile = core.profileUrl(state.noteUserId);
     byId("profile").hidden = !profile;
+    byId("profile").textContent = profile ? `${state.noteUserId}のページ` : "自分のページ";
     if (profile) byId("profile").href = profile; else byId("profile").removeAttribute("href");
     byId("setup-user").hidden = Boolean(profile);
-    byId("user-status").textContent = profile ? `登録ユーザー：${state.noteUserId}` : "自分のページを開くには、設定でnoteユーザー名を登録してください。";
     byId("mode").textContent = `${state.enabled ? "拡張ON：通常ホームを専用ホームへ転送します。" : "拡張OFF：通常のnoteを利用できます。拡張アイコンからONへ戻せます。"} ${state.legacyMode ? "0.1.1モード（重度引きこもりモード）" : "通常モード"}`;
     byId("tag-warning").hidden = !state.tagWarning; byId("tag-warning").textContent = state.tagWarning ?? "";
     selectTab(selected, hiddenFocus);
@@ -104,7 +104,14 @@
       const value = await platform.getState(); uncertain = false; if (before === revision) show(value);
       byId("status").textContent = location.hash === "#activation-failed" && !state.enabled
         ? "ONへの切り替えに失敗しました。拡張アイコンを押して再度お試しください。" : "設定と転送状態を確認しました。";
-    } catch (error) { uncertain = true; byId("status").textContent = `確認できませんでした。${error.message}`; }
+    } catch (error) {
+      uncertain = true; byId("status").textContent = `確認できませんでした。${error.message} 設定タブの「状態を再確認」で再試行できます。`;
+      if (!state) {
+        byId("tabs").hidden = false;
+        for (const tab of ["main", "tags"]) byId(`tab-${tab}`).hidden = true;
+      }
+      selectTab("settings");
+    }
     finally { busy = false; controls(); }
   }
   async function perform(task, options = {}) {
@@ -123,6 +130,7 @@
     } catch (error) {
       uncertain = error.code === "UNCONFIRMED";
       byId("status").textContent = `処理できませんでした。${error.message}`;
+      if (uncertain) selectTab("settings", true);
       if (["CONFLICT", "LEGACY_MODE", "INVALID_TAGS"].includes(error.code)) {
         try { show(await platform.getState()); } catch { uncertain = true; }
       }
