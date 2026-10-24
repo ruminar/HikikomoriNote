@@ -146,7 +146,7 @@ test('実DOM境界に一致するasideだけ差し替え、モード/OFF/記事�
  assert.equal(aside.children[0].querySelector('[aria-current="page"]').textContent,'# A');
  f.ui.update(settings,'https://note.com/tag/A');assert.equal(aside.children.length,2);
  f.ui.update({...settings,legacyMode:true},'https://note.com/tag/A');assert.equal(aside.children.length,1);assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),false);
- f.ui.update(settings,'https://note.com/following');assert.equal(aside.children[0].querySelector('[aria-current="page"]').textContent,'フォロー中');
+ f.ui.update(settings,'https://note.com/following');assert.equal(aside.children[0].querySelector('[aria-current="page"]').textContent,'フォロー中のTL');
  f.ui.update({...settings,enabled:false},'https://note.com/following');assert.equal(aside.children.length,1);
  f.ui.update(settings,'https://note.com/tag/A');f.ui.update(settings,'https://note.com/user/n/id');assert.equal(aside.children.length,1);assert.equal(article.parentElement.tagName,'MAIN');
 });
@@ -157,7 +157,7 @@ test('DOM再生成後の公式メニューも処理し、構造不一致なら�
 });
 test('確認済みプロフィール左カラムの先頭だけに追加し、狭い画面・モードで解除',()=>{
  const f=uiFixture('<aside class="w-full lg:w-96"><div><button data-name="avatar"></button><h1></h1><a href="/ruminar/followings"></a></div></aside>'),settings=f.core.readSettings({});const aside=f.doc.querySelector('aside');
- f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children[0].textContent,'フォロー中画面へ');
+ f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children[0].textContent,'フォロー中のTL');
  f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children.length,2);
  f.win.wide=false;f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,1);
  f.win.wide=true;f.ui.update(settings,'https://note.com/ruminar');f.ui.update({...settings,legacyMode:true},'https://note.com/ruminar');assert.equal(aside.children.length,1);

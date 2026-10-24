@@ -41,13 +41,13 @@
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
         menu.setAttribute(owned, ""); menu.className = "hikikomori-note-navigation";
-        menu.setAttribute("aria-label", page.type === "profile" ? "フォロー中画面への移動" : "ひきこもりnote ナビゲーション");
+        menu.setAttribute("aria-label", page.type === "profile" ? "フォロー中のTLへの移動" : "ひきこもりnote ナビゲーション");
         host.prepend(menu);
       }
       if (signature !== nextSignature) {
         menu.replaceChildren();
         const following = doc.createElement("a"); following.href = "https://note.com/following";
-        following.textContent = page.type === "profile" ? "フォロー中画面へ" : "フォロー中";
+        following.textContent = "フォロー中のTL";
         if (page.type === "following") following.setAttribute("aria-current", "page");
         menu.append(following);
         if (page.type !== "profile") {
