@@ -319,6 +319,74 @@ test('別タブの記事おすすめ設定を同期し、モードでも表示�
 const recommendationHtml='<div class="pt-6 px-4 md:px-0"><div><h2></h2></div><aside aria-label="記事"></aside></div>';
 const articleUrl='https://note.com/ruminar/n/n36b92cdcd987';
 const recommendationMarker='data-hikikomori-note-recommendations-hidden';
+
+test('有料記事設定は既定OFF。型検証・保存・再起動と他設定の維持',async()=>{
+ const f=fixture();assert.equal((await f.controller.getState()).hidePaidArticles,false);
+ await assert.rejects(f.controller.save({hidePaidArticles:'true'}));assert.equal(f.writes,0);
+ await f.controller.save({hidePaidArticles:true});await f.controller.save({legacyMode:true,enabled:false});
+ assert.equal((await f.restart().getState()).hidePaidArticles,true);
+ f.options.fail=true;await assert.rejects(f.controller.save({hidePaidArticles:false}));assert.equal(f.stored.hidePaidArticles,true);
+});
+
+test('有料記事設定UIは未保存値を維持し、保存成功後に同期、失敗時には確定しない',async()=>{
+ const f=homeFixture({saveError:true});await flush();const n=f.nodes,checkbox=n.get('hide-paid-articles');
+ assert.equal(checkbox.checked,false);checkbox.checked=true;checkbox.fire('change');n.get('settings').fire('submit');await flush();
+ assert.equal(f.state.hidePaidArticles,false);assert.equal(checkbox.checked,true);
+ f.options.saveError=false;n.get('settings').fire('submit');await flush();assert.equal(f.state.hidePaidArticles,true);
+ f.changed({hidePaidArticles:false});assert.equal(checkbox.checked,false);
+});
+
+const paidCardHtml='<div class="grid-rows-subgrid"><div class="flex"><a class="absolute inset-0" aria-label="記事" title="記事" href="https://note.com/ai_urawaza_lab/n/n1cefb1215779"></a><div><h3></h3><div><div><span class="text-text-success text-sm"></span></div></div></div></div></div>';
+const paidMarker='data-hikikomori-note-paid-hidden';
+function paidFixture(){const f=uiFixture(paidCardHtml);f.doc.querySelector('span').textContent='¥300';return f;}
+
+test('価格付き記事カードを両モードで隠し、OFF・購入済み一覧へのSPA遷移・停止で復元',()=>{
+ for(const legacyMode of [false,true]){
+  const f=paidFixture(),card=f.doc.root.children[0],settings=f.core.readSettings({...groups(),legacyMode,hidePaidArticles:true});
+  f.ui.update({...settings,hidePaidArticles:false},'https://note.com/search?q=AI');assert.equal(card.hasAttribute(paidMarker),false);
+  f.ui.update(settings,'https://note.com/search?q=AI');assert.equal(card.hasAttribute(paidMarker),true);
+  for(const url of ['https://note.com/notes/purchased','https://note.com/notes/purchased?mode=new','https://note.com/notes/purchased/']){
+   f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),false);
+  }
+  f.ui.update(settings,'https://note.com/following');assert.equal(card.hasAttribute(paidMarker),true);
+  f.ui.update({...settings,enabled:false},'https://note.com/following');assert.equal(card.hasAttribute(paidMarker),false);
+  f.ui.update(settings,'https://note.com/ruminar');assert.equal(card.hasAttribute(paidMarker),true);
+  f.ui.stop();assert.equal(card.hasAttribute(paidMarker),false);
+ }
+});
+
+test('無料・価格不明・本文中の価格・商品・不明なカード構造を隠さない',()=>{
+ for(const value of ['無料','300円','¥0','¥300から','¥300 月額','おすすめ商品 ¥300']){
+  const f=paidFixture();f.doc.querySelector('span').textContent=value;
+  f.ui.update(f.core.readSettings({...groups(),hidePaidArticles:true}),'https://note.com/search');assert.equal(f.doc.root.children[0].hasAttribute(paidMarker),false);
+ }
+ for(const change of [f=>f.doc.querySelector('a').href='https://amazon.co.jp/item',f=>f.doc.querySelector('h3').remove(),f=>f.doc.root.children[0].className='unknown',f=>{const article=f.doc.createElement('article');article.append(f.doc.root.children[0]);f.doc.root.append(article);},f=>f.doc.querySelector('span').className='unknown']){
+  const f=paidFixture(),card=f.doc.root.children[0];change(f);f.ui.update(f.core.readSettings({...groups(),hidePaidArticles:true}),'https://note.com/search');assert.equal(card.hasAttribute(paidMarker),false);
+ }
+});
+
+test('後から追加された価格・カードをDOM更新時だけ再判定し、価格の消失で復元',()=>{
+ const f=paidFixture(),card=f.doc.root.children[0],settings=f.core.readSettings({...groups(),hidePaidArticles:true});
+ f.doc.querySelector('span').textContent='無料';f.ui.update(settings,'https://note.com/search');assert.equal(card.hasAttribute(paidMarker),false);
+ f.doc.querySelector('span').textContent='¥1,200';f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/search');assert.equal(card.hasAttribute(paidMarker),true);
+ f.doc.querySelector('span').textContent='無料';f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/search');assert.equal(card.hasAttribute(paidMarker),false);
+ const added=f.doc.createElement('div');added.className='grid-rows-subgrid';const inner=f.doc.createElement('div');added.append(inner);
+ const a=f.doc.createElement('a');a.className='absolute inset-0';a.href='https://note.com/ruminar/n/n123';a.setAttribute('title','記事');a.setAttribute('aria-label','記事');
+ const price=f.doc.createElement('span');price.className='text-text-success';price.textContent='¥500';inner.append(a,f.doc.createElement('h3'),price);f.doc.root.append(added);
+ f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/search');assert.equal(added.hasAttribute(paidMarker),true);
+});
+
+test('非表示は提供HTMLの一覧アイテム外枠まで。無料カードや一覧全体を隠さず購入済み画面で復元',()=>{
+ const f=uiFixture('<div class="grid"><div><div class="mb-0 w-full min-w-0 border-b-0 pb-0"><div class="contents">'+paidCardHtml+'</div></div></div><div id="free"></div></div>');
+ const grid=f.doc.root.children[0],item=grid.children[0],free=grid.children[1],price=f.doc.querySelector('span');price.textContent='¥300';
+ const settings=f.core.readSettings({...groups(),hidePaidArticles:true});
+ f.ui.update(settings,'https://note.com/search');assert.equal(item.hasAttribute(paidMarker),true);
+ assert.equal(grid.hasAttribute(paidMarker),false);assert.equal(free.hasAttribute(paidMarker),false);
+ f.ui.update(settings,'https://note.com/notes/purchased');assert.equal(item.hasAttribute(paidMarker),false);
+ f.ui.update(settings,'https://note.com/search');assert.equal(item.hasAttribute(paidMarker),true);
+ price.textContent='無料';f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/search');assert.equal(item.hasAttribute(paidMarker),false);
+ price.textContent='¥300';f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/search');f.ui.stop();assert.equal(item.hasAttribute(paidMarker),false);
+});
 test('記事おすすめ枠だけを両モードで隠し、設定解除・全体OFF・画面離脱・停止で戻す',()=>{
  const f=uiFixture('<article id="note-article"><h2></h2></article><section aria-labelledby="comment"><h2></h2></section>'+recommendationHtml);
  const article=f.doc.getElementById('note-article'),comment=f.doc.querySelector('section'),region=f.doc.root.children.at(-1);

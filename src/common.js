@@ -5,7 +5,7 @@
   const groupIds = ["group1", "group2", "group3", "group4"];
   function defaultSettings() {
     return { enabled: true, noteUserId: "", dashboardDisabled: false, legacyMode: false,
-      hideArticleRecommendations: false, confirmNoteLogoClick: false, tagSchemaVersion: 2,
+      hideArticleRecommendations: false, hidePaidArticles: false, confirmNoteLogoClick: false, tagSchemaVersion: 2,
       tagGroups: groupIds.map(id => ({ id, name: "", tags: [] })), selectedTagGroupId: "group1",
       groupSelectionRevision: 0, tagGroupsRevision: 0 };
   }
@@ -78,7 +78,7 @@
     try { noteUserId = normalizeUserId(value?.noteUserId); } catch { /* 破損値は空欄へ */ }
     const groups = inspectGroups(value);
     return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
-      legacyMode: value?.legacyMode === true, hideArticleRecommendations: value?.hideArticleRecommendations === true,
+      legacyMode: value?.legacyMode === true, hideArticleRecommendations: value?.hideArticleRecommendations === true, hidePaidArticles: value?.hidePaidArticles === true,
       confirmNoteLogoClick: value?.confirmNoteLogoClick === true, ...groups };
   }
   function normalizeTag(value) {

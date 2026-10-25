@@ -84,6 +84,7 @@
     if (records?.length && records.every(record => own(record.target) ||
         (record.type === "childList" && [...record.addedNodes, ...record.removedNodes].length &&
           [...record.addedNodes, ...record.removedNodes].every(own)))) return;
+    noteUi?.invalidatePaidCards?.();
     if (scheduled || stopped) return;
     scheduled = true;
     queueMicrotask(() => { scheduled = false; if (!stopped) { syncDashboardLinks(); checkHome(); } });
@@ -137,7 +138,7 @@
       if (stopped) return;
       if (revision === before) settings = core.readSettings(stored);
       observer = new MutationObserver(scheduleSync);
-      observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["href"] });
+      observer.observe(document, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["href"] });
       syncDashboardLinks();
       checkHome();
       interval = setInterval(checkHome, 250);

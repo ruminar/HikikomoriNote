@@ -4,7 +4,7 @@
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
   const tabs = ["main", "tags", "settings"];
-  const fields = { noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", confirmNoteLogoClick: "confirm-note-logo", legacyMode: "legacy-mode" };
+  const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", confirmNoteLogoClick: "confirm-note-logo", legacyMode: "legacy-mode" };
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();

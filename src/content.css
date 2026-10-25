@@ -5,6 +5,7 @@ a[data-hikikomori-note-dashboard-hidden] {
 [data-hikikomori-note-menu-hidden] { display: none !important; }
 [data-hikikomori-note-product-hidden] { display: none !important; }
 [data-hikikomori-note-recommendations-hidden] { display: none !important; }
+[data-hikikomori-note-paid-hidden] { display: none !important; }
 .hikikomori-note-article-following, .hikikomori-note-article-author {
   position: fixed; top: 72px; left: 12px; z-index: 100;
   box-sizing: border-box; width: 200px; min-height: 36px; padding: 8px 12px;

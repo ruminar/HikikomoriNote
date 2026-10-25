@@ -50,6 +50,60 @@
     const originals = new Set();
     const products = new Set();
     const recommendations = new Set();
+    const paidCards = new Map();
+    const paidHidden = "data-hikikomori-note-paid-hidden";
+    let paidDirty = true, paidSignature;
+    function isPaidCard(card) {
+      if (!card.isConnected || card.closest('article') || card.closest('[id="note-body"]')) return false;
+      return [...card.querySelectorAll('a[href]')].some(link =>
+        link.parentElement?.parentElement === card && link.classList.contains("absolute") &&
+        link.classList.contains("inset-0") && link.getAttribute("title") && link.getAttribute("aria-label") && core.isArticle(link.href) &&
+        link.parentElement.querySelector("h3") && [...link.parentElement.querySelectorAll("span[class]")].some(price =>
+          price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(price.textContent.trim())));
+    }
+    function paidCardContainer(card) {
+      // カード内だけでなく、一覧で1件分の場所を占める既知のラッパーも隠す。
+      let container = card;
+      for (let depth = 0; depth < 3; depth++) {
+        const parent = container.parentElement;
+        if (!parent || parent.tagName !== "DIV" || parent.children.length !== 1) break;
+        const classes = parent.className.trim();
+        const wrapper = !classes || classes === "contents" ||
+          ["mb-0", "w-full", "min-w-0", "border-b-0", "pb-0"].every(name => parent.classList.contains(name));
+        if (!wrapper) break;
+        container = parent;
+      }
+      return container;
+    }
+    function syncPaidCards(settings, url) {
+      let active = false;
+      try {
+        const page = new URL(url);
+        active = settings.enabled && settings.hidePaidArticles === true && page.origin === "https://note.com" &&
+          !/^\/notes\/purchased(?:\/|$)/.test(page.pathname);
+      } catch { /* 不明なURLでは解除 */ }
+      const signature = JSON.stringify([active, url]);
+      if (!paidDirty && paidSignature === signature) return;
+      paidDirty = false; paidSignature = signature;
+      for (const [card, container] of paidCards) {
+        if (!active || !isPaidCard(card) || paidCardContainer(card) !== container) {
+          container.removeAttribute(paidHidden); paidCards.delete(card);
+        }
+      }
+      if (!active) return;
+      for (const price of doc.querySelectorAll("span[class]")) {
+        if (!price.classList.contains("text-text-success") || !/^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(price.textContent.trim())) continue;
+        let card = price.parentElement;
+        for (let depth = 0; card && depth < 6; depth++, card = card.parentElement) {
+          if (!card.classList.contains("grid-rows-subgrid")) continue;
+          if (isPaidCard(card)) {
+            const container = paidCardContainer(card);
+            container.setAttribute(paidHidden, ""); paidCards.set(card, container);
+          }
+          break;
+        }
+      }
+    }
     function clearArticleAuthor() {
       articleAuthor?.remove(); articleAuthor = undefined; authorSignature = undefined;
     }
@@ -180,6 +234,7 @@
       syncArticleFollowing(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
+      syncPaidCards(settings, url);
       if (!settings.enabled || settings.legacyMode || !page) { restore(); return; }
       const nextHost = page.type === "profile" ? profile(page.user) : sidebar();
       if (!nextHost) { restore(); return; }
@@ -257,7 +312,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, stop() { disposed = true; articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); } });
+    return Object.freeze({ update, invalidatePaidCards() { paidDirty = true; }, stop() { disposed = true; articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();
