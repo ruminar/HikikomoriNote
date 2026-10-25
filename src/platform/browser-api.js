@@ -3,6 +3,11 @@
   "use strict";
   const api = globalThis.browser ?? globalThis.chrome;
   const key = globalThis.HikikomoriNote.settingsKey;
+  function isNoteSender(sender) {
+    if (sender?.id !== api.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id)) return false;
+    try { return new URL(sender.url).origin === "https://note.com"; }
+    catch { return false; }
+  }
   async function request(type, patch) {
     let result;
     try { result = await api.runtime.sendMessage({ type, patch }); }
@@ -20,8 +25,8 @@
     getState: () => request("get-state"),
     save: patch => request("save-settings", patch),
     tag: operation => request("tag-operation", operation),
-    addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision }),
-    selectGroup: groupId => request("select-tag-group", { groupId }),
+    addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision, pageUrl: globalThis.location.href }),
+    selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),
     subscribe(listener) {
       const onChange = (changes, area) => {
         if (area === "local" && Object.hasOwn(changes, key)) listener(changes[key].newValue);
@@ -42,13 +47,19 @@
     openHome: (activationFailed = false) => api.tabs.create({
       url: api.runtime.getURL("home.html") + (activationFailed ? "#activation-failed" : "")
     }),
-    currentTag: sender => {
-      if (sender?.id !== api.runtime.id || sender.frameId !== 0 || !Number.isInteger(sender.tab?.id)) return null;
-      const page = globalThis.HikikomoriNote.pageKind(sender.url);
-      return page?.type === "tag" ? page.tag : null;
+    isNoteSender,
+    async currentMenuPage(sender, pageUrl) {
+      if (!isNoteSender(sender)) return null;
+      try {
+        // sender.urlはSPA遷移後の表示URLと異なる場合がある。ホスト権限で現在のタブを確認する。
+        const tab = await api.tabs.get(sender.tab.id);
+        const current = new URL(tab.url);
+        if (current.origin !== "https://note.com" || new URL(pageUrl).href !== current.href) return null;
+        if (tab.pendingUrl && new URL(tab.pendingUrl).href !== current.href) return null;
+        const page = globalThis.HikikomoriNote.pageKind(current.href);
+        return ["following", "tag", "search"].includes(page?.type) ? page : null;
+      } catch { return null; }
     },
-    isMenuSender: sender => sender?.id === api.runtime.id && sender.frameId === 0 && Number.isInteger(sender.tab?.id) &&
-      ["following", "tag", "search"].includes(globalThis.HikikomoriNote.pageKind(sender.url)?.type),
     isHomeSender: sender => sender?.id === api.runtime.id &&
       sender.url?.split(/[?#]/)[0] === api.runtime.getURL("home.html")
   });

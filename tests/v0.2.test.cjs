@@ -360,18 +360,20 @@ test('タグページからの追加も同じキューで末尾へ保存し、�
  await assert.rejects(f.controller.tag({groupId:'group1',type:'ADD_TAG',tag:'C'},{requireEnabled:true}));assert.deepEqual(f.stored.tagGroups[0].tags,['A','みじんこ123','B']);
 });
 
-test('コンテンツ送信元は自拡張・noteタグ・最上位タブだけ。URLを安全にデコード',()=>{
- const context=vm.createContext({URL,chrome:{runtime:{id:'self',getURL:file=>'chrome-extension://self/'+file}}});
+test('コンテンツ送信元は自拡張・note・最上位タブだけ。現在のタブURLを安全にデコード',async()=>{
+ let tab;
+ const context=vm.createContext({URL,chrome:{runtime:{id:'self',getURL:file=>'chrome-extension://self/'+file},tabs:{get:async id=>{assert.equal(id,12);return tab;}}}});
  vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/platform/browser-api.js'),context);
- const check=context.HikikomoriNoteBackgroundPlatform.currentTag;
+ const check=context.HikikomoriNoteBackgroundPlatform.currentMenuPage;
  const sender={id:'self',frameId:0,tab:{id:12},url:'https://note.com/hashtag/%E3%81%BF%E3%81%98%E3%82%93%E3%81%93123?mode=new'};
- assert.equal(check(sender),'みじんこ123');
- for(const patch of [{id:'other'},{frameId:1},{tab:undefined},{url:'https://other.test/tag/A'},{url:'https://note.com/ruminar'},{url:'https://note.com/tag/%xx'}])assert.equal(check({...sender,...patch}),null);
+ tab={url:sender.url};assert.equal((await check(sender,sender.url)).tag,'みじんこ123');
+ for(const patch of [{id:'other'},{frameId:1},{tab:undefined},{url:'https://other.test/tag/A'}])assert.equal(await check({...sender,...patch},sender.url),null);
+ for(const url of ['https://note.com/ruminar','https://note.com/tag/%xx','https://other.test/tag/A']){tab={url};assert.equal(await check(sender,url),null);}
 });
 
 test('背景処理は表示中のタグだけを追加し、コンテンツからの任意タグ・削除・設定保存を許可しない',async()=>{
  const f=fixture();let handler;
- const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:()=>false,currentTag:sender=>sender.url==='https://note.com/tag/実際のタグ'?'実際のタグ':null};
+ const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:()=>false,isNoteSender:sender=>sender.url.startsWith('https://note.com/'),currentMenuPage:async()=>({type:'tag',tag:'実際のタグ'})};
  const context=vm.createContext({console,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>f.controller}});
  vm.runInContext(source('src/background.js'),context);await flush();const sender={url:'https://note.com/tag/実際のタグ'};let answer;
  for(const type of ['tag-operation','save-settings','get-state'])assert.equal(handler({type,patch:{groupId:'group1',type:'REMOVE_TAG',tag:'A'}},sender,()=>{}),false);
@@ -484,10 +486,51 @@ test('検索サイドバーでもグループ選択の結果未確認を案内�
  f.doc.querySelectorAll('button').find(button=>button.textContent==='状態を再確認').onclick();await flush();assert.equal(f.doc.querySelector('[data-group-id="group1"]').disabled,false);
 });
 
-test('noteのグループ選択送信元は共通メニュー対象のトップフレームだけ',()=>{
- const context=vm.createContext({URL,chrome:{runtime:{id:'self',getURL:file=>'chrome-extension://self/'+file}}});
+test('noteのグループ選択は現在の共通メニュー対象URLとトップフレームを確認',async()=>{
+ let tab;
+ const context=vm.createContext({URL,chrome:{runtime:{id:'self',getURL:file=>'chrome-extension://self/'+file},tabs:{get:async()=>tab}}});
  vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/platform/browser-api.js'),context);
- const check=context.HikikomoriNoteBackgroundPlatform.isMenuSender,sender={id:'self',frameId:0,tab:{id:1}};
- for(const url of ['https://note.com/following','https://note.com/tag/AI','https://note.com/search?q=AI'])assert.equal(check({...sender,url}),true);
- for(const patch of [{url:'https://note.com/ruminar'},{url:'https://note.com/ruminar/n/n123'},{url:'https://other.test/search'},{url:'https://note.com/search',id:'other'},{url:'https://note.com/search',frameId:1}])assert.equal(check({...sender,...patch}),false);
+ const check=context.HikikomoriNoteBackgroundPlatform.currentMenuPage,sender={id:'self',frameId:0,tab:{id:1},url:'https://note.com/ruminar'};
+ for(const url of ['https://note.com/following','https://note.com/tag/AI','https://note.com/search?q=AI']){tab={url};assert.ok(await check(sender,url));}
+ for(const url of ['https://note.com/ruminar','https://note.com/ruminar/n/n123','https://other.test/search']){tab={url};assert.equal(await check(sender,url),null);}
+ tab={url:'https://note.com/search'};
+ for(const patch of [{id:'other'},{frameId:1}])assert.equal(await check({...sender,...patch},tab.url),null);
+});
+
+test('検索→hashtag→tagのSPA遷移後、古いsender.urlでも現在タグを登録しグループを選べる',async()=>{
+ const f=fixture();let handler,answer;
+ const pageUrl='https://note.com/tag/ComfyUI';
+ const context=vm.createContext({URL,console,location:{href:pageUrl},chrome:{
+  runtime:{id:'self',getURL:file=>'chrome-extension://self/'+file,onMessage:{addListener:fn=>{handler=fn;}},onInstalled:{addListener(){}},onStartup:{addListener(){}}},
+  action:{onClicked:{addListener(){}}},tabs:{get:async()=>({url:pageUrl})}
+ }});
+ for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),context);
+ context.HikikomoriNoteRouting={createController:()=>f.controller};vm.runInContext(source('src/background.js'),context);await flush();
+ const sender={id:'self',frameId:0,tab:{id:1},url:'https://note.com/search?q=ComfyUI&context=note&mode=search'};
+ const send=async(type,patch)=>{answer=undefined;assert.equal(handler({type,patch},sender,value=>{answer=value;}),true);assert.equal(answer,undefined);await flush();return answer;};
+ assert.equal((await send('select-tag-group',{pageUrl,groupId:'group2'})).ok,true);
+ assert.equal((await send('add-current-tag',{pageUrl,groupId:'group2',selectionRevision:1,tag:'偽タグ'})).ok,true);
+ assert.deepEqual(f.stored.tagGroups[1].tags,['ComfyUI']);
+ const writes=f.writes;
+ assert.equal((await send('add-current-tag',{pageUrl:'https://note.com/tag/AI',groupId:'group2',selectionRevision:1})).code,'CONFLICT');
+ assert.equal(f.writes,writes);
+});
+
+test('現在URLの不一致・遷移中・閉じたタブは登録対象とせず、タブ取得失敗も処理する',async()=>{
+ let tab={url:'https://note.com/tag/ComfyUI'},fail=false;
+ const context=vm.createContext({URL,chrome:{runtime:{id:'self'},tabs:{get:async()=>{if(fail)throw Error('closed');return tab;}}}});
+ for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),context);
+ const check=context.HikikomoriNoteBackgroundPlatform.currentMenuPage,sender={id:'self',frameId:0,tab:{id:1},url:'https://note.com/hashtag/ComfyUI'};
+ for(const pageUrl of [undefined,'invalid','https://note.com/tag/AI','https://other.test/tag/ComfyUI'])assert.equal(await check(sender,pageUrl),null);
+ tab.pendingUrl='https://note.com/tag/AI';assert.equal(await check(sender,tab.url),null);
+ delete tab.pendingUrl;fail=true;assert.equal(await check(sender,tab.url),null);
+ tab={};fail=false;assert.equal(await check(sender,'https://note.com/tag/ComfyUI'),null);
+});
+
+test('コンテンツ操作はクリック時のURLを送信し、次のSPA遷移では新しいURLを使う',async()=>{
+ const sent=[],location={href:'https://note.com/hashtag/ComfyUI'};
+ const context=vm.createContext({URL,location,chrome:{runtime:{id:'self',sendMessage:async message=>{sent.push(plain(message));return {ok:true,settings:{}};}}}});
+ for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),context);
+ await context.HikikomoriNotePlatform.addCurrentTag('group1',0);location.href='https://note.com/tag/AI';await context.HikikomoriNotePlatform.selectGroup('group2');
+ assert.equal(sent[0].patch.pageUrl,'https://note.com/hashtag/ComfyUI');assert.equal(sent[1].patch.pageUrl,location.href);
 });

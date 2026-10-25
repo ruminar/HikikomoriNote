@@ -32,15 +32,20 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (message?.type === "select-tag-group" && port.isMenuSender?.(sender)) {
-      operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId }, { requireEnabled: true });
-    } else {
-      const tag = message?.type === "add-current-tag" ? port.currentTag?.(sender) : null;
-      if (tag === null || tag === undefined) return false;
-      operation = Number.isSafeInteger(message.patch?.selectionRevision) && message.patch.selectionRevision >= 0
-        ? controller.tag({ type: "ADD_TAG", tag, groupId: message.patch?.groupId }, { requireEnabled: true, selectionRevision: message.patch.selectionRevision })
-        : Promise.reject(Object.assign(new Error("選択グループを再確認してください。"), { code: "CONFLICT" }));
-    }
+    if (!["select-tag-group", "add-current-tag"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    operation = (async () => {
+      const page = await port.currentMenuPage(sender, message.patch?.pageUrl);
+      if (!page || (message.type === "add-current-tag" && page.type !== "tag")) {
+        throw Object.assign(new Error("表示中のページを確認できません。ページの読み込みが完了してから、もう一度お試しください。"), { code: "CONFLICT" });
+      }
+      if (message.type === "select-tag-group") {
+        return controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId }, { requireEnabled: true });
+      }
+      if (!Number.isSafeInteger(message.patch?.selectionRevision) || message.patch.selectionRevision < 0) {
+        throw Object.assign(new Error("選択グループを再確認してください。"), { code: "CONFLICT" });
+      }
+      return controller.tag({ type: "ADD_TAG", tag: page.tag, groupId: message.patch?.groupId }, { requireEnabled: true, selectionRevision: message.patch.selectionRevision });
+    })();
   }
   operation.then(settings => respond({ ok: true, settings }),
     error => respond({ ok: false, error: error.message || "設定処理に失敗しました。", code: error.code || "OPERATION_FAILED" }));
