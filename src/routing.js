@@ -82,7 +82,7 @@
         const loaded = await port.load(), raw = loaded === undefined ? core.defaultSettings() : loaded;
         const settings = core.readSettings(raw);
         if (options.requireEnabled && !settings.enabled) throw failure("拡張OFFではタグを追加できません。", "DISABLED");
-        if (settings.legacyMode) throw failure("重度引きこもりモードではタグを編集できません。状態を再確認してください。", "LEGACY_MODE");
+        if (settings.legacyMode) throw failure("重度ひきこもりモードではタグを編集できません。状態を再確認してください。", "LEGACY_MODE");
         if (settings.tagWarning) throw failure(settings.tagWarning, "INVALID_TAGS");
         if (settings.groupSelectionInvalid && operation.type !== "SELECT_TAG_GROUP") throw failure("グループを選び直してください。", "CONFLICT");
         if (options.selectionRevision !== undefined && (settings.groupSelectionRevision !== options.selectionRevision || settings.selectedTagGroupId !== operation.groupId)) throw failure("選択グループが変わりました。状態を再確認してください。", "CONFLICT");

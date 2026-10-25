@@ -80,17 +80,20 @@ test('保存失敗ではタグ・モードを確定せず、背景再起動後�
 });
 test('通常の3タブ、重度モードの設定先頭、自分のページとキャッチコピーの切替',async()=>{
  const f=homeFixture({state:{...groups(['A'])}});await flush();const n=f.nodes;
+ assert.match(n.get('mode').textContent,/通常モード（ひとみしりモード）/);
  assert.equal(n.get('panel-main').hidden,false);assert.equal(n.get('quick-access').parentElement,n.get('quick-slot'));
  assert.equal(n.get('panel-main').contains(n.get('quick-access')),true);assert.equal(n.get('profile').textContent,'ruminarのページ');
  assert.equal(source('home.html').includes('フォロー中のTL'),true);assert.equal(f.document.querySelector('h2'),null);assert.equal(n.has('user-status'),false);
  assert.equal(n.get('legacy-intro').hidden,true);
  n.get('tab-tags').onclick();n.get('tag-input').value='入力途中';n.get('tag-input').focus();
  f.changed({legacyMode:true});
+ assert.match(n.get('mode').textContent,/重度ひきこもりモード/);
  assert.equal(n.get('tab-main').hidden,true);assert.equal(n.get('tab-tags').hidden,true);assert.equal(n.get('panel-settings').hidden,false);
  assert.equal(n.get('quick-access').parentElement,n.get('legacy-quick-slot'));assert.equal(n.get('following').hidden,true);assert.equal(n.get('legacy-intro').hidden,false);
  assert.equal(n.get('profile').href,'https://note.com/ruminar');assert.equal(n.get('tag-input').value,'入力途中');assert.equal(f.document.activeElement,n.get('tab-settings'));
  assert.equal(n.get('main-tags').children.length,0);assert.equal(n.get('edit-tags').children.length,0);
  f.changed({legacyMode:false});assert.equal(n.get('tab-main').hidden,false);assert.equal(n.get('following').hidden,false);assert.equal(n.get('legacy-intro').hidden,true);assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('main-tags').children.length,1);
+ f.changed({enabled:false,legacyMode:true});assert.match(n.get('mode').textContent,/拡張OFF：通常のnote/);assert.doesNotMatch(n.get('mode').textContent,/ひきこもりモード|ひとみしりモード/);
 });
 test('重度モードで新規表示してもメインを表示せず、解除操作は同じ設定保存を使う',async()=>{
  const f=homeFixture({state:{legacyMode:true,...groups(['A'])}});await flush();const n=f.nodes;

@@ -125,7 +125,9 @@
     byId("profile").textContent = profile ? `${state.noteUserId}のページ` : "自分のページ";
     if (profile) byId("profile").href = profile; else byId("profile").removeAttribute("href");
     byId("setup-user").hidden = Boolean(profile);
-    byId("mode").textContent = `${state.enabled ? "拡張ON：通常ホームを専用ホームへ転送します。" : "拡張OFF：通常のnoteを利用できます。拡張アイコンからONへ戻せます。"} ${state.legacyMode ? "0.1.1モード（重度引きこもりモード）" : "通常モード"}`;
+    byId("mode").textContent = state.enabled
+      ? `拡張ON：通常ホームを専用ホームへ転送します。 ${state.legacyMode ? "重度ひきこもりモード" : "通常モード（ひとみしりモード）"}`
+      : "拡張OFF：通常のnoteを利用できます。拡張アイコンからONへ戻せます。";
     const warning = state.tagWarning || (state.groupSelectionInvalid ? "保存済みの選択に異常があります。グループを選び直してください。" : "");
     byId("tag-warning").hidden = !warning; byId("tag-warning").textContent = warning;
     selectTab(selected, hiddenFocus);
