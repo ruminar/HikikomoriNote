@@ -198,6 +198,7 @@
       if (signature !== nextSignature) {
         menu.replaceChildren();
         const following = doc.createElement("a"); following.href = "https://note.com/following";
+        following.className = "hikikomori-note-navigation-following";
         following.textContent = "フォロー中のTL";
         if (page.type === "following") following.setAttribute("aria-current", "page");
         menu.append(following);

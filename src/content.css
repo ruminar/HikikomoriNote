@@ -27,6 +27,10 @@ a[data-hikikomori-note-dashboard-hidden] {
 .hikikomori-note-navigation a:hover { background: rgba(128,128,128,.12); }
 .hikikomori-note-navigation a[aria-current="page"] { background: rgba(128,128,128,.18); font-weight: bold; }
 .hikikomori-note-navigation a:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.hikikomori-note-navigation .hikikomori-note-navigation-following {
+  box-sizing: border-box; width: 100%; min-height: 36px; padding: 8px 12px;
+  border: 1px solid rgba(128,128,128,.35); font-size: 14px; text-align: center;
+}
 .hikikomori-note-navigation button {
   box-sizing: border-box; width: 100%; margin-top: 8px; padding: 8px;
   border: 1px solid rgba(128,128,128,.35); border-radius: 8px;
@@ -39,7 +43,7 @@ a[data-hikikomori-note-dashboard-hidden] {
 .hikikomori-note-tag-status:empty { display: none; }
 .hikikomori-note-group-selector { display: flex; gap: 4px; }
 .hikikomori-note-group-selector button { width: auto; flex: 1; margin: 0; padding: 4px; }
-.hikikomori-note-group-selector button[aria-pressed="true"] { background: rgba(128,128,128,.2); }
+.hikikomori-note-group-selector button[aria-pressed="true"] { background: #285d4b; border-color: #285d4b; color: white; }
 .hikikomori-note-group-name { margin: 8px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
 .hikikomori-note-profile-navigation a {
   box-sizing: border-box;
