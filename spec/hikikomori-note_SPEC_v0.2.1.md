@@ -67,11 +67,11 @@ https://note.com/search?q=<encodeURIComponent("#" + normalizeTag(tag))>&context=
 ### 3.2 最小の左メニュー
 
 ```text
-[ ① ][ ② ][ ③ ][ ④ ]   ← 既存独自ナビゲーションの先頭
-技術系                    ← 選択中の名前。長い場合は1行省略＋title
 フォロー中のTL
 [ タグをお気に入りに追加 ] ← 未登録のタグ画面だけ
 お気に入りタグ
+[ ① ][ ② ][ ③ ][ ④ ]   ← 見出しとタグ一覧の間
+技術系                    ← 選択中の名前。長い場合は1行省略＋title
 # ComfyUI
 # AI
 ```

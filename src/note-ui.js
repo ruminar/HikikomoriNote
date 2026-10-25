@@ -197,20 +197,6 @@
       }
       if (signature !== nextSignature) {
         menu.replaceChildren();
-        if (page.type !== "profile") {
-          const selector = doc.createElement("div"); selector.className = "hikikomori-note-group-selector";
-          selector.setAttribute("role", "group"); selector.setAttribute("aria-label", "お気に入りタグのグループ");
-          settings.tagGroups.forEach((item, index) => {
-            const button = doc.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
-            button.setAttribute("data-group-id", item.id); button.setAttribute("title", core.groupName(item));
-            button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
-            button.setAttribute("aria-pressed", String(item.id === group.id));
-            button.disabled = adding || uncertain || Boolean(settings.tagWarning) || !actions.selectGroup;
-            button.onclick = () => { void selectGroup(item.id); }; selector.append(button);
-          });
-          menu.append(selector);
-          const name = doc.createElement("div"); name.className = "hikikomori-note-group-name"; name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); menu.append(name);
-        }
         const following = doc.createElement("a"); following.href = "https://note.com/following";
         following.textContent = "フォロー中のTL";
         if (page.type === "following") following.setAttribute("aria-current", "page");
@@ -238,6 +224,18 @@
             refresh.disabled = adding; refresh.onclick = () => { void refreshTags(); }; menu.append(refresh);
           }
           const title = doc.createElement("p"); title.textContent = "お気に入りタグ"; menu.append(title);
+          const selector = doc.createElement("div"); selector.className = "hikikomori-note-group-selector";
+          selector.setAttribute("role", "group"); selector.setAttribute("aria-label", "お気に入りタグのグループ");
+          settings.tagGroups.forEach((item, index) => {
+            const button = doc.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
+            button.setAttribute("data-group-id", item.id); button.setAttribute("title", core.groupName(item));
+            button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
+            button.setAttribute("aria-pressed", String(item.id === group.id));
+            button.disabled = adding || uncertain || Boolean(settings.tagWarning) || !actions.selectGroup;
+            button.onclick = () => { void selectGroup(item.id); }; selector.append(button);
+          });
+          menu.append(selector);
+          const name = doc.createElement("div"); name.className = "hikikomori-note-group-name"; name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); menu.append(name);
           const list = doc.createElement("ul"); menu.append(list);
           for (const tag of group.tags) {
             const item = doc.createElement("li"), link = doc.createElement("a");
