@@ -10,7 +10,7 @@
     return state;
   }
   const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
-    settingsUrl: () => platform.homeUrl() + "#settings",
+    settingsUrl: () => platform.homeUrl(),
     async addCurrentTag(groupId, selectionRevision) {
       const before = revision;
       const value = await platform.addCurrentTag(groupId, selectionRevision);

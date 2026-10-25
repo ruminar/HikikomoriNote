@@ -151,7 +151,7 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
  const moved=n.get('edit-tags').children;moved[0].fire('dragstart',{dataTransfer:{setData(){}}});moved[2].fire('drop',{clientY:39});await flush();assert.deepEqual(f.state.tagGroups[0].tags,['B','A','C']);
  n.get('home-menu').fire('keydown',{key:'End'});assert.equal(n.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,n.get('nav-settings'));
 });
-function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html#settings",...actions})};}
+function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
 test('トピック配下だけを共通メニュー対象とし、topic直下・類似パス・外部を除外',()=>{
@@ -268,7 +268,7 @@ test('設定ONで公式ロゴ横に歯車を追加。重度・左メニューな
  for(const legacyMode of [false,true]){
   const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true,legacyMode});
   f.ui.update(settings,'https://note.com/search');const parent=f.doc.querySelector('header').children[0],gear=parent.children[1];
-  assert.equal(gear.getAttribute('aria-label'),'設定画面を表示');assert.equal(gear.href,'chrome-extension://self/home.html#settings');assert.ok(gear.querySelector('svg'));assert.equal(parent.children[0].href,'https://note.com/');
+  assert.equal(gear.getAttribute('aria-label'),'設定画面を表示');assert.equal(gear.href,'chrome-extension://self/home.html');assert.ok(gear.querySelector('svg'));assert.equal(parent.children[0].href,'https://note.com/');
   assert.equal(parent.hasAttribute('data-hikikomori-note-logo-settings-layout'),true);
   const aside=f.doc.querySelector('aside');assert.equal(aside.querySelector('[class="hikikomori-note-navigation-settings"]'),null);
   f.ui.update(settings,'https://note.com/settings');assert.equal(gear.isConnected,true);assert.equal(parent.children.length,2);
