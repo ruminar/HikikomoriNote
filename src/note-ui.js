@@ -16,7 +16,6 @@
   function create(doc, win, actions = {}) {
     let host, menu, signature;
     let articleFollowing;
-    let articleSettings;
     let articleAuthor, authorSignature;
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
     function repaint() { if (!disposed && currentSettings) update(currentSettings, currentUrl); }
@@ -51,6 +50,38 @@
     const originals = new Set();
     const products = new Set();
     const recommendations = new Set();
+    const headerSettings = new Map();
+    const settingsLayout = "data-hikikomori-note-logo-settings-layout";
+    function logoContainer(logo) {
+      const parent = logo.parentElement;
+      return isOfficialHeaderLogo(logo) && parent?.tagName === "DIV" &&
+        [...parent.children].filter(child => !child.hasAttribute(owned)).length === 1 ? parent : null;
+    }
+    function syncHeaderSettings(active) {
+      for (const [logo, control] of headerSettings) {
+        if (!active || logoContainer(logo) !== control.parent || !control.link.isConnected) {
+          control.link.remove(); control.parent.removeAttribute(settingsLayout); headerSettings.delete(logo);
+        }
+      }
+      if (!active || !actions.settingsUrl) return;
+      for (const header of doc.querySelectorAll('header[data-header-state="navbar"]')) {
+        for (const logo of header.querySelectorAll('a[href]')) {
+          const parent = logoContainer(logo);
+          if (!parent || headerSettings.has(logo)) continue;
+          const link = doc.createElement("a"); link.className = "hikikomori-note-header-settings";
+          link.href = actions.settingsUrl(); link.setAttribute(owned, "");
+          link.setAttribute("aria-label", "設定画面を表示"); link.setAttribute("title", "設定画面を表示");
+          const icon = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+          icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true"); icon.setAttribute("focusable", "false");
+          const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", "M9.5 3h5l.5 3 2 1 2.5-1 2.5 4-2 2v2l2 2-2.5 4-2.5-1-2 1-.5 3h-5L9 20l-2-1-2.5 1L2 16l2-2v-2l-2-2 2.5-4L7 7l2-1Z");
+          const circle = doc.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("cx", "12"); circle.setAttribute("cy", "13"); circle.setAttribute("r", "3");
+          icon.append(path, circle); link.append(icon); parent.append(link); parent.setAttribute(settingsLayout, "");
+          headerSettings.set(logo, { parent, link });
+        }
+      }
+    }
     const searchClearControls = new Map();
     const clearLayout = "data-hikikomori-note-search-clear-layout";
     function searchForm(input) {
@@ -218,7 +249,7 @@
       const show = settings.enabled && !settings.legacyMode && core.isArticle(url) &&
         win.matchMedia("(min-width: 1100px)").matches && article && visible(article) &&
         article.getBoundingClientRect().left >= 228 && doc.body;
-      if (!show) { articleSettings?.remove(); articleSettings = undefined; articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); return; }
+      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); return; }
       if (!articleFollowing?.isConnected) {
         articleFollowing = doc.createElement("a");
         articleFollowing.setAttribute(owned, "");
@@ -227,20 +258,7 @@
         articleFollowing.textContent = "フォロー中のTL";
         doc.body.append(articleFollowing);
       }
-      if (settings.noteLogoBrowserBack && actions.settingsUrl) {
-        if (!articleSettings?.isConnected) {
-          articleSettings = doc.createElement("a"); articleSettings.setAttribute(owned, "");
-          articleSettings.className = "hikikomori-note-article-settings";
-          articleSettings.href = actions.settingsUrl(); articleSettings.textContent = "設定画面を表示";
-          doc.body.append(articleSettings);
-        }
-      } else { articleSettings?.remove(); articleSettings = undefined; }
       syncArticleAuthor(article, url);
-      for (const link of [articleFollowing, articleAuthor]) {
-        if (!link) continue;
-        if (articleSettings) link.setAttribute("data-hikikomori-note-settings-offset", "");
-        else link.removeAttribute("data-hikikomori-note-settings-offset");
-      }
     }
     function isRecommendations(element) {
       if (element.tagName !== "DIV" || !element.classList.contains("pt-6") ||
@@ -313,6 +331,7 @@
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
       currentSettings = settings; currentUrl = url;
       syncSearchClear(settings.enabled);
+      syncHeaderSettings(settings.enabled && settings.noteLogoBrowserBack);
       const page = core.pageKind(url);
       syncArticleFollowing(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
@@ -335,11 +354,6 @@
       }
       if (signature !== nextSignature) {
         menu.replaceChildren();
-        if (settings.noteLogoBrowserBack && actions.settingsUrl) {
-          const settingsLink = doc.createElement("a"); settingsLink.href = actions.settingsUrl();
-          settingsLink.className = "hikikomori-note-navigation-settings"; settingsLink.textContent = "設定画面を表示";
-          menu.append(settingsLink);
-        }
         const following = doc.createElement("a"); following.href = "https://note.com/following";
         following.className = "hikikomori-note-navigation-following";
         following.textContent = "フォロー中のTL";
@@ -400,7 +414,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, invalidatePaidCards() { paidDirty = true; }, stop() { disposed = true; syncSearchClear(false); articleSettings?.remove(); articleSettings = undefined; articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
+    return Object.freeze({ update, invalidatePaidCards() { paidDirty = true; }, stop() { disposed = true; syncHeaderSettings(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();

@@ -78,29 +78,36 @@ test('保存失敗ではタグ・モードを確定せず、背景再起動後�
  assert.deepEqual(f.stored,{...settingsData(['A'])});f.options.fail=false;
  await f.restart().tag({groupId:'group1',type:'ADD_TAG',tag:'C'});assert.deepEqual(f.stored.tagGroups[0].tags,['A','C']);
 });
-test('通常の3タブ、重度モードの設定先頭、自分のページとキャッチコピーの切替',async()=>{
+test('左メニューでタグ管理と設定を切替。重度では設定入口とキャッチコピーだけにする',async()=>{
  const f=homeFixture({state:{...groups(['A'])}});await flush();const n=f.nodes;
  assert.match(n.get('mode').textContent,/通常モード（ひとみしりモード）/);
- assert.equal(n.get('panel-main').hidden,false);assert.equal(n.get('quick-access').parentElement,n.get('quick-slot'));
- assert.equal(n.get('panel-main').contains(n.get('quick-access')),true);assert.equal(n.get('profile').textContent,'ruminarのページ');
- assert.equal(source('home.html').includes('フォロー中のTL'),true);assert.equal(f.document.querySelector('h2'),null);assert.equal(n.has('user-status'),false);
- assert.equal(n.get('legacy-intro').hidden,true);
- n.get('tab-tags').onclick();n.get('tag-input').value='入力途中';n.get('tag-input').focus();
- f.changed({legacyMode:true});
- assert.match(n.get('mode').textContent,/重度ひきこもりモード/);
- assert.equal(n.get('tab-main').hidden,true);assert.equal(n.get('tab-tags').hidden,true);assert.equal(n.get('panel-settings').hidden,false);
- assert.equal(n.get('quick-access').parentElement,n.get('legacy-quick-slot'));assert.equal(n.get('following').hidden,true);assert.equal(n.get('legacy-intro').hidden,false);
- assert.equal(n.get('profile').href,'https://note.com/ruminar');assert.equal(n.get('tag-input').value,'入力途中');assert.equal(f.document.activeElement,n.get('tab-settings'));
- assert.equal(n.get('main-tags').children.length,0);assert.equal(n.get('edit-tags').children.length,0);
- f.changed({legacyMode:false});assert.equal(n.get('tab-main').hidden,false);assert.equal(n.get('following').hidden,false);assert.equal(n.get('legacy-intro').hidden,true);assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('main-tags').children.length,1);
+ assert.equal(n.get('panel-tags').hidden,false);assert.equal(n.get('nav-tags').getAttribute('aria-current'),'page');
+ for(const id of ['tabs','tab-main','panel-main','quick-access','main-tags'])assert.equal(n.has(id),false);
+ assert.equal(n.get('home-menu').contains(n.get('nav-settings')),true);assert.equal(n.get('home-menu').contains(n.get('following')),false);
+ n.get('nav-settings').onclick();assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('panel-tags').hidden,true);
+ n.get('nav-tags').onclick();n.get('tag-input').value='入力途中';n.get('tag-input').focus();
+ f.changed({legacyMode:true});assert.match(n.get('mode').textContent,/重度ひきこもりモード/);
+ assert.equal(n.get('nav-tags').hidden,true);assert.equal(n.get('page-links').hidden,false);assert.equal(n.get('following').hidden,true);assert.equal(n.get('profile').href,'https://note.com/ruminar');assert.equal(n.get('profile').hidden,false);
+ assert.equal(n.get('panel-intro').hidden,false);assert.equal(n.get('panel-settings').hidden,true);assert.equal(n.get('panel-tags').hidden,true);
+ assert.equal(n.get('tag-input').value,'入力途中');assert.equal(f.document.activeElement,n.get('nav-settings'));assert.equal(n.get('edit-tags').children.length,0);
+ n.get('nav-settings').onclick();assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('panel-intro').hidden,false);
+ f.changed({legacyMode:false});assert.equal(n.get('nav-tags').hidden,false);assert.equal(n.get('following').hidden,false);assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('edit-tags').children.length,1);
  f.changed({enabled:false,legacyMode:true});assert.match(n.get('mode').textContent,/拡張OFF：通常のnote/);assert.doesNotMatch(n.get('mode').textContent,/ひきこもりモード|ひとみしりモード/);
 });
-test('重度モードで新規表示してもメインを表示せず、解除操作は同じ設定保存を使う',async()=>{
+
+test('重度の初期表示はキャッチコピーだけ。設定から解除しタグ一覧を保持する',async()=>{
  const f=homeFixture({state:{legacyMode:true,...groups(['A'])}});await flush();const n=f.nodes;
- assert.equal(n.get('panel-main').hidden,true);assert.equal(n.get('panel-settings').hidden,false);
+ assert.equal(n.get('panel-intro').hidden,false);assert.equal(n.get('panel-settings').hidden,true);assert.equal(n.get('nav-tags').hidden,true);
+ assert.equal(n.get('panel-intro').querySelector('form'),null);assert.equal(n.get('panel-intro').querySelector('p').className,'catchphrase');
+ n.get('nav-settings').onclick();assert.equal(n.get('panel-settings').hidden,false);
+ assert.equal(n.get('panel-intro').hidden,false);
  n.get('legacy-mode').checked=false;n.get('legacy-mode').fire('change');n.get('settings').fire('submit');await flush();
- assert.deepEqual(f.patches,[{legacyMode:false}]);assert.deepEqual(f.state.tagGroups[0].tags,['A']);
+ assert.equal(n.get('panel-intro').hidden,true);
+ assert.deepEqual(f.patches,[{legacyMode:false}]);assert.deepEqual(f.state.tagGroups[0].tags,['A']);assert.equal(n.get('nav-tags').hidden,false);
+ f.changed({noteUserId:'other_user',enabled:false});assert.equal(n.get('profile').href,'https://note.com/other_user');assert.equal(n.get('page-links').hidden,false);
+ f.changed({noteUserId:'',legacyMode:true});assert.equal(n.get('profile').getAttribute('href'),null);assert.equal(n.get('profile').getAttribute('aria-disabled'),'true');assert.equal(n.get('profile').hidden,false);
 });
+
 test('別タブの更新は編集中タグと既存設定の未保存入力を消さない',async()=>{
  const f=homeFixture();await flush();const n=f.nodes;
  n.get('tag-input').value='Comfy';n.get('note-user').value='draft_user';n.get('note-user').fire('input');
@@ -111,7 +118,7 @@ test('別タブの更新は編集中タグと既存設定の未保存入力を�
 test('背景処理からの破損データ診断を表示し、正常項目は残すがタグ編集は停止',async()=>{
  const f=homeFixture({state:{...groups(['A',null,'B'])}});await flush();const n=f.nodes;
  assert.equal(n.get('tag-warning').hidden,false);assert.match(n.get('tag-warning').textContent,/異常/);
- assert.equal(n.get('tag-input').disabled,true);assert.equal(n.get('add-tag').disabled,true);assert.equal(n.get('main-tags').children.length,2);
+ assert.equal(n.get('tag-input').disabled,true);assert.equal(n.get('add-tag').disabled,true);assert.equal(n.get('edit-tags').children.length,2);
  assert.equal(n.get('edit-tags').children[0].draggable,false);assert.equal(n.get('edit-tags').children[0].children.at(-1).disabled,true);
  n.get('legacy-mode').checked=true;n.get('legacy-mode').fire('change');n.get('settings').fire('submit');await flush();
  assert.deepEqual(f.state.tagGroups[0].tags,['A',null,'B']);assert.equal(n.get('tag-warning').hidden,false);
@@ -130,19 +137,19 @@ test('結果未確認時はタグ操作を止め、再取得するまで自動�
 });
 test('初回の設定読込失敗でも設定タブに再確認を表示し、再試行で復旧できる',async()=>{
  const f=homeFixture({stateError:true});await flush();const n=f.nodes;
- assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('tabs').hidden,false);
+ assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('home-menu').hidden,false);
  assert.equal(n.get('retry').disabled,false);assert.equal(n.get('save').disabled,true);
  assert.equal(n.get('save').parentElement,n.get('retry').parentElement);assert.equal(n.get('retry').getAttribute('type'),'button');
  f.options.stateError=false;n.get('retry').onclick();await flush();
- assert.equal(n.get('save').disabled,false);assert.equal(n.get('tab-main').hidden,false);
- assert.equal(n.get('profile').textContent,'ruminarのページ');
+ assert.equal(n.get('save').disabled,false);assert.equal(n.get('nav-tags').hidden,false);
+ assert.equal(n.get('profile').href,'https://note.com/ruminar');
 });
-test('上下ボタンとドラッグの移動を保存し、キーボードでタブ選択できる',async()=>{
+test('上下ボタンとドラッグの移動を保存し、キーボードで左メニューを選択できる',async()=>{
  const f=homeFixture({state:{...groups(['A','B','C'])}});await flush();const n=f.nodes;
  n.get('edit-tags').children[1].children[1].onclick();await flush();assert.deepEqual(f.state.tagGroups[0].tags,['B','A','C']);
  const rows=n.get('edit-tags').children;rows[2].fire('dragstart',{dataTransfer:{setData(){}}});rows[0].fire('drop');await flush();assert.deepEqual(f.state.tagGroups[0].tags,['C','B','A']);
  const moved=n.get('edit-tags').children;moved[0].fire('dragstart',{dataTransfer:{setData(){}}});moved[2].fire('drop',{clientY:39});await flush();assert.deepEqual(f.state.tagGroups[0].tags,['B','A','C']);
- n.get('tabs').fire('keydown',{key:'End'});assert.equal(n.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,n.get('tab-settings'));
+ n.get('home-menu').fire('keydown',{key:'End'});assert.equal(n.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,n.get('nav-settings'));
 });
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html#settings",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
@@ -256,32 +263,43 @@ function authorFixture(){
  return f;
 }
 
-test('ロゴ戻る設定時は共通メニューとプロフィール系のTLより上に設定リンクを表示',()=>{
- const profile='<aside class="w-full lg:w-96"><div><button data-name="avatar"></button><h1></h1><a href="/ruminar/followings"></a></div></aside>';
- for(const url of ['https://note.com/following','https://note.com/tag/AI','https://note.com/search?q=AI','https://note.com/topic/education_learning','https://note.com/ruminar','https://note.com/ruminar/followings','https://note.com/ruminar/followers']){
-  const f=uiFixture(url.includes('/ruminar')?profile:sidebarHtml),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true});
-  f.ui.update(settings,url);const links=f.doc.querySelector('aside').children[0].querySelectorAll('a');assert.equal(links[0].textContent,'設定画面を表示');assert.equal(links[0].href,'chrome-extension://self/home.html#settings');assert.equal(links[1].textContent,'フォロー中のTL');
-  f.ui.update({...settings,noteLogoBrowserBack:false},url);assert.equal(f.doc.querySelector('aside').children[0].querySelector('a').textContent,'フォロー中のTL');
-  f.ui.update({...settings,enabled:false},url);assert.equal(f.doc.querySelector('aside').children.length,1);
+const logoHeaderHtml='<header data-header-state="navbar"><div><a href="/" target="_self"><svg role="img" aria-label="note"></svg></a></div></header>';
+test('設定ONで公式ロゴ横に歯車を追加。重度・左メニューなしでも使え、OFFで撤去',()=>{
+ for(const legacyMode of [false,true]){
+  const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true,legacyMode});
+  f.ui.update(settings,'https://note.com/search');const parent=f.doc.querySelector('header').children[0],gear=parent.children[1];
+  assert.equal(gear.getAttribute('aria-label'),'設定画面を表示');assert.equal(gear.href,'chrome-extension://self/home.html#settings');assert.ok(gear.querySelector('svg'));assert.equal(parent.children[0].href,'https://note.com/');
+  assert.equal(parent.hasAttribute('data-hikikomori-note-logo-settings-layout'),true);
+  const aside=f.doc.querySelector('aside');assert.equal(aside.querySelector('[class="hikikomori-note-navigation-settings"]'),null);
+  f.ui.update(settings,'https://note.com/settings');assert.equal(gear.isConnected,true);assert.equal(parent.children.length,2);
+  f.ui.update({...settings,noteLogoBrowserBack:false},'https://note.com/settings');assert.equal(gear.isConnected,false);assert.equal(parent.hasAttribute('data-hikikomori-note-logo-settings-layout'),false);
+  f.ui.update(settings,'https://note.com/settings');f.ui.update({...settings,enabled:false},'https://note.com/settings');assert.equal(parent.children.length,1);
  }
 });
 
-test('記事の設定リンクはTLの上、作者も1段下げ、設定解除・狭幅・重度・停止で片付ける',()=>{
+test('記事のTL・作者に設定リンクを追加せず、ロゴ設定ONでも固定位置をずらさない',()=>{
  const f=authorFixture(),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true}),url='https://note.com/ruminar/n/n123';
- const entry=()=>f.doc.querySelector('[class="hikikomori-note-article-settings"]');
- f.ui.update(settings,url);assert.equal(entry().href,'chrome-extension://self/home.html#settings');
- for(const name of ['following','author'])assert.equal(f.doc.querySelector(`[class="hikikomori-note-article-${name}"]`).hasAttribute('data-hikikomori-note-settings-offset'),true);
- f.ui.update({...settings,noteLogoBrowserBack:false},url);assert.equal(entry(),null);assert.equal(f.doc.querySelector('[class="hikikomori-note-article-author"]').hasAttribute('data-hikikomori-note-settings-offset'),false);
- f.ui.update(settings,url);f.win.wide=false;f.ui.update(settings,url);assert.equal(entry(),null);f.win.wide=true;
- f.ui.update(settings,url);f.ui.update({...settings,legacyMode:true},url);assert.equal(entry(),null);
- f.ui.update(settings,url);f.ui.stop();assert.equal(entry(),null);
+ f.ui.update(settings,url);assert.equal(f.doc.querySelector('[class="hikikomori-note-article-settings"]'),null);
+ for(const name of ['following','author'])assert.equal(f.doc.querySelector(`[class="hikikomori-note-article-${name}"]`).hasAttribute('data-hikikomori-note-settings-offset'),false);
+ assert.equal(f.doc.querySelectorAll('[data-hikikomori-note-owned]').length,2);
 });
 
-test('専用ホームの設定リンクは設定タブへ直行し、#settingsからの直接表示にも対応',async()=>{
- const f=homeFixture({state:{noteLogoBrowserBack:true}});await flush();assert.equal(f.nodes.get('home-settings-return').hidden,false);
- f.nodes.get('home-settings-return').onclick();assert.equal(f.nodes.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,f.nodes.get('tab-settings'));
- f.changed({noteLogoBrowserBack:false});assert.equal(f.nodes.get('home-settings-return').hidden,true);
- const direct=homeFixture({hash:'#settings'});await flush();assert.equal(direct.nodes.get('panel-settings').hidden,false);assert.equal(direct.nodes.get('panel-main').hidden,true);
+test('公式ロゴが差し替われば歯車も付け直し、未確認のロゴ親構造には挿入しない',()=>{
+ const f=uiFixture(logoHeaderHtml),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true});f.ui.update(settings,'https://note.com/search');
+ const parent=f.doc.querySelector('header').children[0],logo=parent.children[0],oldGear=parent.children[1];
+ logo.remove();const replacement=f.doc.createElement('a');replacement.href='/';const svg=f.doc.createElement('svg');svg.setAttribute('role','img');svg.setAttribute('aria-label','note');replacement.append(svg);parent.append(replacement);
+ f.ui.update(settings,'https://note.com/search');assert.equal(oldGear.isConnected,false);assert.equal(parent.children.length,2);assert.equal(parent.children[0],replacement);
+ f.ui.stop();assert.equal(parent.children.length,1);assert.equal(parent.hasAttribute('data-hikikomori-note-logo-settings-layout'),false);
+ const unknown=uiFixture(logoHeaderHtml);unknown.doc.querySelector('header').children[0].append(unknown.doc.createElement('button'));
+ unknown.ui.update(unknown.core.readSettings({...groups(),noteLogoBrowserBack:true}),'https://note.com/search');assert.equal(unknown.doc.querySelector('[class="hikikomori-note-header-settings"]'),null);
+});
+
+test('専用ホームの左メニューで設定を開き、#settingsは重度でも設定を直接表示する',async()=>{
+ const f=homeFixture();await flush();assert.equal(f.nodes.get('panel-tags').hidden,false);
+ f.nodes.get('nav-settings').onclick();assert.equal(f.nodes.get('panel-settings').hidden,false);assert.equal(f.nodes.get('nav-settings').getAttribute('aria-current'),'page');
+ for(const legacyMode of [false,true]){
+  const direct=homeFixture({hash:'#settings',state:{legacyMode}});await flush();assert.equal(direct.nodes.get('panel-settings').hidden,false);assert.equal(direct.nodes.get('panel-tags').hidden,true);assert.equal(direct.nodes.get('panel-intro').hidden,!legacyMode);
+ }
 });
 
 test('ロゴ戻る設定は初期OFF・保存再起動と他タブ同期。失敗時は従来値を維持',async()=>{

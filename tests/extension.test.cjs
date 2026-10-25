@@ -310,9 +310,9 @@ test("無効化中にダッシュボード配下へSPA・履歴・直行した�
 });
 const homeFixture = require("./helpers/home.cjs");
 
-test("専用ホームはnoteへの移動なしで設定とプロフィールを表示", async () => {
+test("専用ホームはnoteへの移動なしでタグ管理と設定を表示", async () => {
   const f = homeFixture(); await flush();
-  assert.equal(f.nodes.get("profile").href, "https://note.com/ruminar");
+  assert.equal(f.nodes.get("panel-tags").hidden, false); assert.equal(f.nodes.get("profile").href, "https://note.com/ruminar");
   assert.equal(f.nodes.get("note-user").value, "ruminar"); assert.equal(f.moves.length, 0);
 });
 test("OFFの完了応答前は通常noteを開かず、成功後にだけ移動", async () => {

@@ -3,21 +3,23 @@
   const core = globalThis.HikikomoriNote;
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
-  const tabs = ["main", "tags", "settings"];
+  const views = ["tags", "settings"];
   const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", legacyMode: "legacy-mode" };
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();
-  let state, selected = location.hash === "#settings" ? "settings" : "main", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
-  function selectTab(name, focus = false) {
+  let state, selected = location.hash === "#settings" ? "settings" : "tags", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
+  function selectView(name, focus = false) {
     if (!state && name !== "settings") return;
-    selected = state?.legacyMode ? "settings" : name;
-    for (const tab of tabs) {
-      byId(`tab-${tab}`).setAttribute("aria-selected", String(tab === selected));
-      byId(`tab-${tab}`).tabIndex = tab === selected ? 0 : -1;
-      byId(`panel-${tab}`).hidden = tab !== selected;
+    selected = state?.legacyMode && name === "tags" ? "intro" : name;
+    for (const view of views) {
+      const button = byId(`nav-${view}`);
+      if (view === selected) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+      byId(`panel-${view}`).hidden = view !== selected;
     }
-    if (focus) byId(`tab-${selected}`).focus();
+    byId("panel-intro").hidden = !state?.legacyMode;
+    if (focus) byId(`nav-${selected === "intro" ? "settings" : selected}`).focus();
   }
   function controls() {
     const blocked = !state || busy || uncertain;
@@ -28,22 +30,19 @@
     byId("add-tag").disabled = tagBlocked;
     byId("group-name").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning);
     byId("save-group-name").disabled = tagBlocked;
-    for (const id of ["main-groups", "edit-groups"]) byId(id).querySelectorAll("button").forEach(button => { button.disabled = blocked || state?.legacyMode || Boolean(state?.tagWarning); });
+    for (const id of ["edit-groups"]) byId(id).querySelectorAll("button").forEach(button => { button.disabled = blocked || state?.legacyMode || Boolean(state?.tagWarning); });
     byId("edit-tags").querySelectorAll("button").forEach(button => { button.disabled = tagBlocked || button.dataset.edge === "true"; });
     for (const row of byId("edit-tags").children) row.draggable = !tagBlocked;
     byId("edit-tags").querySelectorAll("select").forEach(select => { select.disabled = tagBlocked; });
     byId("retry").disabled = busy;
     byId("edit-tags").setAttribute("aria-busy", String(busy));
   }
-  function link(tag) {
-    const a = document.createElement("a"); a.textContent = `# ${tag}`; a.href = core.tagUrl(tag); return a;
-  }
   function renderTags() {
-    const main = byId("main-tags"), editor = byId("edit-tags");
-    main.replaceChildren(); editor.replaceChildren();
-    if (state.legacyMode) return;
+    const editor = byId("edit-tags");
+    editor.replaceChildren();
+    if (state.legacyMode) { byId("edit-groups").replaceChildren(); return; }
     const group = core.selectedGroup(state), tags = group.tags;
-    for (const id of ["main-groups", "edit-groups"]) {
+    for (const id of ["edit-groups"]) {
       const container = byId(id), focused = container.contains(document.activeElement) ? document.activeElement?.getAttribute("data-group-id") : null;
       container.replaceChildren(); container.setAttribute("role", "group"); container.setAttribute("aria-label", "お気に入りタグのグループ");
       state.tagGroups.forEach((item, index) => {
@@ -58,7 +57,6 @@
     }
     byId("tags-empty").hidden = tags.length !== 0;
     tags.forEach((tag, index) => {
-      const item = document.createElement("li"); item.append(link(tag)); main.append(item);
       const row = document.createElement("li"); row.className = "tag-row"; row.draggable = true;
       const name = document.createElement("span"); name.textContent = `# ${tag}`; name.className = "tag-name"; row.append(name);
       function action(text, label, operation, edge = false) {
@@ -96,6 +94,7 @@
     });
   }
   function show(value) {
+    const firstLoad = !state;
     const previous = state?.selectedTagGroupId;
     if (previous) draft(previous).tag = byId("tag-input").value;
     state = core.readSettings(value);
@@ -107,31 +106,29 @@
     byId("group-name").value = currentDraft.nameDirty ? currentDraft.name : group.name;
     byId("group-name-form").hidden = state.legacyMode;
     const active = document.activeElement;
-    const hiddenFocus = state.legacyMode && ["main", "tags"].some(tab =>
-      byId(`panel-${tab}`).contains(active) || active === byId(`tab-${tab}`));
+    const hiddenFocus = state.legacyMode &&
+      (byId("panel-tags").contains(active) || active === byId("nav-tags") || active === byId("following"));
+    if (state.legacyMode && ((firstLoad && location.hash !== "#settings") || selected === "tags")) selected = "intro";
+    if (!state.legacyMode && selected === "intro") selected = "tags";
     for (const [field, id] of Object.entries(fields)) {
       if (dirty.has(field)) continue;
       if (field === "noteUserId") byId(id).value = state[field];
       else byId(id).checked = state[field];
     }
-    byId("tabs").hidden = false;
-    for (const tab of ["main", "tags"]) byId(`tab-${tab}`).hidden = state.legacyMode;
-    byId("legacy-intro").hidden = !state.legacyMode;
-    byId(state.legacyMode ? "legacy-quick-slot" : "quick-slot").append(byId("quick-access"));
-    byId("quick-access").hidden = false;
+    byId("home-menu").hidden = false;
+    byId("nav-tags").hidden = state.legacyMode;
+    byId("page-links").hidden = false;
     byId("following").hidden = state.legacyMode;
-    byId("home-settings-return").hidden = !state.enabled || !state.noteLogoBrowserBack || state.legacyMode;
     const profile = core.profileUrl(state.noteUserId);
-    byId("profile").hidden = !profile;
-    byId("profile").textContent = profile ? `${state.noteUserId}のページ` : "自分のページ";
-    if (profile) byId("profile").href = profile; else byId("profile").removeAttribute("href");
-    byId("setup-user").hidden = Boolean(profile);
+    byId("profile").textContent = profile ? `${state.noteUserId}のページ` : "自分のページ（未設定）";
+    if (profile) { byId("profile").href = profile; byId("profile").removeAttribute("aria-disabled"); }
+    else { byId("profile").removeAttribute("href"); byId("profile").setAttribute("aria-disabled", "true"); }
     byId("mode").textContent = state.enabled
       ? `拡張ON：通常ホームを専用ホームへ転送します。 ${state.legacyMode ? "重度ひきこもりモード" : "通常モード（ひとみしりモード）"}`
       : "拡張OFF：通常のnoteを利用できます。拡張アイコンからONへ戻せます。";
     const warning = state.tagWarning || (state.groupSelectionInvalid ? "保存済みの選択に異常があります。グループを選び直してください。" : "");
     byId("tag-warning").hidden = !warning; byId("tag-warning").textContent = warning;
-    selectTab(selected, hiddenFocus);
+    selectView(selected, hiddenFocus);
     renderTags(); controls();
   }
   async function refresh() {
@@ -144,12 +141,13 @@
       byId("status").textContent = location.hash === "#activation-failed" && !state.enabled
         ? "ONへの切り替えに失敗しました。拡張アイコンを押して再度お試しください。" : "設定と転送状態を確認しました。";
     } catch (error) {
-      uncertain = true; byId("status").textContent = `確認できませんでした。${error.message} 設定タブの「状態を再確認」で再試行できます。`;
+      uncertain = true; byId("status").textContent = `確認できませんでした。${error.message} 「設定」の「状態を再確認」で再試行できます。`;
       if (!state) {
-        byId("tabs").hidden = false;
-        for (const tab of ["main", "tags"]) byId(`tab-${tab}`).hidden = true;
+        byId("home-menu").hidden = false;
+        byId("nav-tags").hidden = true;
+        byId("page-links").hidden = true;
       }
-      selectTab("settings");
+      selectView("settings");
     }
     finally { busy = false; controls(); }
   }
@@ -175,7 +173,7 @@
     } catch (error) {
       uncertain = error.code === "UNCONFIRMED";
       byId("status").textContent = `処理できませんでした。${error.message}`;
-      if (uncertain) selectTab("settings", true);
+      if (uncertain) selectView("settings", true);
       if (["CONFLICT", "LEGACY_MODE", "INVALID_TAGS"].includes(error.code)) {
         try { show(await platform.getState()); } catch { uncertain = true; }
       }
@@ -215,19 +213,17 @@
     event.preventDefault(); const group = core.selectedGroup(state), value = draft(group.id);
     void perform(() => platform.tag({ type: "RENAME_TAG_GROUP", groupId: group.id, name: byId("group-name").value, expectedName: value.nameDirty ? value.expectedName : group.name }), { rename: { groupId: group.id, name: value.name } });
   };
-  for (const name of tabs) byId(`tab-${name}`).onclick = () => selectTab(name);
-  byId("tabs").onkeydown = event => {
-    const visible = state?.legacyMode ? ["settings"] : tabs;
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  for (const name of views) byId(`nav-${name}`).onclick = () => selectView(name);
+  byId("home-menu").onkeydown = event => {
+    const visible = state?.legacyMode || !state ? ["settings"] : views;
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     let index = visible.indexOf(selected);
     if (event.key === "Home") index = 0;
     else if (event.key === "End") index = visible.length - 1;
-    else index = (index + (event.key === "ArrowRight" ? 1 : -1) + visible.length) % visible.length;
-    selectTab(visible[index], true);
+    else index = (index + (event.key === "ArrowDown" ? 1 : -1) + visible.length) % visible.length;
+    selectView(visible[index], true);
   };
-  byId("setup-user").onclick = () => { selectTab("settings"); byId("note-user").focus(); };
-  byId("home-settings-return").onclick = () => selectTab("settings", true);
   byId("normal").onclick = () => { void perform(() => platform.save({ enabled: false }), { off: true }); };
   byId("retry").onclick = () => { void refresh(); };
   platform.subscribe(value => { revision++; show(value); });
