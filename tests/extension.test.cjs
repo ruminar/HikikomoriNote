@@ -76,7 +76,7 @@ test("ダッシュボード設定を保存・復元し、全体OFF/ONと別タ�
   const f = controllerFixture({ enabled: true, noteUserId: "ruminar" });
   await f.controller.save({ dashboardDisabled: true }); assert.equal(f.rules.length, 4);
   await Promise.all([f.controller.save({ noteUserId: "other_user" }), f.controller.save({ enabled: false })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, hideArticleRecommendations: false, favoriteTags: [] });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false });
   assert.equal(f.rules.length, 0);
   const restart = controllerFixture(f.value); await restart.controller.getState(); assert.equal(restart.rules.length, 0);
   await restart.controller.save({ enabled: true }); assert.equal(restart.rules.length, 4);
@@ -100,7 +100,7 @@ test("DNR：ホームの文書だけ専用ページへ転送、事前取得も�
 });
 test("既存のユーザー名・OFFを引き継ぎ、再起動後もOFFルールを適用", async () => {
   const f = controllerFixture({ enabled: false, noteUserId: "ruminar" });
-  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, favoriteTags: [] });
+  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false, favoriteTags: [], tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0 });
   assert.deepEqual(f.rules, []);
   await f.controller.save({ enabled: true });
   const restart = controllerFixture(f.value); await restart.controller.getState();
@@ -115,7 +115,7 @@ test("OFFはルール解除・保存の順に完了してから成功を返す",
 test("複数タブから同時保存してもON/OFFとユーザー名を上書きし合わない", async () => {
   const f = controllerFixture();
   await Promise.all([f.controller.save({ enabled: false }), f.controller.save({ noteUserId: "ruminar" })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, favoriteTags: [] });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false });
   assert.deepEqual(f.rules, []);
 });
 test("転送更新失敗時は設定を保存せず、次の操作は再試行できる", async () => {
@@ -159,6 +159,7 @@ function contentFixture(stored, options = {}) {
   const location = { href: options.url ?? "https://note.com/ruminar", assign: url => moves.push(["assign", url]), replace: url => moves.push(["replace", url]) };
   const c = context({
     location,
+    HikikomoriNoteUi: options.logoDetector ? { create:()=>undefined, isOfficialHeaderLogo:options.logoDetector } : undefined,
     document: {
       addEventListener: (name, fn) => documentEvents.set(name, fn), removeEventListener: name => documentEvents.delete(name),
       querySelectorAll: () => anchors.filter(anchor => anchor.isConnected && anchor.href)
@@ -169,6 +170,7 @@ function contentFixture(stored, options = {}) {
       disconnect() { disconnected = true; }
     },
     window: {
+      confirm: options.confirm,
       addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name),
       navigation: { addEventListener: (name, fn) => navigationEvents.set(name, fn), removeEventListener: name => navigationEvents.delete(name) }
     },
@@ -238,6 +240,24 @@ test("OFF・記事リンク・修飾クリック・別タブ・ダウンロー�
   }
   f.changed({ enabled: false }); assert.equal(f.click().defaultPrevented, false);
   assert.equal(f.moves.length, 0);
+});
+
+test("ロゴ確認はイベント停止後に実行し、承認だけ移動。キャンセル・例外・OFFを検証",async()=>{
+ for(const result of [true,false,'throw']){
+  let event,calls=0;const f=contentFixture({confirmNoteLogoClick:true,legacyMode:true},{logoDetector:()=>true,confirm(){calls++;assert.equal(event.defaultPrevented,true);assert.equal(event.stopped,true);if(result==='throw')throw Error('suppressed');return result;}});await flush();
+  event={button:0,isTrusted:true,cancelable:true,defaultPrevented:false,composedPath:()=>[{tagName:'A',href:'https://note.com/',hasAttribute:()=>false}],preventDefault(){this.defaultPrevented=true;},stopImmediatePropagation(){this.stopped=true;}};
+  f.documentEvents.get('click')(event);assert.equal(calls,1);assert.equal(f.moves.length,result===true?1:0);
+  f.changed({enabled:false,confirmNoteLogoClick:true});f.click();assert.equal(calls,1);
+ }
+});
+
+test("ロゴ以外・修飾キー・非trusted・設定OFFでは確認しない",async()=>{
+ let calls=0;const options={logoDetector:()=>true,confirm(){calls++;return false;}};
+ const f=contentFixture({confirmNoteLogoClick:true},options);await flush();
+ for(const event of [{isTrusted:true,cancelable:true,ctrlKey:true},{isTrusted:false,cancelable:true},{isTrusted:true,cancelable:false}])f.click(undefined,event);
+ assert.equal(calls,0);f.changed({enabled:true,confirmNoteLogoClick:false});f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);
+ const other=contentFixture({confirmNoteLogoClick:true},{...options,logoDetector:()=>false});await flush();other.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);assert.deepEqual(other.moves,[['assign',other.home]]);
+ await assert.rejects(controllerFixture().controller.save({confirmNoteLogoClick:'true'}));
 });
 test("JSによるホーム遷移も可能なら通信開始前にキャンセルし専用ホームへ", async () => {
   const f = contentFixture(); await flush();
@@ -388,7 +408,7 @@ test("アダプターは自拡張のhome.htmlだけを設定メッセージ送�
 });
 test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホーム全体を隠さない", () => {
   const m = JSON.parse(source("manifest.json"));
-  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.0");
+  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.1");
   assert.deepEqual(m.permissions, ["storage", "declarativeNetRequestWithHostAccess"]);
   assert.deepEqual(m.host_permissions, ["https://note.com/*"]);
   assert.deepEqual(m.web_accessible_resources, [{ resources: ["home.html"], matches: ["https://note.com/*"] }]);

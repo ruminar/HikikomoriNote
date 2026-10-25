@@ -22,18 +22,25 @@ port.onAction(() => {
     await port.openHome(activationFailed);
   })().catch(error => console.warn(error));
 });
-// note上では送信元URLのタグ追加だけを許可し、設定変更・削除・並べ替えは専用ホームに限定。
+// note上はグループ選択と送信元URLのタグ追加だけ。設定変更・削除・並べ替えは専用ホームに限定。
 port.onMessage((message, sender, respond) => {
   let operation;
   if (port.isHomeSender(sender)) {
     if (message?.type === "get-state") operation = controller.getState();
     else if (message?.type === "save-settings") operation = controller.save(message.patch);
     else if (message?.type === "tag-operation") operation = controller.tag(message.patch);
+    else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    const tag = message?.type === "add-current-tag" ? port.currentTag?.(sender) : null;
-    if (tag === null || tag === undefined) return false;
-    operation = controller.tag({ type: "ADD_TAG", tag }, { requireEnabled: true });
+    if (message?.type === "select-tag-group" && port.isMenuSender?.(sender)) {
+      operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId }, { requireEnabled: true });
+    } else {
+      const tag = message?.type === "add-current-tag" ? port.currentTag?.(sender) : null;
+      if (tag === null || tag === undefined) return false;
+      operation = Number.isSafeInteger(message.patch?.selectionRevision) && message.patch.selectionRevision >= 0
+        ? controller.tag({ type: "ADD_TAG", tag, groupId: message.patch?.groupId }, { requireEnabled: true, selectionRevision: message.patch.selectionRevision })
+        : Promise.reject(Object.assign(new Error("選択グループを再確認してください。"), { code: "CONFLICT" }));
+    }
   }
   operation.then(settings => respond({ ok: true, settings }),
     error => respond({ ok: false, error: error.message || "設定処理に失敗しました。", code: error.code || "OPERATION_FAILED" }));

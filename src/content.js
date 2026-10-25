@@ -3,16 +3,27 @@
   "use strict";
   const core = globalThis.HikikomoriNote;
   const platform = globalThis.HikikomoriNotePlatform;
+  function readView(value) {
+    const state = core.readSettings(value);
+    if (value?.tagWarning) state.tagWarning = value.tagWarning;
+    if (value?.groupSelectionInvalid) state.groupSelectionInvalid = true;
+    return state;
+  }
   const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
-    async addCurrentTag() {
+    async addCurrentTag(groupId, selectionRevision) {
       const before = revision;
-      const value = await platform.addCurrentTag();
-      if (!stopped && revision === before) { settings = core.readSettings(value); checkHome(); }
+      const value = await platform.addCurrentTag(groupId, selectionRevision);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
+    },
+    async selectGroup(groupId) {
+      const before = revision;
+      const value = await platform.selectGroup(groupId);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
     async refresh() {
       const before = revision;
       const value = await platform.load();
-      if (!stopped && revision === before) { settings = core.readSettings(value); checkHome(); }
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     }
   });
   let settings;
@@ -82,6 +93,15 @@
         event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const anchor = event.composedPath().find(node => node?.tagName === "A");
     if (!anchor || anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) return;
+    if (settings.confirmNoteLogoClick && event.isTrusted === true && event.cancelable === true && core.isHome(anchor.href) &&
+        globalThis.HikikomoriNoteUi?.isOfficialHeaderLogo(anchor)) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      let accepted = false;
+      try { accepted = window.confirm("ひきこもりnoteの専用ホームへ移動しますか？ OKで移動、キャンセルで現在のページにとどまります。") === true; }
+      catch { /* 表示できない場合も移動しない */ }
+      if (accepted) location.assign(platform.homeUrl());
+      return;
+    }
     // クリック時の委譲処理なので、SPAで後から追加された公式タブにも対応する。
     const articleTabUrl = !settings.legacyMode && anchor.getAttribute?.("data-id") === "NavigationItem" &&
       anchor.textContent?.trim() === "記事" ? core.articleSearchTabUrl(location.href, anchor.href) : null;

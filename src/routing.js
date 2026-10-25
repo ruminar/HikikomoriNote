@@ -31,19 +31,34 @@
     }
     function failure(message, code) { return Object.assign(new Error(message), { code }); }
     function storedValue(raw, settings) {
-      const { tagWarning, ...clean } = settings;
-      if (tagWarning) clean.favoriteTags = raw.favoriteTags;
+      const { tagWarning, groupSelectionInvalid, ...clean } = settings;
+      // タグ関連の保存値は通常設定保存では一切正規化・上書きしない。
+      for (const key of ["favoriteTags", "tagSchemaVersion", "tagGroups", "selectedTagGroupId", "groupSelectionRevision", "tagGroupsRevision"]) delete clean[key];
       return { ...(raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}), ...clean };
+    }
+    async function migrate(raw) {
+      const settings = core.readSettings(raw);
+      if (settings.tagSchemaVersion !== undefined || settings.tagWarning) return raw;
+      const next = { ...(raw ?? {}), tagSchemaVersion: 2, tagGroups: settings.tagGroups,
+        selectedTagGroupId: "group1", groupSelectionRevision: 0, tagGroupsRevision: 0 };
+      await port.store(next); return next;
+    }
+    function increment(value) {
+      if (!Number.isSafeInteger(value) || value >= Number.MAX_SAFE_INTEGER) throw failure("更新番号が不正か上限です。編集を停止しました。", "INVALID_TAGS");
+      return value + 1;
     }
     return Object.freeze({
       getState: () => run(async () => {
-        const settings = core.readSettings(await port.load());
+        let raw = await port.load(), migrationError;
+        try { raw = await migrate(raw); } catch { migrationError = "グループへの移行を保存できません。状態を再確認してください。"; }
+        const settings = core.readSettings(raw);
+        if (migrationError) settings.tagWarning = migrationError;
         await port.setRules(rules(settings.enabled, settings.dashboardDisabled));
         return settings;
       }),
       save: patch => run(async () => {
         if (!patch || typeof patch !== "object" || Array.isArray(patch) ||
-            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "legacyMode", "hideArticleRecommendations"].includes(key))) {
+            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "legacyMode", "hideArticleRecommendations", "confirmNoteLogoClick"].includes(key))) {
           throw new Error("設定の形式が正しくありません。");
         }
         if (Object.hasOwn(patch, "enabled") && typeof patch.enabled !== "boolean") {
@@ -56,6 +71,7 @@
         }
         if (Object.hasOwn(patch, "legacyMode") && typeof patch.legacyMode !== "boolean") throw new Error("モード設定の値が正しくありません。");
         if (Object.hasOwn(patch, "hideArticleRecommendations") && typeof patch.hideArticleRecommendations !== "boolean") throw new Error("おすすめ表示設定の値が正しくありません。");
+        if (Object.hasOwn(patch, "confirmNoteLogoClick") && typeof patch.confirmNoteLogoClick !== "boolean") throw new Error("ロゴ確認設定の値が正しくありません。");
         const next = { ...previous, ...patch };
         next.noteUserId = core.normalizeUserId(next.noteUserId);
         await port.setRules(rules(next.enabled, next.dashboardDisabled));
@@ -65,25 +81,51 @@
           catch { throw new Error("保存と転送設定の復旧に失敗しました。拡張を無効化して再読み込みしてください。"); }
           throw error;
         }
-        return next;
+        return core.readSettings(storedValue(raw, next));
       }),
       tag: (operation, options = {}) => run(async () => {
-        if (!operation || !["ADD_TAG", "REMOVE_TAG", "MOVE_TAG"].includes(operation.type) ||
-            Object.keys(operation).some(key => !["type", "tag", "beforeTag"].includes(key))) throw new Error("タグ操作の形式が正しくありません。");
-        const raw = await port.load();
+        if (!operation || !["ADD_TAG", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
+            Object.keys(operation).some(key => !["type", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName"].includes(key)) ||
+            !core.groupIds.includes(operation.groupId)) throw new Error("グループを指定して画面を再読み込みしてください。");
+        if (["ADD_TAG", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG"].includes(operation.type)) core.normalizeTag(operation.tag);
+        if (operation.type === "RENAME_TAG_GROUP") core.normalizeGroupName(operation.name);
+        const raw = await migrate(await port.load());
         const settings = core.readSettings(raw);
         if (options.requireEnabled && !settings.enabled) throw failure("拡張OFFではタグを追加できません。", "DISABLED");
         if (settings.legacyMode) throw failure("重度引きこもりモードではタグを編集できません。状態を再確認してください。", "LEGACY_MODE");
         if (settings.tagWarning) throw failure(settings.tagWarning, "INVALID_TAGS");
+        if (settings.groupSelectionInvalid && operation.type !== "SELECT_TAG_GROUP") throw failure("グループを選び直してください。", "CONFLICT");
+        if (options.selectionRevision !== undefined && (settings.groupSelectionRevision !== options.selectionRevision || settings.selectedTagGroupId !== operation.groupId)) throw failure("選択グループが変わりました。状態を再確認してください。", "CONFLICT");
+        const groups = settings.tagGroups.map(group => ({ ...group, tags: [...group.tags] }));
+        const group = groups.find(item => item.id === operation.groupId);
+        async function storeGroups(patch = {}) {
+          const next = { ...raw, tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision), ...patch };
+          await port.store(next); return core.readSettings(next);
+        }
+        if (operation.type === "SELECT_TAG_GROUP") {
+          if (!settings.groupSelectionInvalid && settings.selectedTagGroupId === group.id) return settings;
+          return storeGroups({ selectedTagGroupId: group.id, groupSelectionRevision: increment(settings.groupSelectionRevision) });
+        }
+        if (operation.type === "RENAME_TAG_GROUP") {
+          if (operation.expectedName !== group.name) throw failure("別の画面でグループ名が変更されました。", "CONFLICT");
+          const name = core.normalizeGroupName(operation.name);
+          if (name === group.name) return settings;
+          group.name = name; return storeGroups();
+        }
         const tag = core.normalizeTag(operation.tag);
-        const tags = [...settings.favoriteTags];
+        const tags = group.tags;
         const index = tags.indexOf(tag);
         if (operation.type === "ADD_TAG") {
           if (index >= 0) throw failure("このタグは既に登録されています。", "CONFLICT");
           tags.push(tag);
         } else {
           if (index < 0) throw failure("対象タグが別の画面で削除されています。最新一覧を確認してください。", "CONFLICT");
-          if (operation.type === "REMOVE_TAG") tags.splice(index, 1);
+          if (operation.type === "TRANSFER_TAG") {
+            const target = groups.find(item => item.id === operation.targetGroupId);
+            if (!target || target === group) throw new Error("別の移動先グループを指定してください。");
+            if (target.tags.includes(tag)) throw failure("移動先には既に登録されています。", "CONFLICT");
+            tags.splice(index, 1); target.tags.push(tag);
+          } else if (operation.type === "REMOVE_TAG") tags.splice(index, 1);
           else {
             if (operation.beforeTag !== null && typeof operation.beforeTag !== "string") throw new Error("移動先を指定してください。");
             const before = operation.beforeTag === null ? null : core.normalizeTag(operation.beforeTag);
@@ -93,9 +135,7 @@
             tags.splice(before === null ? tags.length : tags.indexOf(before), 0, tag);
           }
         }
-        const next = { ...settings, favoriteTags: tags };
-        await port.store(storedValue(raw, next));
-        return next;
+        return storeGroups();
       })
     });
   }

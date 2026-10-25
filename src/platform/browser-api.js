@@ -20,7 +20,8 @@
     getState: () => request("get-state"),
     save: patch => request("save-settings", patch),
     tag: operation => request("tag-operation", operation),
-    addCurrentTag: () => request("add-current-tag"),
+    addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision }),
+    selectGroup: groupId => request("select-tag-group", { groupId }),
     subscribe(listener) {
       const onChange = (changes, area) => {
         if (area === "local" && Object.hasOwn(changes, key)) listener(changes[key].newValue);
@@ -46,6 +47,8 @@
       const page = globalThis.HikikomoriNote.pageKind(sender.url);
       return page?.type === "tag" ? page.tag : null;
     },
+    isMenuSender: sender => sender?.id === api.runtime.id && sender.frameId === 0 && Number.isInteger(sender.tab?.id) &&
+      ["following", "tag", "search"].includes(globalThis.HikikomoriNote.pageKind(sender.url)?.type),
     isHomeSender: sender => sender?.id === api.runtime.id &&
       sender.url?.split(/[?#]/)[0] === api.runtime.getURL("home.html")
   });

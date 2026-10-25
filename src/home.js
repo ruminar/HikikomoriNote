@@ -4,7 +4,9 @@
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
   const tabs = ["main", "tags", "settings"];
-  const fields = { noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", legacyMode: "legacy-mode" };
+  const fields = { noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", confirmNoteLogoClick: "confirm-note-logo", legacyMode: "legacy-mode" };
+  const drafts = new Map();
+  function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();
   let state, selected = "main", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectTab(name, focus = false) {
@@ -19,13 +21,17 @@
   }
   function controls() {
     const blocked = !state || busy || uncertain;
-    const tagBlocked = blocked || state?.legacyMode || Boolean(state?.tagWarning);
+    const tagBlocked = blocked || state?.legacyMode || Boolean(state?.tagWarning) || Boolean(state?.groupSelectionInvalid);
     for (const id of ["normal", "save"]) byId(id).disabled = blocked;
     for (const id of Object.values(fields)) byId(id).disabled = !state || uncertain || (busy && pendingState === "settings");
     byId("tag-input").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning);
     byId("add-tag").disabled = tagBlocked;
+    byId("group-name").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning);
+    byId("save-group-name").disabled = tagBlocked;
+    for (const id of ["main-groups", "edit-groups"]) byId(id).querySelectorAll("button").forEach(button => { button.disabled = blocked || state?.legacyMode || Boolean(state?.tagWarning); });
     byId("edit-tags").querySelectorAll("button").forEach(button => { button.disabled = tagBlocked || button.dataset.edge === "true"; });
     for (const row of byId("edit-tags").children) row.draggable = !tagBlocked;
+    byId("edit-tags").querySelectorAll("select").forEach(select => { select.disabled = tagBlocked; });
     byId("retry").disabled = busy;
     byId("edit-tags").setAttribute("aria-busy", String(busy));
   }
@@ -36,7 +42,20 @@
     const main = byId("main-tags"), editor = byId("edit-tags");
     main.replaceChildren(); editor.replaceChildren();
     if (state.legacyMode) return;
-    const tags = state.favoriteTags;
+    const group = core.selectedGroup(state), tags = group.tags;
+    for (const id of ["main-groups", "edit-groups"]) {
+      const container = byId(id), focused = container.contains(document.activeElement) ? document.activeElement?.getAttribute("data-group-id") : null;
+      container.replaceChildren(); container.setAttribute("role", "group"); container.setAttribute("aria-label", "お気に入りタグのグループ");
+      state.tagGroups.forEach((item, index) => {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
+        button.setAttribute("data-group-id", item.id); button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
+        button.setAttribute("aria-pressed", String(item.id === group.id)); button.setAttribute("title", core.groupName(item));
+        button.onclick = () => { void perform(() => platform.tag({ type: "SELECT_TAG_GROUP", groupId: item.id }), { focusGroup: [id, item.id] }); };
+        container.append(button);
+      });
+      const name = document.createElement("span"); name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); container.append(name);
+      if (focused) container.querySelector(`[data-group-id="${focused}"]`)?.focus();
+    }
     byId("tags-empty").hidden = tags.length !== 0;
     tags.forEach((tag, index) => {
       const item = document.createElement("li"); item.append(link(tag)); main.append(item);
@@ -45,14 +64,22 @@
       function action(text, label, operation, edge = false) {
         const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
         button.textContent = text; button.setAttribute("aria-label", `${tag}：${label}`); button.dataset.edge = String(edge);
-        button.onclick = () => { void mutateTag(operation, { focusTagInput: true }); }; row.append(button);
+        button.onclick = () => { void mutateTag({ ...operation, groupId: group.id }, { focusTagInput: true }); }; row.append(button);
       }
       action("↑", "上へ移動", { type: "MOVE_TAG", tag, beforeTag: tags[index - 1] ?? null }, index === 0);
       action("↓", "下へ移動", { type: "MOVE_TAG", tag, beforeTag: tags[index + 2] ?? null }, index === tags.length - 1);
       action("削除", "削除", { type: "REMOVE_TAG", tag });
+      const destination = document.createElement("select"); destination.setAttribute("aria-label", `${tag}の移動先`);
+      for (const item of state.tagGroups.filter(item => item.id !== group.id)) {
+        const option = document.createElement("option"); option.value = item.id; option.textContent = `${core.groupIds.indexOf(item.id) + 1} ${core.groupName(item)}`; destination.append(option);
+      }
+      destination.value = state.tagGroups.find(item => item.id !== group.id).id; row.append(destination);
+      const transfer = document.createElement("button"); transfer.type = "button"; transfer.textContent = "移動";
+      transfer.setAttribute("aria-label", `${tag}を別グループへ移動`);
+      transfer.onclick = () => { void mutateTag({ type: "TRANSFER_TAG", groupId: group.id, targetGroupId: destination.value, tag }); }; row.append(transfer);
       row.ondragstart = event => {
         if (busy || uncertain || state.legacyMode || state.tagWarning) { event.preventDefault(); return; }
-        dragTag = tag; event.dataTransfer.setData("text/plain", tag); event.dataTransfer.effectAllowed = "move";
+        dragTag = { tag, groupId: group.id }; event.dataTransfer.setData("text/plain", tag); event.dataTransfer.effectAllowed = "move";
       };
       row.ondragover = event => { if (dragTag && !busy && !uncertain) event.preventDefault(); };
       row.ondrop = event => {
@@ -61,16 +88,24 @@
         const rect = row.getBoundingClientRect();
         const beforeTag = Number.isFinite(event.clientY) && event.clientY > rect.top + rect.height / 2
           ? tags[index + 1] ?? null : tag;
-        void mutateTag({ type: "MOVE_TAG", tag: source, beforeTag }, { focusTagInput: true });
+        if (source.groupId !== state.selectedTagGroupId) return;
+        void mutateTag({ type: "MOVE_TAG", groupId: source.groupId, tag: source.tag, beforeTag }, { focusTagInput: true });
       };
       row.ondragend = () => { dragTag = null; };
       editor.append(row);
     });
   }
   function show(value) {
+    const previous = state?.selectedTagGroupId;
+    if (previous) draft(previous).tag = byId("tag-input").value;
     state = core.readSettings(value);
     // 背景処理が正常項目と一緒に返した診断を、再正規化で消さない。
     if (typeof value?.tagWarning === "string" && value.tagWarning) state.tagWarning = value.tagWarning;
+    if (value?.groupSelectionInvalid) state.groupSelectionInvalid = true;
+    const group = core.selectedGroup(state), currentDraft = draft(group.id);
+    if (previous !== group.id) { byId("tag-input").value = currentDraft.tag; dragTag = null; }
+    byId("group-name").value = currentDraft.nameDirty ? currentDraft.name : group.name;
+    byId("group-name-form").hidden = state.legacyMode;
     const active = document.activeElement;
     const hiddenFocus = state.legacyMode && ["main", "tags"].some(tab =>
       byId(`panel-${tab}`).contains(active) || active === byId(`tab-${tab}`));
@@ -91,7 +126,8 @@
     if (profile) byId("profile").href = profile; else byId("profile").removeAttribute("href");
     byId("setup-user").hidden = Boolean(profile);
     byId("mode").textContent = `${state.enabled ? "拡張ON：通常ホームを専用ホームへ転送します。" : "拡張OFF：通常のnoteを利用できます。拡張アイコンからONへ戻せます。"} ${state.legacyMode ? "0.1.1モード（重度引きこもりモード）" : "通常モード"}`;
-    byId("tag-warning").hidden = !state.tagWarning; byId("tag-warning").textContent = state.tagWarning ?? "";
+    const warning = state.tagWarning || (state.groupSelectionInvalid ? "保存済みの選択に異常があります。グループを選び直してください。" : "");
+    byId("tag-warning").hidden = !warning; byId("tag-warning").textContent = warning;
     selectTab(selected, hiddenFocus);
     renderTags(); controls();
   }
@@ -122,11 +158,17 @@
     try {
       const result = await task();
       if (options.kind === "settings") dirty.clear();
-      if (options.addInput !== undefined && byId("tag-input").value === options.addInput) byId("tag-input").value = "";
+      if (options.addInput !== undefined) {
+        const savedDraft = draft(options.groupId);
+        if (state.selectedTagGroupId === options.groupId && byId("tag-input").value === options.addInput) byId("tag-input").value = "";
+        if (savedDraft.tag === options.addInput) savedDraft.tag = "";
+      }
+      if (options.rename && draft(options.rename.groupId).name === options.rename.name) draft(options.rename.groupId).nameDirty = false;
       show(before === revision ? result : state);
       byId("status").textContent = "保存しました。";
       if (options.off) location.assign("https://note.com/");
       if (options.focusTagInput && !state.legacyMode) byId("tag-input").focus();
+      if (options.focusGroup) byId(options.focusGroup[0]).querySelector(`[data-group-id="${options.focusGroup[1]}"]`)?.focus();
     } catch (error) {
       uncertain = error.code === "UNCONFIRMED";
       byId("status").textContent = `処理できませんでした。${error.message}`;
@@ -150,14 +192,25 @@
   };
   byId("tag-form").onsubmit = event => {
     event.preventDefault(); const input = byId("tag-input").value;
-    try { void mutateTag({ type: "ADD_TAG", tag: core.normalizeTag(input) }, { addInput: input }); }
+    const groupId = state?.selectedTagGroupId;
+    try { void mutateTag({ type: "ADD_TAG", groupId, tag: core.normalizeTag(input) }, { addInput: input, groupId }); }
     catch (error) { byId("status").textContent = error.message; }
   };
   byId("edit-tags").ondragover = event => { if (dragTag && !busy && !uncertain) event.preventDefault(); };
   byId("edit-tags").ondrop = event => {
     if (!dragTag || busy || uncertain) return;
     event.preventDefault(); const tag = dragTag; dragTag = null;
-    void mutateTag({ type: "MOVE_TAG", tag, beforeTag: null }, { focusTagInput: true });
+    if (tag.groupId !== state.selectedTagGroupId) return;
+    void mutateTag({ type: "MOVE_TAG", groupId: tag.groupId, tag: tag.tag, beforeTag: null }, { focusTagInput: true });
+  };
+  byId("group-name").addEventListener("input", () => {
+    const group = core.selectedGroup(state), value = draft(group.id);
+    if (!value.nameDirty) value.expectedName = group.name;
+    value.nameDirty = true; value.name = byId("group-name").value;
+  });
+  byId("group-name-form").onsubmit = event => {
+    event.preventDefault(); const group = core.selectedGroup(state), value = draft(group.id);
+    void perform(() => platform.tag({ type: "RENAME_TAG_GROUP", groupId: group.id, name: byId("group-name").value, expectedName: value.nameDirty ? value.expectedName : group.name }), { rename: { groupId: group.id, name: value.name } });
   };
   for (const name of tabs) byId(`tab-${name}`).onclick = () => selectTab(name);
   byId("tabs").onkeydown = event => {

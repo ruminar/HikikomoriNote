@@ -2,6 +2,46 @@
 (() => {
   "use strict";
   const settingsKey = "hikikomoriNote.settings.v1";
+  const groupIds = ["group1", "group2", "group3", "group4"];
+  function groupName(group) { return group.name || `グループ${groupIds.indexOf(group.id) + 1}`; }
+  function normalizeGroupName(value) {
+    if (typeof value !== "string") throw new Error("グループ名を文字列で入力してください。");
+    const name = value.trim();
+    if ([...name].length > 40 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(name)) throw new Error("グループ名は改行なしの40文字以内で入力してください。");
+    try { encodeURIComponent(name); } catch { throw new Error("グループ名に使用できない文字があります。"); }
+    return name;
+  }
+  function inspectGroups(value) {
+    const legacy = value?.tagSchemaVersion === undefined &&
+      !["tagGroups", "selectedTagGroupId", "groupSelectionRevision", "tagGroupsRevision"].some(key => Object.hasOwn(value ?? {}, key));
+    let warning = value !== undefined && (!value || typeof value !== "object" || Array.isArray(value)) ? "設定の保存形式に異常があります。タグ編集を停止しました。" : "";
+    let groups;
+    if (legacy) {
+      const old = inspectTags(value?.favoriteTags); warning ||= old.warning;
+      groups = groupIds.map((id, index) => ({ id, name: "", tags: index === 0 ? old.tags : [] }));
+    } else {
+      const source = Array.isArray(value?.tagGroups) ? value.tagGroups : [];
+      if (value?.tagSchemaVersion !== 2 || source.length !== 4) warning = "タググループの保存形式に異常があります。元データを保持し、編集を停止しました。";
+      groups = groupIds.map((id, index) => {
+        const matches = source.filter(group => group?.id === id), item = matches.length === 1 ? matches[0] : undefined;
+        const tags = inspectTags(item?.tags); let name = "";
+        try { name = normalizeGroupName(item?.name); if (name !== item.name) warning ||= "グループ名の保存値に異常があります。"; }
+        catch { warning ||= "グループ名の保存値に異常があります。"; }
+        if (!item || !Array.isArray(item.tags) || source[index]?.id !== id || tags.warning) warning ||= "タググループの保存データに異常があります。編集を停止しました。";
+        return { id, name, tags: tags.tags };
+      });
+      for (const key of ["groupSelectionRevision", "tagGroupsRevision"]) {
+        if (!Number.isSafeInteger(value?.[key]) || value[key] < 0) warning ||= "グループの更新番号に異常があります。";
+      }
+    }
+    const selectionInvalid = !legacy && !groupIds.includes(value?.selectedTagGroupId);
+    return { tagSchemaVersion: legacy ? undefined : value?.tagSchemaVersion, tagGroups: groups,
+      selectedTagGroupId: !selectionInvalid && !legacy ? value.selectedTagGroupId : "group1",
+      groupSelectionRevision: legacy ? 0 : value?.groupSelectionRevision,
+      tagGroupsRevision: legacy ? 0 : value?.tagGroupsRevision,
+      ...(warning ? { tagWarning: warning } : {}), ...(selectionInvalid ? { groupSelectionInvalid: true } : {}) };
+  }
+  function selectedGroup(settings) { return settings.tagGroups.find(group => group.id === settings.selectedTagGroupId); }
   function isHome(url) {
     try {
       const parsed = new URL(url);
@@ -38,10 +78,10 @@
   function readSettings(value) {
     let noteUserId = "";
     try { noteUserId = normalizeUserId(value?.noteUserId); } catch { /* 破損値は空欄へ */ }
-    const inspected = inspectTags(value?.favoriteTags);
+    const groups = inspectGroups(value);
     return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
-      legacyMode: value?.legacyMode === true, hideArticleRecommendations: value?.hideArticleRecommendations === true, favoriteTags: inspected.tags,
-      ...(inspected.warning ? { tagWarning: inspected.warning } : {}) };
+      legacyMode: value?.legacyMode === true, hideArticleRecommendations: value?.hideArticleRecommendations === true, favoriteTags: inspectTags(value?.favoriteTags).tags,
+      confirmNoteLogoClick: value?.confirmNoteLogoClick === true, ...groups };
   }
   function normalizeTag(value) {
     if (typeof value !== "string") throw new Error("タグ名は文字列で入力してください。");
@@ -100,5 +140,5 @@
     return normalized ? `https://note.com/${encodeURIComponent(normalized)}` : null;
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
-    normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle });
+    normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, groupIds, groupName, normalizeGroupName, selectedGroup });
 })();
