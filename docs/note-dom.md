@@ -96,3 +96,7 @@ kakiponの実タブリンクで `/all`、`/magazines`、`/likes`、`/archives` �
 利用者提供の¥300の記事カードを基に、grid-rows-subgrid枠と、その直下のカードにあるタイトル・aria-label付きabsolute/inset-0の記事リンク、h3、text-text-successの価格spanを確認。価格は「¥」の子spanと金額テキストからなり、textContent全体で判定する。異なるDOMは隠さない。購入済み一覧はURLで除外し、購入状態そのものは判定しない。実ブラウザでの非表示・余白・追加読み込みは別途確認が必要。
 
 非表示記事の空き枠対策：提供HTMLはカード外にcontents→mb-0/w-full/min-w-0/border-b-0/pb-0→無クラスdivの3段がある。単一子の既知ラッパーを含む一覧アイテム単位で隠し、後続のカードが詰まるようにする。外枠の属性も解除・購入済み画面への遷移時に復元する。
+
+## 0.2.1 ヘッダー検索クリア（2026-10-25）
+
+未ログインのnote.com/searchでread-only DOM参照により確認。header[data-header-state="navbar"]内のform[role="search"][action="/search"]に、data-name="Field"→ラッパー→data-name="TextFieldBase"→input[type="search"][name="q"]があり、入力のaria-labelは「キーワードやクリエイターで検索」。本文側にはtype=textの別検索欄があるため対象外。ヘッダーの検索フォーム末尾にtype=buttonを追加し、独自属性のあるフォームだけ横並びにする。実拡張での消去後の公式再検索・ログイン後・狭い幅での表示確認は別途必要。

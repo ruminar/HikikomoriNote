@@ -147,6 +147,50 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,actions)};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
+const searchHeaderHtml='<header data-header-state="navbar"><form role="search" action="/search"><div data-name="Field"><div><div data-name="TextFieldBase"><input type="search" name="q" aria-label="キーワードやクリエイターで検索"></div></div></div></form></header>';
+function searchClearFixture(html=searchHeaderHtml){
+ const f=uiFixture(html);
+ f.win.HTMLInputElement=class {set value(value){this._nativeValue=value;}};
+ f.win.Event=class {constructor(type,options){this.type=type;Object.assign(this,options);}};
+ for(const input of f.doc.querySelectorAll('input')){
+  input._nativeValue='';input.trackedWrites=0;
+  Object.defineProperty(input,'value',{get(){return this._nativeValue;},set(value){this.trackedWrites++;this._nativeValue=value;}});
+ }
+ return f;
+}
+
+test('ヘッダーの検索クリアは値がある場合だけ表示。標準setterとinput通知で消しフォーカスを戻す',()=>{
+ const f=searchClearFixture(),input=f.doc.querySelector('input'),settings=f.core.readSettings({...groups()});
+ f.ui.update(settings,'https://note.com/search?q=AI');const button=f.doc.querySelector('button'),form=f.doc.querySelector('form');
+ assert.equal(button.hidden,true);assert.equal(form.hasAttribute('data-hikikomori-note-search-clear-layout'),false);
+ input.value='AI';input.fire('input');assert.equal(button.hidden,false);assert.equal(button.type,'button');assert.equal(button.getAttribute('aria-label'),'検索欄をクリア');assert.ok(button.querySelector('svg'));
+ let inputs=0,submits=0;input.addEventListener('input',event=>{inputs++;assert.equal(event.bubbles,true);});form.addEventListener('submit',()=>{submits++;});
+ const writes=input.trackedWrites;const event=button.fire('click');
+ assert.equal(input.value,'');assert.equal(input.trackedWrites,writes);assert.equal(inputs,1);assert.equal(submits,0);assert.equal(event.defaultPrevented,true);assert.equal(f.doc.activeElement,input);assert.equal(button.hidden,true);
+});
+
+test('ヘッダー検索クリアは重度でも利用可能、IME中は無効、OFF・停止で公式フォームへ復元',()=>{
+ const f=searchClearFixture(),input=f.doc.querySelector('input'),settings=f.core.readSettings({...groups(),legacyMode:true});input.value='日本語';
+ f.ui.update(settings,'https://note.com/ruminar');const button=f.doc.querySelector('button');input.fire('compositionstart');assert.equal(button.disabled,true);
+ button.fire('click');assert.equal(input.value,'日本語');input.fire('compositionend');assert.equal(button.disabled,false);
+ f.ui.update({...settings,enabled:false},'https://note.com/ruminar');assert.equal(button.isConnected,false);assert.equal(input.value,'日本語');assert.equal(input.listeners.input.length,0);assert.equal(f.doc.querySelector('form').hasAttribute('data-hikikomori-note-search-clear-layout'),false);
+ f.ui.update(settings,'https://note.com/ruminar');assert.ok(f.doc.querySelector('button'));f.ui.stop();assert.equal(f.doc.querySelector('button'),null);
+});
+
+test('本文検索・未確認のヘッダー構造・外部送信フォームにはクリアボタンを追加しない',()=>{
+ for(const html of [searchHeaderHtml.replace('<header data-header-state="navbar">','<main>').replace('</header>','</main>'),searchHeaderHtml.replace('action="/search"','action="https://other.test/search"'),searchHeaderHtml.replace('data-name="TextFieldBase"','data-name="unknown"'),searchHeaderHtml.replace('type="search"','type="password"')]){
+  const f=searchClearFixture(html);f.ui.update(f.core.readSettings({...groups()}),'https://note.com/search');assert.equal(f.doc.querySelector('button'),null);
+ }
+});
+
+test('検索欄の後挿入・差し替え・値のプログラム変更に対応し、重複ボタンや古いイベントを残さない',()=>{
+ const f=searchClearFixture(),input=f.doc.querySelector('input'),settings=f.core.readSettings({...groups()});
+ f.ui.update(settings,'https://note.com/search');input.value='AI';f.ui.update(settings,'https://note.com/search');assert.equal(f.doc.querySelector('button').hidden,false);
+ f.ui.update(settings,'https://note.com/search');assert.equal(f.doc.querySelectorAll('button').length,1);
+ const replacement=f.doc.createElement('input');for(const name of ['type','name','aria-label'])replacement.setAttribute(name,input.getAttribute(name));replacement.value='ComfyUI';const parent=input.parentElement;input.remove();parent.append(replacement);
+ f.ui.update(settings,'https://note.com/search');assert.equal(f.doc.querySelectorAll('button').length,1);assert.equal(input.listeners.input.length,0);assert.equal(f.doc.querySelector('button').hidden,false);
+});
+
 test('新規保存領域は空の4グループで開始し、読込では書かず最初の設定保存で現行形式を保存',async()=>{
  const context=vm.createContext({URL,console});for(const file of ['src/common.js','src/routing.js'])vm.runInContext(source(file),context);
  let stored,writes=0;const controller=context.HikikomoriNoteRouting.createController({load:async()=>stored,store:async value=>{stored=plain(value);writes++;},setRules:async()=>{}});

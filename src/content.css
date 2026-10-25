@@ -6,6 +6,18 @@ a[data-hikikomori-note-dashboard-hidden] {
 [data-hikikomori-note-product-hidden] { display: none !important; }
 [data-hikikomori-note-recommendations-hidden] { display: none !important; }
 [data-hikikomori-note-paid-hidden] { display: none !important; }
+form[data-hikikomori-note-search-clear-layout] { display: flex; align-items: center; gap: 8px; }
+form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; min-width: 0; }
+.hikikomori-note-search-clear {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px;
+  width: 32px; height: 32px; padding: 4px; border: 0; border-radius: 6px;
+  color: var(--color-text-secondary, inherit); background: transparent; cursor: pointer;
+}
+.hikikomori-note-search-clear[hidden] { display: none !important; }
+.hikikomori-note-search-clear:hover { background: rgba(128,128,128,.12); }
+.hikikomori-note-search-clear:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.hikikomori-note-search-clear:disabled { opacity: .5; cursor: default; }
+.hikikomori-note-search-clear svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; pointer-events: none; }
 .hikikomori-note-article-following, .hikikomori-note-article-author {
   position: fixed; top: 72px; left: 12px; z-index: 100;
   box-sizing: border-box; width: 200px; min-height: 36px; padding: 8px 12px;

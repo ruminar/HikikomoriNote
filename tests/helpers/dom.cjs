@@ -22,12 +22,13 @@ class Element {
   closest(selector){return this.matches(selector)?this:this.parentElement?.closest(selector)??null;}
   addEventListener(type,listener){(this.listeners[type]??=[]).push(listener);}
   removeEventListener(type,listener){this.listeners[type]=(this.listeners[type]??[]).filter(fn=>fn!==listener);}
+  dispatchEvent(event){this.fire(event.type,event);return !event.defaultPrevented;}
   fire(type,event={}){event.target??=this;event.preventDefault??=()=>{event.defaultPrevented=true;};event.stopPropagation??=()=>{};for(const fn of this.listeners[type]??[])fn(event);this[`on${type}`]?.(event);return event;}
   focus(){this.ownerDocument.activeElement=this;this.focused=true;}
   getBoundingClientRect(){return {width:this.width,x:0,top:0,height:40};}
 }
 function documentFromHtml(html="") {
- const doc={nodes:new Map(),activeElement:null,createElement(tag){return new Element(tag,this);},getElementById(id){return this.nodes.get(id);},querySelectorAll(selector){return this.root.querySelectorAll(selector);},querySelector(selector){return this.root.querySelector(selector);}};
+ const doc={nodes:new Map(),activeElement:null,createElement(tag){return new Element(tag,this);},createElementNS(namespace,tag){return this.createElement(tag);},getElementById(id){return this.nodes.get(id);},querySelectorAll(selector){return this.root.querySelectorAll(selector);},querySelector(selector){return this.root.querySelector(selector);}};
  doc.root=doc.createElement("document");const stack=[doc.root];
  for(const match of html.matchAll(/<\/?([\w-]+)\b([^>]*)>/g)){
   if(match[0].startsWith("</")){if(stack.length>1)stack.pop();continue;}

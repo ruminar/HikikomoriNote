@@ -50,6 +50,74 @@
     const originals = new Set();
     const products = new Set();
     const recommendations = new Set();
+    const searchClearControls = new Map();
+    const clearLayout = "data-hikikomori-note-search-clear-layout";
+    function searchForm(input) {
+      const form = input.closest("form"), field = input.closest('[data-name="Field"]');
+      if (!input.isConnected || input.disabled || input.readOnly ||
+          !input.closest('header[data-header-state="navbar"]') ||
+          input.getAttribute("type") !== "search" || input.getAttribute("name") !== "q" ||
+          input.getAttribute("aria-label") !== "キーワードやクリエイターで検索" ||
+          input.parentElement?.getAttribute("data-name") !== "TextFieldBase" ||
+          !form || form.getAttribute("role") !== "search" || field?.parentElement !== form) return null;
+      try {
+        const action = new URL(form.getAttribute("action"), "https://note.com");
+        return action.origin === "https://note.com" && action.pathname === "/search" ? form : null;
+      } catch { return null; }
+    }
+    function removeSearchClear(input, control) {
+      control.button.remove(); control.form.removeAttribute(clearLayout);
+      input.removeEventListener("input", control.refresh);
+      input.removeEventListener("compositionstart", control.startComposition);
+      input.removeEventListener("compositionend", control.endComposition);
+      searchClearControls.delete(input);
+    }
+    function syncSearchClear(active) {
+      for (const [input, control] of searchClearControls) {
+        if (!active || searchForm(input) !== control.form || !control.button.isConnected) removeSearchClear(input, control);
+      }
+      if (!active) return;
+      for (const input of doc.querySelectorAll('input[name="q"]')) {
+        const form = searchForm(input);
+        if (!form) continue;
+        if (!searchClearControls.has(input)) {
+          const button = doc.createElement("button"); button.type = "button";
+          button.className = "hikikomori-note-search-clear"; button.setAttribute(owned, "");
+          button.setAttribute("aria-label", "検索欄をクリア"); button.setAttribute("title", "検索欄をクリア");
+          const icon = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+          icon.setAttribute("viewBox", "0 0 24 24"); icon.setAttribute("aria-hidden", "true"); icon.setAttribute("focusable", "false");
+          const path = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", "M6 6l12 12M18 6L6 18"); icon.append(path); button.append(icon);
+          let composing = false;
+          const refresh = () => {
+            const empty = input.value.length === 0;
+            if (button.hidden !== empty) button.hidden = empty;
+            button.disabled = composing;
+            if (!empty && !form.hasAttribute(clearLayout)) form.setAttribute(clearLayout, "");
+            if (empty && form.hasAttribute(clearLayout)) form.removeAttribute(clearLayout);
+          };
+          const startComposition = () => { composing = true; refresh(); };
+          const endComposition = () => { composing = false; refresh(); };
+          button.onclick = event => {
+            event.preventDefault(); event.stopPropagation();
+            if (disposed || !currentSettings?.enabled || composing || searchForm(input) !== form) return;
+            try {
+              // React等が持つ入力追跡にも変更を伝える。ページ側の内部状態には触れない。
+              const setter = Object.getOwnPropertyDescriptor(win.HTMLInputElement.prototype, "value")?.set;
+              if (!setter) return;
+              setter.call(input, "");
+              input.dispatchEvent(new win.Event("input", { bubbles: true, composed: true }));
+              if (input.isConnected) input.focus();
+            } finally { refresh(); }
+          };
+          input.addEventListener("input", refresh);
+          input.addEventListener("compositionstart", startComposition);
+          input.addEventListener("compositionend", endComposition);
+          form.append(button); searchClearControls.set(input, { form, button, refresh, startComposition, endComposition });
+        }
+        searchClearControls.get(input).refresh();
+      }
+    }
     const paidCards = new Map();
     const paidHidden = "data-hikikomori-note-paid-hidden";
     let paidDirty = true, paidSignature;
@@ -230,6 +298,7 @@
       if (disposed) return;
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
       currentSettings = settings; currentUrl = url;
+      syncSearchClear(settings.enabled);
       const page = core.pageKind(url);
       syncArticleFollowing(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
@@ -312,7 +381,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, invalidatePaidCards() { paidDirty = true; }, stop() { disposed = true; articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
+    return Object.freeze({ update, invalidatePaidCards() { paidDirty = true; }, stop() { disposed = true; syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();
