@@ -33,15 +33,8 @@
     function storedValue(raw, settings) {
       const { tagWarning, groupSelectionInvalid, ...clean } = settings;
       // タグ関連の保存値は通常設定保存では一切正規化・上書きしない。
-      for (const key of ["favoriteTags", "tagSchemaVersion", "tagGroups", "selectedTagGroupId", "groupSelectionRevision", "tagGroupsRevision"]) delete clean[key];
-      return { ...(raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}), ...clean };
-    }
-    async function migrate(raw) {
-      const settings = core.readSettings(raw);
-      if (settings.tagSchemaVersion !== undefined || settings.tagWarning) return raw;
-      const next = { ...(raw ?? {}), tagSchemaVersion: 2, tagGroups: settings.tagGroups,
-        selectedTagGroupId: "group1", groupSelectionRevision: 0, tagGroupsRevision: 0 };
-      await port.store(next); return next;
+      for (const key of ["tagSchemaVersion", "tagGroups", "selectedTagGroupId", "groupSelectionRevision", "tagGroupsRevision"]) delete clean[key];
+      return { ...(raw === undefined ? core.defaultSettings() : raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}), ...clean };
     }
     function increment(value) {
       if (!Number.isSafeInteger(value) || value >= Number.MAX_SAFE_INTEGER) throw failure("更新番号が不正か上限です。編集を停止しました。", "INVALID_TAGS");
@@ -49,10 +42,7 @@
     }
     return Object.freeze({
       getState: () => run(async () => {
-        let raw = await port.load(), migrationError;
-        try { raw = await migrate(raw); } catch { migrationError = "グループへの移行を保存できません。状態を再確認してください。"; }
-        const settings = core.readSettings(raw);
-        if (migrationError) settings.tagWarning = migrationError;
+        const settings = core.readSettings(await port.load());
         await port.setRules(rules(settings.enabled, settings.dashboardDisabled));
         return settings;
       }),
@@ -89,7 +79,7 @@
             !core.groupIds.includes(operation.groupId)) throw new Error("グループを指定して画面を再読み込みしてください。");
         if (["ADD_TAG", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG"].includes(operation.type)) core.normalizeTag(operation.tag);
         if (operation.type === "RENAME_TAG_GROUP") core.normalizeGroupName(operation.name);
-        const raw = await migrate(await port.load());
+        const loaded = await port.load(), raw = loaded === undefined ? core.defaultSettings() : loaded;
         const settings = core.readSettings(raw);
         if (options.requireEnabled && !settings.enabled) throw failure("拡張OFFではタグを追加できません。", "DISABLED");
         if (settings.legacyMode) throw failure("重度引きこもりモードではタグを編集できません。状態を再確認してください。", "LEGACY_MODE");

@@ -6,6 +6,7 @@ const vm = require("node:vm");
 const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const source = file => fs.readFileSync(path.join(root, file), "utf8");
+const settingsData = require("./helpers/settings.cjs");
 const plain = value => JSON.parse(JSON.stringify(value));
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function context(extra = {}) {
@@ -15,7 +16,7 @@ function context(extra = {}) {
 }
 function controllerFixture(stored, options = {}) {
   const c = context();
-  let value = stored, activeRules = [], updates = 0;
+  let value = stored === undefined ? undefined : {...settingsData(),...stored}, activeRules = [], updates = 0;
   const history = [];
   const controller = c.HikikomoriNoteRouting.createController({
     async load() { return value; },
@@ -56,7 +57,7 @@ test("ダッシュボード判定は本体・配下・query/hashを対象とし�
     assert.equal(core.shouldRedirect(url, { enabled: false, dashboardDisabled: true }), false);
   }
   for (const url of ["", undefined, "https://note.com/dashboard-old", "https://note.com/dashboardish/", "https://note.com/settings/account", "https://note.com/api/dashboard", "https://other.test/dashboard", "https://note.com.evil.test/dashboard", "http://note.com/dashboard"]) assert.equal(core.isDashboard(url), false);
-  for (const old of [undefined, {}, { noteUserId: "ruminar" }, { dashboardDisabled: "true" }]) assert.equal(core.readSettings(old).dashboardDisabled, false);
+  assert.equal(core.readSettings().dashboardDisabled, false);
 });
 test("ダッシュボード無効化のDNRは本体と全配下のみを転送・遮断し、OFFでは全ルール解除", () => {
   const routing = context().HikikomoriNoteRouting;
@@ -76,7 +77,7 @@ test("ダッシュボード設定を保存・復元し、全体OFF/ONと別タ�
   const f = controllerFixture({ enabled: true, noteUserId: "ruminar" });
   await f.controller.save({ dashboardDisabled: true }); assert.equal(f.rules.length, 4);
   await Promise.all([f.controller.save({ noteUserId: "other_user" }), f.controller.save({ enabled: false })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false, ...settingsData.groups() });
   assert.equal(f.rules.length, 0);
   const restart = controllerFixture(f.value); await restart.controller.getState(); assert.equal(restart.rules.length, 0);
   await restart.controller.save({ enabled: true }); assert.equal(restart.rules.length, 4);
@@ -98,9 +99,9 @@ test("DNR：ホームの文書だけ専用ページへ転送、事前取得も�
   for (const url of ["https://note.com/ruminar", "https://note.com/login", "https://note.com/api/v2/contents", "https://note.com/notes/new", "https://note.com/purchase", "https://note.com.evil.test/", "http://note.com/"]) assert.equal(regex.test(url), false);
   assert.deepEqual(plain(context().HikikomoriNoteRouting.rules(false)), []);
 });
-test("既存のユーザー名・OFFを引き継ぎ、再起動後もOFFルールを適用", async () => {
+test("保存したユーザー名・OFFを再起動後も適用", async () => {
   const f = controllerFixture({ enabled: false, noteUserId: "ruminar" });
-  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false, favoriteTags: [], tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0 });
+  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false, tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0 });
   assert.deepEqual(f.rules, []);
   await f.controller.save({ enabled: true });
   const restart = controllerFixture(f.value); await restart.controller.getState();
@@ -115,7 +116,7 @@ test("OFFはルール解除・保存の順に完了してから成功を返す",
 test("複数タブから同時保存してもON/OFFとユーザー名を上書きし合わない", async () => {
   const f = controllerFixture();
   await Promise.all([f.controller.save({ enabled: false }), f.controller.save({ noteUserId: "ruminar" })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, confirmNoteLogoClick: false, ...settingsData.groups() });
   assert.deepEqual(f.rules, []);
 });
 test("転送更新失敗時は設定を保存せず、次の操作は再試行できる", async () => {
@@ -178,7 +179,7 @@ function contentFixture(stored, options = {}) {
     HikikomoriNotePlatform: {
       isAvailable: () => !options.invalid,
       homeUrl: () => home,
-      load: async () => { if (options.loadError) throw new Error("read failed"); return stored; },
+      load: async () => { if (options.loadError) throw new Error("read failed"); return {...settingsData(),...stored}; },
       subscribe(fn) { subscriber = fn; return () => { subscriber = undefined; }; }
     }
   });
@@ -292,7 +293,7 @@ test("ダッシュボード導線は後から出るメニューも隠し、設�
   dashboard.href = "https://note.com/settings/account"; f.mutate(); await flush(); assert.equal(dashboard.hasAttribute(marker), false);
   submenu.href = ""; f.mutate(); await flush(); assert.equal(submenu.hasAttribute(marker), false);
   submenu.href = "https://note.com/dashboard/suggestions"; f.mutate(); await flush(); assert.equal(submenu.hasAttribute(marker), true);
-  f.changed({ enabled: true, dashboardDisabled: false, legacyMode: false, favoriteTags: [] }); assert.equal(submenu.hasAttribute(marker), false);
+  f.changed({ enabled: true, dashboardDisabled: false, legacyMode: false }); assert.equal(submenu.hasAttribute(marker), false);
   assert.equal(f.click(submenu.href).defaultPrevented, false);
   f.changed({ enabled: true, dashboardDisabled: true }); assert.equal(submenu.hasAttribute(marker), true);
   f.changed({ enabled: false, dashboardDisabled: true }); assert.equal(submenu.hasAttribute(marker), false);
