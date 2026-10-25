@@ -57,7 +57,7 @@
         if (current.origin !== "https://note.com" || new URL(pageUrl).href !== current.href) return null;
         if (tab.pendingUrl && new URL(tab.pendingUrl).href !== current.href) return null;
         const page = globalThis.HikikomoriNote.pageKind(current.href);
-        return ["following", "tag", "search"].includes(page?.type) ? page : null;
+        return ["following", "tag", "search", "topic"].includes(page?.type) ? page : null;
       } catch { return null; }
     },
     isHomeSender: sender => sender?.id === api.runtime.id &&

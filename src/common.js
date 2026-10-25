@@ -125,6 +125,7 @@
       if (parsed.origin !== "https://note.com") return null;
       if (/^\/following\/?$/.test(parsed.pathname)) return { type: "following" };
       if (/^\/search\/?$/.test(parsed.pathname)) return { type: "search" };
+      if (/^\/topic\/[^/]+(?:\/[^/]+)*\/?$/.test(parsed.pathname)) return { type: "topic" };
       const match = /^\/(?:tag|hashtag)\/([^/]+)\/?$/.exec(parsed.pathname);
       if (match) return { type: "tag", tag: decodeURIComponent(match[1]) };
       const profile = /^\/([a-zA-Z0-9_]+)(?:\/(?:all|magazines|membership|likes|archives|followings|followers)(?:\/[^/]+)*)?\/?$/.exec(parsed.pathname);

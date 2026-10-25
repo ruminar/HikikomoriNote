@@ -147,6 +147,32 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,actions)};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
+test('トピック配下だけを共通メニュー対象とし、topic直下・類似パス・外部を除外',()=>{
+ const {core}=fixture();
+ for(const url of ['https://note.com/topic/education_learning','https://note.com/topic/education_learning/?mode=new#main','https://note.com/topic/education_learning/sub'])assert.equal(core.pageKind(url).type,'topic');
+ for(const url of ['https://note.com/topic','https://note.com/topic/','https://note.com/topics/education_learning','https://other.test/topic/education_learning'])assert.equal(core.pageKind(url),null);
+});
+
+test('トピックの既存asideにTLとグループ・タグを表示し、OFF・重度・対象外遷移で公式表示へ戻す',()=>{
+ const f=uiFixture(sidebarHtml,{async selectGroup(){}}),settings=f.core.readSettings({...groups(['ComfyUI'])}),url='https://note.com/topic/education_learning';
+ const aside=f.doc.querySelector('aside'),original=aside.children[0],article=f.doc.querySelector('article');
+ f.ui.update(settings,url);const menu=aside.children[0];assert.equal(menu.querySelector('a').textContent,'フォロー中のTL');assert.equal(menu.querySelectorAll('button').length,4);
+ assert.equal(menu.querySelector('ul').querySelector('a').href,f.core.tagUrl('ComfyUI'));assert.equal(menu.querySelector('[data-tag-add]'),null);assert.equal(article.isConnected,true);
+ for(const [state,target] of [[{...settings,enabled:false},url],[{...settings,legacyMode:true},url],[settings,'https://note.com/topic']]){
+  f.ui.update(state,target);assert.equal(aside.children.length,1);assert.equal(aside.children[0],original);assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),false);
+  f.ui.update(settings,url);
+ }
+});
+
+test('トピックからの背景操作はグループ選択だけ許可し、タグ追加は応答付きで拒否',async()=>{
+ const f=fixture();let handler,answer;
+ const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:()=>false,isNoteSender:()=>true,currentMenuPage:async()=>({type:'topic'})};
+ const context=vm.createContext({console,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>f.controller}});
+ vm.runInContext(source('src/background.js'),context);await flush();
+ handler({type:'select-tag-group',patch:{groupId:'group2'}},{},value=>{answer=value;});await flush();assert.equal(answer.ok,true);assert.equal(f.stored.selectedTagGroupId,'group2');
+ const writes=f.writes;handler({type:'add-current-tag',patch:{groupId:'group2',selectionRevision:1}},{},value=>{answer=value;});await flush();assert.equal(answer.code,'CONFLICT');assert.equal(f.writes,writes);
+});
+
 const searchHeaderHtml='<header data-header-state="navbar"><form role="search" action="/search"><div data-name="Field"><div><div data-name="TextFieldBase"><input type="search" name="q" aria-label="キーワードやクリエイターで検索"></div></div></div></form></header>';
 function searchClearFixture(html=searchHeaderHtml){
  const f=uiFixture(html);
@@ -606,7 +632,7 @@ test('noteのグループ選択は現在の共通メニュー対象URLとトッ�
  const context=vm.createContext({URL,chrome:{runtime:{id:'self',getURL:file=>'chrome-extension://self/'+file},tabs:{get:async()=>tab}}});
  vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/platform/browser-api.js'),context);
  const check=context.HikikomoriNoteBackgroundPlatform.currentMenuPage,sender={id:'self',frameId:0,tab:{id:1},url:'https://note.com/ruminar'};
- for(const url of ['https://note.com/following','https://note.com/tag/AI','https://note.com/search?q=AI']){tab={url};assert.ok(await check(sender,url));}
+ for(const url of ['https://note.com/following','https://note.com/tag/AI','https://note.com/search?q=AI','https://note.com/topic/education_learning']){tab={url};assert.ok(await check(sender,url));}
  for(const url of ['https://note.com/ruminar','https://note.com/ruminar/n/n123','https://other.test/search']){tab={url};assert.equal(await check(sender,url),null);}
  tab={url:'https://note.com/search'};
  for(const patch of [{id:'other'},{frameId:1}])assert.equal(await check({...sender,...patch},tab.url),null);

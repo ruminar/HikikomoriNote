@@ -100,3 +100,7 @@ kakiponの実タブリンクで `/all`、`/magazines`、`/likes`、`/archives` �
 ## 0.2.1 ヘッダー検索クリア（2026-10-25）
 
 未ログインのnote.com/searchでread-only DOM参照により確認。header[data-header-state="navbar"]内のform[role="search"][action="/search"]に、data-name="Field"→ラッパー→data-name="TextFieldBase"→input[type="search"][name="q"]があり、入力のaria-labelは「キーワードやクリエイターで検索」。本文側にはtype=textの別検索欄があるため対象外。ヘッダーの検索フォーム末尾にtype=buttonを追加し、独自属性のあるフォームだけ横並びにする。実拡張での消去後の公式再検索・ログイン後・狭い幅での表示確認は別途必要。
+
+## 0.2.1 トピック配下（2026-10-25）
+
+note.com/topic/education_learningでread-only DOM参照により、asideにsticky・w-[11.375rem]があり、内側にnav[aria-label="急上昇"]があることを確認（表示幅182px）。既存の共通左メニューの境界をそのまま使用する。/topicと/topic/自体は対象外。トピックから許可する背景操作はグループ選択だけで、タグ追加は許可しない。実拡張での表示確認は別途必要。
