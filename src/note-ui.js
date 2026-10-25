@@ -10,6 +10,7 @@
   function create(doc, win, actions = {}) {
     let host, menu, signature;
     let articleFollowing;
+    let articleAuthor, authorSignature;
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
     function repaint() { if (!disposed && currentSettings) update(currentSettings, currentUrl); }
     async function addTag(tag) {
@@ -32,12 +33,52 @@
     const originals = new Set();
     const products = new Set();
     const recommendations = new Set();
+    function clearArticleAuthor() {
+      articleAuthor?.remove(); articleAuthor = undefined; authorSignature = undefined;
+    }
+    function syncArticleAuthor(article, url) {
+      const profileUrl = core.profileUrl(new URL(url).pathname.split("/")[1]);
+      let author;
+      for (const time of article.querySelectorAll("time")) {
+        if (time.closest('[id="note-body"]')) continue;
+        let region = time.parentElement;
+        for (let depth = 0; region && region !== article && depth < 4; depth++, region = region.parentElement) {
+          if (region.querySelector('[id="note-body"]')) break;
+          const avatar = region.querySelector('[data-name="avatar"]');
+          const name = [...region.querySelectorAll("a[href]")].find(a => a.href === profileUrl && a.textContent.trim());
+          if (!avatar || avatar.closest("a")?.href !== profileUrl || !name) continue;
+          let image = "";
+          try {
+            const source = new URL(avatar.querySelector("img")?.getAttribute("src"));
+            if (source.protocol === "https:" && source.hostname === "assets.st-note.com") image = source.href;
+          } catch { /* 画像が不明な場合は名前だけ表示する */ }
+          author = { name: name.textContent.trim(), image }; break;
+        }
+        if (author) break;
+      }
+      if (!author) { clearArticleAuthor(); return; }
+      const nextSignature = JSON.stringify([profileUrl, author]);
+      if (authorSignature === nextSignature && articleAuthor?.isConnected) return;
+      clearArticleAuthor();
+      articleAuthor = doc.createElement("a"); articleAuthor.setAttribute(owned, "");
+      articleAuthor.className = "hikikomori-note-article-author";
+      articleAuthor.href = profileUrl;
+      articleAuthor.setAttribute("title", author.name);
+      articleAuthor.setAttribute("aria-label", `${author.name}のクリエーターページ`);
+      if (author.image) {
+        const image = doc.createElement("img"); image.setAttribute("src", author.image);
+        image.setAttribute("alt", ""); image.setAttribute("width", "32"); image.setAttribute("height", "32");
+        articleAuthor.append(image);
+      }
+      const name = doc.createElement("span"); name.textContent = author.name; articleAuthor.append(name);
+      doc.body.append(articleAuthor); authorSignature = nextSignature;
+    }
     function syncArticleFollowing(settings, url) {
       const article = doc.querySelector('article[id="note-article"]');
       const show = settings.enabled && !settings.legacyMode && core.isArticle(url) &&
         win.matchMedia("(min-width: 1100px)").matches && article && visible(article) &&
         article.getBoundingClientRect().left >= 228 && doc.body;
-      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; return; }
+      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); return; }
       if (!articleFollowing?.isConnected) {
         articleFollowing = doc.createElement("a");
         articleFollowing.setAttribute(owned, "");
@@ -46,6 +87,7 @@
         articleFollowing.textContent = "フォロー中のTL";
         doc.body.append(articleFollowing);
       }
+      syncArticleAuthor(article, url);
     }
     function isRecommendations(element) {
       if (element.tagName !== "DIV" || !element.classList.contains("pt-6") ||
@@ -182,7 +224,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, stop() { disposed = true; articleFollowing?.remove(); articleFollowing = undefined; restore(); syncProducts(false); syncRecommendations(false); } });
+    return Object.freeze({ update, stop() { disposed = true; articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create });
 })();

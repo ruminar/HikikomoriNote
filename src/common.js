@@ -63,7 +63,18 @@
     }
     return { tags, warning: invalid ? "タグの保存データに異常があります。正常な項目だけ表示しています。タグ編集を停止しました。元のデータを保存してから、開発者へ修復をご相談ください。" : "" };
   }
-  function tagUrl(tag) { return `https://note.com/tag/${encodeURIComponent(normalizeTag(tag))}?mode=new`; }
+  function tagUrl(tag) { return `https://note.com/search?q=${encodeURIComponent(`#${normalizeTag(tag)}`)}&context=note&mode=search&sort=new`; }
+  function articleSearchTabUrl(currentUrl, targetUrl) {
+    try {
+      const current = new URL(currentUrl), target = new URL(targetUrl, current);
+      if (pageKind(current.href)?.type !== "search" || pageKind(target.href)?.type !== "search" ||
+          !["user", "magazine", "circle"].includes(current.searchParams.get("context")) ||
+          target.searchParams.get("context") !== "note" ||
+          target.searchParams.get("q") !== current.searchParams.get("q")) return null;
+      target.searchParams.set("mode", "search"); target.searchParams.set("sort", "new");
+      return target.href;
+    } catch { return null; }
+  }
   function isArticle(url) {
     try {
       const parsed = new URL(url);
@@ -89,5 +100,5 @@
     return normalized ? `https://note.com/${encodeURIComponent(normalized)}` : null;
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
-    normalizeTag, inspectTags, tagUrl, pageKind, isArticle });
+    normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle });
 })();

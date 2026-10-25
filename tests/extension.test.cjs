@@ -199,6 +199,35 @@ test("noteロゴの通常クリックはSPA処理の前に専用ホームへ直�
   assert.equal(event.defaultPrevented, true); assert.equal(event.stopped, true);
   assert.deepEqual(f.moves, [["assign", f.home]]);
 });
+
+test("検索の他対象タブから記事へ戻るURLだけ新着にし、検索語と追加条件を維持", () => {
+  const core = context().HikikomoriNote;
+  for (const type of ["user", "magazine", "circle"]) {
+    const next = new URL(core.articleSearchTabUrl(`https://note.com/search?q=%23AI&context=${type}`, "/search?context=note&q=%23AI&extra=yes"));
+    assert.equal(next.searchParams.get("q"), "#AI"); assert.equal(next.searchParams.get("sort"), "new");
+    assert.equal(next.searchParams.get("mode"), "search"); assert.equal(next.searchParams.get("extra"), "yes");
+  }
+  for (const [current, target] of [
+    ["https://note.com/search?q=AI&context=note", "https://note.com/search?q=AI&context=note&sort=popular"],
+    ["https://note.com/search?q=AI&context=user", "https://note.com/search?q=other&context=note"],
+    ["https://note.com/search?q=AI&context=user", "https://other.test/search?q=AI&context=note"],
+    ["https://note.com/ruminar", "https://note.com/search?q=AI&context=note"],
+    ["invalid", "invalid"]
+  ]) assert.equal(core.articleSearchTabUrl(current, target), null);
+});
+
+test("後から出る記事タブの通常クリックを新着へ。並び順・修飾クリック・OFF・重度は維持", async () => {
+  const f = contentFixture({}, { url: "https://note.com/search?q=%23AI&context=user" }); await flush();
+  const anchor = { tagName: "A", href: "https://note.com/search?q=%23AI&context=note", textContent: "記事", hasAttribute: () => false, getAttribute: key => key === "data-id" ? "NavigationItem" : null };
+  const click = (changes = {}, link = anchor) => f.click(undefined, { composedPath: () => [{ tagName: "SPAN" }, link], ...changes });
+  assert.equal(click().stopped, true); assert.equal(new URL(f.moves[0][1]).searchParams.get("sort"), "new");
+  for (const changes of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) assert.equal(click(changes).defaultPrevented, false);
+  for (const patch of [{ target: "_blank" }, { textContent: "人気" }, { getAttribute: () => null }, { hasAttribute: () => true }]) assert.equal(click({}, { ...anchor, ...patch }).defaultPrevented, false);
+  f.location.href = "https://note.com/search?q=%23AI&context=note&sort=new";assert.equal(click().defaultPrevented, false);
+  f.location.href = "https://note.com/search?q=%23AI&context=user";
+  for (const settings of [{ enabled: false }, { enabled: true, legacyMode: true }]) { f.changed(settings); assert.equal(click().defaultPrevented, false); }
+  assert.equal(f.moves.length, 1);
+});
 test("OFF・記事リンク・修飾クリック・別タブ・ダウンロードには介入しない", async () => {
   const f = contentFixture(); await flush();
   assert.equal(f.click("https://note.com/ruminar/n/abc").defaultPrevented, false);

@@ -81,8 +81,14 @@
     if (!enabled() || event.defaultPrevented || event.button !== 0 ||
         event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const anchor = event.composedPath().find(node => node?.tagName === "A");
-    if (!anchor || anchor.hasAttribute("download") ||
-        (anchor.target && anchor.target !== "_self") || !core.shouldRedirect(anchor.href, settings)) return;
+    if (!anchor || anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) return;
+    // クリック時の委譲処理なので、SPAで後から追加された公式タブにも対応する。
+    const articleTabUrl = !settings.legacyMode && anchor.getAttribute?.("data-id") === "NavigationItem" &&
+      anchor.textContent?.trim() === "記事" ? core.articleSearchTabUrl(location.href, anchor.href) : null;
+    if (articleTabUrl) {
+      event.preventDefault(); event.stopImmediatePropagation(); location.assign(articleTabUrl); return;
+    }
+    if (!core.shouldRedirect(anchor.href, settings)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     location.assign(platform.homeUrl());

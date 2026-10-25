@@ -5,7 +5,7 @@ a[data-hikikomori-note-dashboard-hidden] {
 [data-hikikomori-note-menu-hidden] { display: none !important; }
 [data-hikikomori-note-product-hidden] { display: none !important; }
 [data-hikikomori-note-recommendations-hidden] { display: none !important; }
-.hikikomori-note-article-following {
+.hikikomori-note-article-following, .hikikomori-note-article-author {
   position: fixed; top: 72px; left: 12px; z-index: 100;
   box-sizing: border-box; width: 200px; min-height: 36px; padding: 8px 12px;
   border: 1px solid rgba(128,128,128,.35); border-radius: 8px;
@@ -13,9 +13,12 @@ a[data-hikikomori-note-dashboard-hidden] {
   font: inherit; font-size: 14px; line-height: 1.5; text-align: center;
   text-decoration: none; white-space: nowrap;
 }
-.hikikomori-note-article-following:hover { background: rgba(128,128,128,.12); }
-.hikikomori-note-article-following:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
-@media (max-width: 1099px) { .hikikomori-note-article-following { display: none; } }
+.hikikomori-note-article-following:hover, .hikikomori-note-article-author:hover { background: rgba(128,128,128,.12); }
+.hikikomori-note-article-following:focus-visible, .hikikomori-note-article-author:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.hikikomori-note-article-author { top: 120px; display: flex; align-items: center; gap: 8px; text-align: left; }
+.hikikomori-note-article-author img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.hikikomori-note-article-author span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1099px) { .hikikomori-note-article-following, .hikikomori-note-article-author { display: none; } }
 .hikikomori-note-navigation { margin: 0 0 16px; color: inherit; font: inherit; overflow-wrap: anywhere; }
 .hikikomori-note-navigation ul { list-style: none; padding: 0; margin: 0; }
 .hikikomori-note-navigation li a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

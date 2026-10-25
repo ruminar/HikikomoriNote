@@ -20,7 +20,8 @@ test('タグ正規化は前後空白と#だけ。大小・全半角・内部空�
  assert.equal(core.normalizeTag('  #ComfyUI  '),'ComfyUI');
  for(const tag of ['comfyui','ComfyUI','ＡＩ','AI','a b','a  b','e\u0301','é'])assert.equal(core.normalizeTag(tag),tag);
  for(const tag of ['', '  ', '#  ', null, 3,'\ud800'])assert.throws(()=>core.normalizeTag(tag));
- assert.equal(core.tagUrl('a/b?# x'),'https://note.com/tag/a%2Fb%3F%23%20x?mode=new');
+ assert.equal(core.tagUrl('a/b?# x'),'https://note.com/search?q=%23a%2Fb%3F%23%20x&context=note&mode=search&sort=new');
+ assert.equal(core.tagUrl('るみなー先生'),'https://note.com/search?q=%23%E3%82%8B%E3%81%BF%E3%81%AA%E3%83%BC%E5%85%88%E7%94%9F&context=note&mode=search&sort=new');
 });
 test('旧設定を移行し、タグ・モードがない場合もユーザー名とOFFを維持',async()=>{
  const f=fixture({enabled:false,noteUserId:'ruminar',dashboardDisabled:true});
@@ -164,6 +165,43 @@ test('記事URLでも本文領域が未挿入・非表示の場合や編集画�
  article.getBoundingClientRect=()=>({left:270,width:620});f.ui.update(settings,'https://note.com/ruminar/n/n123/edit');assert.equal(f.doc.body.children.length,1);
 });
 
+const authorHeaderHtml='<div id="author-header"><a href="https://note.com/ruminar"><span data-name="avatar"><img src="https://assets.st-note.com/profile.jpg"></span></a><div><a id="author-name" href="https://note.com/ruminar"></a><div><time></time></div></div></div>';
+function authorFixture(){
+ const f=uiFixture('<body><article id="note-article">'+authorHeaderHtml+'<div id="note-body"></div></article></body>');
+ f.doc.body=f.doc.querySelector('body');f.doc.getElementById('author-name').textContent='るみなー先生';
+ f.doc.getElementById('note-article').getBoundingClientRect=()=>({left:270,width:620});
+ return f;
+}
+test('記事作者の名前・アイコンをTLの下の独立リンクへ表示し、元の欄を保持。更新・削除・復帰に追随',()=>{
+ const f=authorFixture(),settings=f.core.readSettings({}),url='https://note.com/ruminar/n/n123';
+ const author=()=>f.doc.querySelector('[class="hikikomori-note-article-author"]');
+ f.ui.update(settings,url);const link=author();assert.equal(link.href,'https://note.com/ruminar');assert.equal(link.textContent,'るみなー先生');assert.equal(link.querySelector('img').getAttribute('src'),'https://assets.st-note.com/profile.jpg');assert.equal(link.getAttribute('aria-label'),'るみなー先生のクリエーターページ');
+ assert.equal(f.doc.body.children[1].textContent,'フォロー中のTL');assert.equal(f.doc.body.children[2],link);assert.equal(f.doc.getElementById('author-header').isConnected,true);
+ f.ui.update(settings,url);assert.equal(author(),link);
+ f.doc.getElementById('author-name').textContent='新しい表示名';f.ui.update(settings,url);assert.equal(author().textContent,'新しい表示名');
+ f.doc.getElementById('author-header').remove();f.ui.update(settings,url);assert.equal(author(),null);assert.equal(f.doc.querySelector('[class="hikikomori-note-article-following"]').isConnected,true);
+});
+
+test('作者リンクはURLの作者と一致する記事上部だけ。本文内の同形欄・外部リンクをコピーしない',()=>{
+ const f=authorFixture(),settings=f.core.readSettings({}),url='https://note.com/ruminar/n/n123';
+ const author=()=>f.doc.querySelector('[class="hikikomori-note-article-author"]');
+ const header=f.doc.getElementById('author-header');f.doc.getElementById('note-body').append(header);f.ui.update(settings,url);assert.equal(author(),null);
+ header.remove();f.doc.getElementById('note-article').prepend(header);
+ f.doc.getElementById('author-name').href='https://other.test/ruminar';f.ui.update(settings,url);assert.equal(author(),null);
+ f.doc.getElementById('author-name').href='https://note.com/ruminar';header.querySelector('img').setAttribute('src','https://other.test/image.jpg');f.ui.update(settings,url);assert.equal(author().textContent,'るみなー先生');assert.equal(author().querySelector('img'),null);
+ f.ui.update(settings,'https://note.com/other_user/n/n456');assert.equal(author(),null);
+});
+
+test('作者固定リンクも狭幅・左余白不足・OFF・重度・SPA離脱・停止で除去する',()=>{
+ const f=authorFixture(),settings=f.core.readSettings({}),url='https://note.com/ruminar/n/n123';
+ const author=()=>f.doc.querySelector('[class="hikikomori-note-article-author"]');
+ for(const patch of [{enabled:false},{legacyMode:true}]){f.ui.update(settings,url);assert.ok(author());f.ui.update({...settings,...patch},url);assert.equal(author(),null);}
+ f.ui.update(settings,url);f.win.wide=false;f.ui.update(settings,url);assert.equal(author(),null);f.win.wide=true;
+ f.doc.getElementById('note-article').getBoundingClientRect=()=>({left:200,width:620});f.ui.update(settings,url);assert.equal(author(),null);
+ f.doc.getElementById('note-article').getBoundingClientRect=()=>({left:270,width:620});f.ui.update(settings,url);assert.ok(author());
+ f.ui.update(settings,'https://note.com/search');assert.equal(author(),null);f.ui.update(settings,url);f.ui.stop();assert.equal(author(),null);
+});
+
 test('検索URLは検索語・対象・並び順・末尾スラッシュに関わらず専用種別。別パスと外部は対象外',()=>{
  const {core}=fixture();
  for(const url of ['https://note.com/search','https://note.com/search/?q=きのころ&context=note&mode=search#results','https://note.com/search?context=user&q=AI'])assert.equal(core.pageKind(url).type,'search');
@@ -175,7 +213,7 @@ test('検索の左メニューだけを差し替え、検索フォーム・結�
  const aside=f.doc.querySelector('aside'),original=aside.children[0],form=f.doc.getElementById('search-form'),tabs=f.doc.getElementById('search-tabs'),article=f.doc.querySelector('article');
  for(const url of ['https://note.com/search','https://note.com/search?q=きのころ&context=note&mode=search']){
   f.ui.update(settings,url);assert.equal(aside.children.length,2);assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),true);
-  const links=aside.children[0].querySelectorAll('a');assert.equal(links[0].textContent,'フォロー中のTL');assert.equal(links[1].href,'https://note.com/tag/AI?mode=new');
+  const links=aside.children[0].querySelectorAll('a');assert.equal(links[0].textContent,'フォロー中のTL');assert.equal(links[1].href,'https://note.com/search?q=%23AI&context=note&mode=search&sort=new');
   assert.equal(aside.querySelector('button'),null);assert.equal(form.isConnected,true);assert.equal(tabs.isConnected,true);assert.equal(article.isConnected,true);
   assert.equal(tabs.hasAttribute('data-hikikomori-note-menu-hidden'),false);
   for(const patch of [{enabled:false},{legacyMode:true}]){f.ui.update({...settings,...patch},url);assert.equal(aside.children.length,1);assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),false);}
@@ -340,7 +378,7 @@ test('表示中の日本語タグを左メニューで追加し、二重クリ�
  const button=f.doc.querySelector('button');assert.match(button.getAttribute('aria-label'),/みじんこ123/);assert.equal(button.disabled,false);
  button.onclick();button.onclick();assert.equal(calls,1);assert.equal(f.doc.querySelector('button').disabled,true);
  complete();await flush();assert.equal(f.doc.querySelector('button'),null);
- assert.equal(f.doc.querySelector('[aria-current="page"]').href,'https://note.com/tag/%E3%81%BF%E3%81%98%E3%82%93%E3%81%93123?mode=new');
+ assert.equal(f.doc.querySelector('[aria-current="page"]').href,'https://note.com/search?q=%23%E3%81%BF%E3%81%98%E3%82%93%E3%81%93123&context=note&mode=search&sort=new');
  f.ui.update(f.core.readSettings({}),url);assert.equal(f.doc.querySelector('button').disabled,false);
  for(const target of ['https://note.com/following','https://note.com/ruminar/n/n123']){f.ui.update(settings,target);assert.equal(f.doc.querySelector('button'),null);}
 });
