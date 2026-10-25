@@ -22,7 +22,19 @@
       return result[key];
     },
     homeUrl: () => api.runtime.getURL("home.html"),
-    goBack: () => globalThis.history.back(),
+    goBackUnrestricted: () => globalThis.history.back(),
+    async goBack() {
+      try {
+        const navigation = globalThis.navigation;
+        if (navigation?.canGoBack !== true || typeof navigation.back !== "function") return false;
+        const result = navigation.back();
+        // back()が返す完了結果まで確認し、history.backへの代替は行わない。
+        result.committed?.catch(() => {});
+        if (typeof result.finished?.then !== "function") return false;
+        await result.finished;
+        return true;
+      } catch { return false; }
+    },
     getState: () => request("get-state"),
     save: patch => request("save-settings", patch),
     tag: operation => request("tag-operation", operation),

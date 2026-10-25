@@ -311,11 +311,36 @@ test('ロゴ戻る設定は初期OFF・保存再起動と他タブ同期。失�
  await assert.rejects(saved.controller.save({confirmNoteLogoClick:true}));
 });
 
-test('ブラウザバックのアダプターは履歴を調べずbackを一度呼び、履歴なしでも別URLを開かない',()=>{
- let calls=0;const context=vm.createContext({URL,chrome:{runtime:{id:'self'}},history:{back(){calls++;}}});
- for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),context);
- context.HikikomoriNotePlatform.goBack();assert.equal(calls,1);
+test('専用ホームの戻るボタンは自分のページの上。通常・重度・OFFでも設定保存なしに戻る',async()=>{
+ for(const state of [{},{legacyMode:true},{enabled:false}]){
+  const f=homeFixture({state});await flush();const links=f.nodes.get('page-links');
+  assert.equal(links.hidden,false);assert.equal(links.children[0],f.nodes.get('previous-page'));assert.equal(links.children[1],f.nodes.get('profile'));
+  assert.equal(f.nodes.get('previous-page').getAttribute('type'),'button');f.nodes.get('previous-page').onclick();
+  assert.deepEqual(f.moves,['back']);assert.deepEqual(f.patches,[]);
+ }
 });
+
+test('専用ホーム用の戻るAPIはオリジン判定なしにhistory.backを1回呼ぶ',()=>{
+ let calls=0;const context=vm.createContext({URL,chrome:{runtime:{id:'self'}},history:{back(){calls++;}},navigation:{get canGoBack(){assert.fail('オリジン判定しない');}}});
+ for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),context);
+ context.HikikomoriNotePlatform.goBackUnrestricted();assert.equal(calls,1);
+});
+
+test('Navigation APIで同一オリジンへ戻れる場合だけbackし、完了まで成功扱いにしない',async()=>{
+ let calls=0,finish;const navigation={canGoBack:true,back(){calls++;return {finished:new Promise(resolve=>{finish=resolve;}),committed:Promise.resolve()};}};
+ const context=vm.createContext({URL,chrome:{runtime:{id:'self'}},navigation,history:{back(){assert.fail('history.backは禁止');}}});
+ for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),context);
+ let done=false;const result=context.HikikomoriNotePlatform.goBack().then(value=>{done=true;return value;});assert.equal(calls,1);await flush();assert.equal(done,false);finish();assert.equal(await result,true);
+});
+
+test('Navigation APIなし・外部直前履歴・同期例外・完了失敗はfalse。履歴URLを参照しない',async()=>{
+ for(const navigation of [undefined,{canGoBack:false,back(){assert.fail('外部へ戻さない');}},{canGoBack:true},{get canGoBack(){throw Error('unsupported');}},{canGoBack:true,back(){throw Error('failed');}},{canGoBack:true,back(){return {committed:Promise.reject(Error('failed')),finished:Promise.reject(Error('failed'))};}}]){
+  const context=vm.createContext({URL,chrome:{runtime:{id:'self'}},navigation,history:{back(){assert.fail('history.backは禁止');}}});
+  for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),context);
+  assert.equal(await context.HikikomoriNotePlatform.goBack(),false);
+ }
+});
+
 test('記事作者の名前・アイコンをTLの下の独立リンクへ表示し、元の欄を保持。更新・削除・復帰に追随',()=>{
  const f=authorFixture(),settings=f.core.readSettings({...groups(),}),url='https://note.com/ruminar/n/n123';
  const author=()=>f.doc.querySelector('[class="hikikomori-note-article-author"]');

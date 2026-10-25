@@ -24,9 +24,9 @@ footer { font-size: 13px; color: #59685e; margin-top: 24px; }
 #home-menu button { width: 100%; text-align: left; background: transparent; color: #285d4b; border-color: #285d4b; }
 #home-menu button[aria-current="page"] { background: #285d4b; color: white; }
 .page-links { margin-top: 20px; padding-top: 20px; border-top: 1px solid #cbd4ca; }
-.page-links a { display: block; padding: 10px 12px; border: 1px solid #b4c4b9; border-radius: 8px; text-align: center; text-decoration: none; }
+.page-links a, .page-links button { display: block; width: 100%; padding: 10px 12px; border: 1px solid #b4c4b9; border-radius: 8px; text-align: center; text-decoration: none; }
 .page-links a:hover { background: rgba(40,93,75,.08); }
-.page-links a + a { margin-top: 8px; }
+.page-links > * + * { margin-top: 8px; }
 .page-links a[aria-disabled="true"] { opacity: .6; }
 .home-content { min-width: 0; }
 .home-content section { margin: 0; }

@@ -224,6 +224,7 @@
     else index = (index + (event.key === "ArrowDown" ? 1 : -1) + visible.length) % visible.length;
     selectView(visible[index], true);
   };
+  byId("previous-page").onclick = () => platform.goBackUnrestricted();
   byId("normal").onclick = () => { void perform(() => platform.save({ enabled: false }), { off: true }); };
   byId("retry").onclick = () => { void refresh(); };
   platform.subscribe(value => { revision++; show(value); });

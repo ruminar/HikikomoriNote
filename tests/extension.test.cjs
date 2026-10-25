@@ -178,7 +178,7 @@ function contentFixture(stored, options = {}) {
     HikikomoriNotePlatform: {
       isAvailable: () => !options.invalid,
       homeUrl: () => home,
-      goBack: () => { options.back?.(); moves.push(["back"]); },
+      goBack: () => { const result = options.back?.(); if (result !== undefined) return result; if (options.backResult === false) return false; moves.push(["back"]); return true; },
       load: async () => { if (options.loadError) throw new Error("read failed"); return {...settingsData(),...stored}; },
       subscribe(fn) { subscriber = fn; return () => { subscriber = undefined; }; }
     }
@@ -257,6 +257,22 @@ test("ロゴ以外・修飾キー・非trusted・設定OFFではブラウザバ�
  assert.equal(calls,0);f.changed({enabled:true,noteLogoBrowserBack:false});f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);
  const other=contentFixture({noteLogoBrowserBack:true},{...options,logoDetector:()=>false});await flush();other.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);assert.deepEqual(other.moves,[['assign',other.home]]);
  await assert.rejects(controllerFixture().controller.save({noteLogoBrowserBack:'true'}));
+});
+
+test("ロゴで戻れない・API失敗時はフラグメントなしの専用ホームへ1回移動",async()=>{
+ for(const options of [{backResult:false},{back(){throw Error('unsupported');}},{back:()=>Promise.reject(Error('failed'))}]){
+  const f=contentFixture({noteLogoBrowserBack:true},{logoDetector:()=>true,...options});await flush();
+  const event=f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(event.defaultPrevented,true);assert.equal(event.stopped,true);await flush();
+  assert.deepEqual(f.moves,[['assign',f.home]]);assert.equal(f.moves[0][1].includes('#'),false);
+ }
+});
+
+test("ロゴの戻る待機中は連打をまとめ、利用者の画面移動・設定OFF後には転送しない",async()=>{
+ for(const change of [f=>{f.location.href='https://note.com/other';},f=>f.changed({enabled:false})]){
+  let resolve,calls=0;const f=contentFixture({noteLogoBrowserBack:true},{logoDetector:()=>true,back(){calls++;return new Promise(done=>{resolve=done;});}});await flush();
+  f.click(undefined,{isTrusted:true,cancelable:true});f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,1);
+  change(f);resolve(false);await flush();assert.deepEqual(f.moves,[]);
+ }
 });
 
 test("JSによるホーム遷移も可能なら通信開始前にキャンセルし専用ホームへ", async () => {

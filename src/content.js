@@ -34,6 +34,18 @@
   let interval;
   let observer;
   let scheduled = false;
+  let logoBackPending = false;
+  async function logoBack() {
+    if (logoBackPending) return;
+    logoBackPending = true;
+    const before = location.href;
+    try {
+      let moved = false;
+      try { moved = await platform.goBack() === true; } catch { /* API利用不可も専用ホームへ */ }
+      // 待機中に利用者が別ページへ移動・設定変更した場合は割り込まない。
+      if (!moved && location.href === before && enabled() && settings.noteLogoBrowserBack) location.assign(platform.homeUrl());
+    } finally { logoBackPending = false; }
+  }
   const hiddenLinks = new Set();
   const dashboardMarker = "data-hikikomori-note-dashboard-hidden";
   function restoreLinks() {
@@ -98,7 +110,7 @@
     if (settings.noteLogoBrowserBack && event.isTrusted === true && event.cancelable === true && core.isHome(anchor.href) &&
         globalThis.HikikomoriNoteUi?.isOfficialHeaderLogo(anchor)) {
       event.preventDefault(); event.stopImmediatePropagation();
-      platform.goBack();
+      void logoBack();
       return;
     }
     // クリック時の委譲処理なので、SPAで後から追加された公式タブにも対応する。
