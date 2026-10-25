@@ -144,7 +144,7 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
  const moved=n.get('edit-tags').children;moved[0].fire('dragstart',{dataTransfer:{setData(){}}});moved[2].fire('drop',{clientY:39});await flush();assert.deepEqual(f.state.tagGroups[0].tags,['B','A','C']);
  n.get('tabs').fire('keydown',{key:'End'});assert.equal(n.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,n.get('tab-settings'));
 });
-function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,actions)};}
+function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html#settings",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
 test('トピック配下だけを共通メニュー対象とし、topic直下・類似パス・外部を除外',()=>{
@@ -255,6 +255,49 @@ function authorFixture(){
  f.doc.getElementById('note-article').getBoundingClientRect=()=>({left:270,width:620});
  return f;
 }
+
+test('ロゴ戻る設定時は共通メニューとプロフィール系のTLより上に設定リンクを表示',()=>{
+ const profile='<aside class="w-full lg:w-96"><div><button data-name="avatar"></button><h1></h1><a href="/ruminar/followings"></a></div></aside>';
+ for(const url of ['https://note.com/following','https://note.com/tag/AI','https://note.com/search?q=AI','https://note.com/topic/education_learning','https://note.com/ruminar','https://note.com/ruminar/followings','https://note.com/ruminar/followers']){
+  const f=uiFixture(url.includes('/ruminar')?profile:sidebarHtml),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true});
+  f.ui.update(settings,url);const links=f.doc.querySelector('aside').children[0].querySelectorAll('a');assert.equal(links[0].textContent,'設定画面を表示');assert.equal(links[0].href,'chrome-extension://self/home.html#settings');assert.equal(links[1].textContent,'フォロー中のTL');
+  f.ui.update({...settings,noteLogoBrowserBack:false},url);assert.equal(f.doc.querySelector('aside').children[0].querySelector('a').textContent,'フォロー中のTL');
+  f.ui.update({...settings,enabled:false},url);assert.equal(f.doc.querySelector('aside').children.length,1);
+ }
+});
+
+test('記事の設定リンクはTLの上、作者も1段下げ、設定解除・狭幅・重度・停止で片付ける',()=>{
+ const f=authorFixture(),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true}),url='https://note.com/ruminar/n/n123';
+ const entry=()=>f.doc.querySelector('[class="hikikomori-note-article-settings"]');
+ f.ui.update(settings,url);assert.equal(entry().href,'chrome-extension://self/home.html#settings');
+ for(const name of ['following','author'])assert.equal(f.doc.querySelector(`[class="hikikomori-note-article-${name}"]`).hasAttribute('data-hikikomori-note-settings-offset'),true);
+ f.ui.update({...settings,noteLogoBrowserBack:false},url);assert.equal(entry(),null);assert.equal(f.doc.querySelector('[class="hikikomori-note-article-author"]').hasAttribute('data-hikikomori-note-settings-offset'),false);
+ f.ui.update(settings,url);f.win.wide=false;f.ui.update(settings,url);assert.equal(entry(),null);f.win.wide=true;
+ f.ui.update(settings,url);f.ui.update({...settings,legacyMode:true},url);assert.equal(entry(),null);
+ f.ui.update(settings,url);f.ui.stop();assert.equal(entry(),null);
+});
+
+test('専用ホームの設定リンクは設定タブへ直行し、#settingsからの直接表示にも対応',async()=>{
+ const f=homeFixture({state:{noteLogoBrowserBack:true}});await flush();assert.equal(f.nodes.get('home-settings-return').hidden,false);
+ f.nodes.get('home-settings-return').onclick();assert.equal(f.nodes.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,f.nodes.get('tab-settings'));
+ f.changed({noteLogoBrowserBack:false});assert.equal(f.nodes.get('home-settings-return').hidden,true);
+ const direct=homeFixture({hash:'#settings'});await flush();assert.equal(direct.nodes.get('panel-settings').hidden,false);assert.equal(direct.nodes.get('panel-main').hidden,true);
+});
+
+test('ロゴ戻る設定は初期OFF・保存再起動と他タブ同期。失敗時は従来値を維持',async()=>{
+ const f=homeFixture();await flush();const input=f.nodes.get('note-logo-browser-back');assert.equal(input.checked,false);
+ input.checked=true;input.fire('change');f.nodes.get('settings').fire('submit');await flush();assert.equal(f.state.noteLogoBrowserBack,true);
+ f.changed({noteLogoBrowserBack:false});assert.equal(input.checked,false);
+ const saved=fixture();await saved.controller.save({noteLogoBrowserBack:true});assert.equal((await saved.restart().getState()).noteLogoBrowserBack,true);
+ saved.options.fail=true;await assert.rejects(saved.controller.save({noteLogoBrowserBack:false}));assert.equal(saved.stored.noteLogoBrowserBack,true);
+ await assert.rejects(saved.controller.save({confirmNoteLogoClick:true}));
+});
+
+test('ブラウザバックのアダプターは履歴を調べずbackを一度呼び、履歴なしでも別URLを開かない',()=>{
+ let calls=0;const context=vm.createContext({URL,chrome:{runtime:{id:'self'}},history:{back(){calls++;}}});
+ for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),context);
+ context.HikikomoriNotePlatform.goBack();assert.equal(calls,1);
+});
 test('記事作者の名前・アイコンをTLの下の独立リンクへ表示し、元の欄を保持。更新・削除・復帰に追随',()=>{
  const f=authorFixture(),settings=f.core.readSettings({...groups(),}),url='https://note.com/ruminar/n/n123';
  const author=()=>f.doc.querySelector('[class="hikikomori-note-article-author"]');
@@ -558,7 +601,7 @@ test('現行グループ形式の破損はrawを保持して変更停止',async(
  for(const patch of [{tagSchemaVersion:9,tagGroups:[]},{tagGroups:[]},{tagSchemaVersion:2,tagGroups:[]}]){
   const initial={...settingsData(),...patch},f=fixture(initial);const state=await f.controller.getState();assert.ok(state.tagWarning);assert.deepEqual(f.stored,initial);
   await assert.rejects(f.controller.tag({type:'ADD_TAG',groupId:'group1',tag:'X'}),{code:'INVALID_TAGS'});
-  await f.controller.save({confirmNoteLogoClick:true});for(const key of ['tagSchemaVersion','tagGroups','selectedTagGroupId','groupSelectionRevision','tagGroupsRevision'])assert.deepEqual(f.stored[key],initial[key]);
+  await f.controller.save({noteLogoBrowserBack:true});for(const key of ['tagSchemaVersion','tagGroups','selectedTagGroupId','groupSelectionRevision','tagGroupsRevision'])assert.deepEqual(f.stored[key],initial[key]);
  }
 });
 

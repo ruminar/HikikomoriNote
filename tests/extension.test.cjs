@@ -77,7 +77,7 @@ test("ダッシュボード設定を保存・復元し、全体OFF/ONと別タ�
   const f = controllerFixture({ enabled: true, noteUserId: "ruminar" });
   await f.controller.save({ dashboardDisabled: true }); assert.equal(f.rules.length, 4);
   await Promise.all([f.controller.save({ noteUserId: "other_user" }), f.controller.save({ enabled: false })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, confirmNoteLogoClick: false, ...settingsData.groups() });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, ...settingsData.groups() });
   assert.equal(f.rules.length, 0);
   const restart = controllerFixture(f.value); await restart.controller.getState(); assert.equal(restart.rules.length, 0);
   await restart.controller.save({ enabled: true }); assert.equal(restart.rules.length, 4);
@@ -101,7 +101,7 @@ test("DNR：ホームの文書だけ専用ページへ転送、事前取得も�
 });
 test("保存したユーザー名・OFFを再起動後も適用", async () => {
   const f = controllerFixture({ enabled: false, noteUserId: "ruminar" });
-  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, confirmNoteLogoClick: false, tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0 });
+  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0 });
   assert.deepEqual(f.rules, []);
   await f.controller.save({ enabled: true });
   const restart = controllerFixture(f.value); await restart.controller.getState();
@@ -116,7 +116,7 @@ test("OFFはルール解除・保存の順に完了してから成功を返す",
 test("複数タブから同時保存してもON/OFFとユーザー名を上書きし合わない", async () => {
   const f = controllerFixture();
   await Promise.all([f.controller.save({ enabled: false }), f.controller.save({ noteUserId: "ruminar" })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, confirmNoteLogoClick: false, ...settingsData.groups() });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, ...settingsData.groups() });
   assert.deepEqual(f.rules, []);
 });
 test("転送更新失敗時は設定を保存せず、次の操作は再試行できる", async () => {
@@ -171,7 +171,6 @@ function contentFixture(stored, options = {}) {
       disconnect() { disconnected = true; }
     },
     window: {
-      confirm: options.confirm,
       addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name),
       navigation: { addEventListener: (name, fn) => navigationEvents.set(name, fn), removeEventListener: name => navigationEvents.delete(name) }
     },
@@ -179,6 +178,7 @@ function contentFixture(stored, options = {}) {
     HikikomoriNotePlatform: {
       isAvailable: () => !options.invalid,
       homeUrl: () => home,
+      goBack: () => { options.back?.(); moves.push(["back"]); },
       load: async () => { if (options.loadError) throw new Error("read failed"); return {...settingsData(),...stored}; },
       subscribe(fn) { subscriber = fn; return () => { subscriber = undefined; }; }
     }
@@ -243,23 +243,22 @@ test("OFF・記事リンク・修飾クリック・別タブ・ダウンロー�
   assert.equal(f.moves.length, 0);
 });
 
-test("ロゴ確認はイベント停止後に実行し、承認だけ移動。キャンセル・例外・OFFを検証",async()=>{
- for(const result of [true,false,'throw']){
-  let event,calls=0;const f=contentFixture({confirmNoteLogoClick:true,legacyMode:true},{logoDetector:()=>true,confirm(){calls++;assert.equal(event.defaultPrevented,true);assert.equal(event.stopped,true);if(result==='throw')throw Error('suppressed');return result;}});await flush();
-  event={button:0,isTrusted:true,cancelable:true,defaultPrevented:false,composedPath:()=>[{tagName:'A',href:'https://note.com/',hasAttribute:()=>false}],preventDefault(){this.defaultPrevented=true;},stopImmediatePropagation(){this.stopped=true;}};
-  f.documentEvents.get('click')(event);assert.equal(calls,1);assert.equal(f.moves.length,result===true?1:0);
-  f.changed({enabled:false,confirmNoteLogoClick:true});f.click();assert.equal(calls,1);
- }
+test("ロゴの通常クリックはイベント停止後にブラウザバック。重度でも適用しOFFで停止",async()=>{
+ let event,calls=0;const f=contentFixture({noteLogoBrowserBack:true,legacyMode:true},{logoDetector:()=>true,back(){calls++;assert.equal(event.defaultPrevented,true);assert.equal(event.stopped,true);}});await flush();
+ event={button:0,isTrusted:true,cancelable:true,defaultPrevented:false,composedPath:()=>[{tagName:'A',href:'https://note.com/',hasAttribute:()=>false}],preventDefault(){this.defaultPrevented=true;},stopImmediatePropagation(){this.stopped=true;}};
+ f.documentEvents.get('click')(event);assert.equal(calls,1);assert.deepEqual(f.moves,[['back']]);
+ f.changed({enabled:false,noteLogoBrowserBack:true});assert.equal(f.click(undefined,{isTrusted:true,cancelable:true}).defaultPrevented,false);assert.equal(calls,1);
 });
 
-test("ロゴ以外・修飾キー・非trusted・設定OFFでは確認しない",async()=>{
- let calls=0;const options={logoDetector:()=>true,confirm(){calls++;return false;}};
- const f=contentFixture({confirmNoteLogoClick:true},options);await flush();
- for(const event of [{isTrusted:true,cancelable:true,ctrlKey:true},{isTrusted:false,cancelable:true},{isTrusted:true,cancelable:false}])f.click(undefined,event);
- assert.equal(calls,0);f.changed({enabled:true,confirmNoteLogoClick:false});f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);
- const other=contentFixture({confirmNoteLogoClick:true},{...options,logoDetector:()=>false});await flush();other.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);assert.deepEqual(other.moves,[['assign',other.home]]);
- await assert.rejects(controllerFixture().controller.save({confirmNoteLogoClick:'true'}));
+test("ロゴ以外・修飾キー・非trusted・設定OFFではブラウザバックしない",async()=>{
+ let calls=0;const options={logoDetector:()=>true,back(){calls++;}};
+ const f=contentFixture({noteLogoBrowserBack:true},options);await flush();
+ for(const event of [{isTrusted:true,cancelable:true,ctrlKey:true},{isTrusted:false,cancelable:true},{isTrusted:true,cancelable:false},{isTrusted:true,cancelable:true,button:1}])f.click(undefined,event);
+ assert.equal(calls,0);f.changed({enabled:true,noteLogoBrowserBack:false});f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);
+ const other=contentFixture({noteLogoBrowserBack:true},{...options,logoDetector:()=>false});await flush();other.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);assert.deepEqual(other.moves,[['assign',other.home]]);
+ await assert.rejects(controllerFixture().controller.save({noteLogoBrowserBack:'true'}));
 });
+
 test("JSによるホーム遷移も可能なら通信開始前にキャンセルし専用ホームへ", async () => {
   const f = contentFixture(); await flush();
   let canceled = false;

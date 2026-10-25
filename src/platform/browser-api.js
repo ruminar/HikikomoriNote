@@ -22,6 +22,7 @@
       return result[key];
     },
     homeUrl: () => api.runtime.getURL("home.html"),
+    goBack: () => globalThis.history.back(),
     getState: () => request("get-state"),
     save: patch => request("save-settings", patch),
     tag: operation => request("tag-operation", operation),

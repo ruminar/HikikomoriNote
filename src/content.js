@@ -10,6 +10,7 @@
     return state;
   }
   const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
+    settingsUrl: () => platform.homeUrl() + "#settings",
     async addCurrentTag(groupId, selectionRevision) {
       const before = revision;
       const value = await platform.addCurrentTag(groupId, selectionRevision);
@@ -94,13 +95,10 @@
         event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const anchor = event.composedPath().find(node => node?.tagName === "A");
     if (!anchor || anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) return;
-    if (settings.confirmNoteLogoClick && event.isTrusted === true && event.cancelable === true && core.isHome(anchor.href) &&
+    if (settings.noteLogoBrowserBack && event.isTrusted === true && event.cancelable === true && core.isHome(anchor.href) &&
         globalThis.HikikomoriNoteUi?.isOfficialHeaderLogo(anchor)) {
       event.preventDefault(); event.stopImmediatePropagation();
-      let accepted = false;
-      try { accepted = window.confirm("ひきこもりnoteの専用ホームへ移動しますか？ OKで移動、キャンセルで現在のページにとどまります。") === true; }
-      catch { /* 表示できない場合も移動しない */ }
-      if (accepted) location.assign(platform.homeUrl());
+      platform.goBack();
       return;
     }
     // クリック時の委譲処理なので、SPAで後から追加された公式タブにも対応する。

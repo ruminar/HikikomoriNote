@@ -4,11 +4,11 @@
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
   const tabs = ["main", "tags", "settings"];
-  const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", confirmNoteLogoClick: "confirm-note-logo", legacyMode: "legacy-mode" };
+  const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", legacyMode: "legacy-mode" };
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();
-  let state, selected = "main", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
+  let state, selected = location.hash === "#settings" ? "settings" : "main", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectTab(name, focus = false) {
     if (!state && name !== "settings") return;
     selected = state?.legacyMode ? "settings" : name;
@@ -120,6 +120,7 @@
     byId(state.legacyMode ? "legacy-quick-slot" : "quick-slot").append(byId("quick-access"));
     byId("quick-access").hidden = false;
     byId("following").hidden = state.legacyMode;
+    byId("home-settings-return").hidden = !state.enabled || !state.noteLogoBrowserBack || state.legacyMode;
     const profile = core.profileUrl(state.noteUserId);
     byId("profile").hidden = !profile;
     byId("profile").textContent = profile ? `${state.noteUserId}のページ` : "自分のページ";
@@ -226,6 +227,7 @@
     selectTab(visible[index], true);
   };
   byId("setup-user").onclick = () => { selectTab("settings"); byId("note-user").focus(); };
+  byId("home-settings-return").onclick = () => selectTab("settings", true);
   byId("normal").onclick = () => { void perform(() => platform.save({ enabled: false }), { off: true }); };
   byId("retry").onclick = () => { void refresh(); };
   platform.subscribe(value => { revision++; show(value); });

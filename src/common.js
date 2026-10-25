@@ -5,7 +5,7 @@
   const groupIds = ["group1", "group2", "group3", "group4"];
   function defaultSettings() {
     return { enabled: true, noteUserId: "", dashboardDisabled: false, legacyMode: false,
-      hideArticleRecommendations: false, hidePaidArticles: false, confirmNoteLogoClick: false, tagSchemaVersion: 2,
+      hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, tagSchemaVersion: 2,
       tagGroups: groupIds.map(id => ({ id, name: "", tags: [] })), selectedTagGroupId: "group1",
       groupSelectionRevision: 0, tagGroupsRevision: 0 };
   }
@@ -79,7 +79,7 @@
     const groups = inspectGroups(value);
     return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
       legacyMode: value?.legacyMode === true, hideArticleRecommendations: value?.hideArticleRecommendations === true, hidePaidArticles: value?.hidePaidArticles === true,
-      confirmNoteLogoClick: value?.confirmNoteLogoClick === true, ...groups };
+      noteLogoBrowserBack: value?.noteLogoBrowserBack === true, ...groups };
   }
   function normalizeTag(value) {
     if (typeof value !== "string") throw new Error("タグ名は文字列で入力してください。");
