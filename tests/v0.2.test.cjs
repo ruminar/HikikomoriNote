@@ -154,6 +154,18 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
+test('お気に入りの#記事検索をハイライトし、SPAの検索語・検索対象変更で切り替える',()=>{
+ const f=uiFixture(sidebarHtml),settings=f.core.readSettings({...groups(['るみなー先生','ComfyUI'])});
+ const current=()=>f.doc.querySelector('aside').querySelector('[aria-current="page"]');
+ f.ui.update(settings,f.core.tagUrl('るみなー先生'));assert.equal(current().textContent,'# るみなー先生');
+ f.ui.update(settings,f.core.tagUrl('ComfyUI'));assert.equal(current().textContent,'# ComfyUI');
+ f.ui.update(settings,'https://note.com/search?q=%23ComfyUI&context=note&sort=popular');assert.equal(current().textContent,'# ComfyUI');
+ for(const url of ['https://note.com/search?q=ComfyUI&context=note','https://note.com/search?q=%23ComfyUI&context=user','https://note.com/search?q=%23ComfyUI&context=magazine','https://note.com/search?q=%23ComfyUI%20%23AI&context=note','https://note.com/search?q=%23Other&context=note']){
+  f.ui.update(settings,url);assert.equal(current(),null);assert.equal(f.doc.querySelector('[data-tag-add]'),null);
+ }
+ f.ui.update(settings,'https://note.com/tag/ComfyUI');assert.equal(current().textContent,'# ComfyUI');
+});
+
 test('トピック配下だけを共通メニュー対象とし、topic直下・類似パス・外部を除外',()=>{
  const {core}=fixture();
  for(const url of ['https://note.com/topic/education_learning','https://note.com/topic/education_learning/?mode=new#main','https://note.com/topic/education_learning/sub'])assert.equal(core.pageKind(url).type,'topic');

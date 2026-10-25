@@ -13,6 +13,14 @@
       Boolean(anchor.closest('header[data-header-state="navbar"]')) &&
       [...anchor.querySelectorAll('svg[aria-label="note"]')].some(svg => svg.getAttribute("role") === "img");
   }
+  function selectedTag(page, url) {
+    if (page?.type === "tag") return page.tag;
+    if (page?.type !== "search") return null;
+    const params = new URL(url).searchParams;
+    if (params.has("context") && params.get("context") !== "note") return null;
+    const query = params.get("q");
+    return query?.startsWith("#") ? query.slice(1) : null;
+  }
   function create(doc, win, actions = {}) {
     let host, menu, signature;
     let articleFollowing;
@@ -343,7 +351,8 @@
       if (host !== nextHost || !menu?.isConnected) restore();
       host = nextHost;
       const group = core.selectedGroup(settings);
-      const nextSignature = JSON.stringify([page, settings.tagGroups, settings.selectedTagGroupId, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
+      const activeTag = selectedTag(page, url);
+      const nextSignature = JSON.stringify([page, activeTag, settings.tagGroups, settings.selectedTagGroupId, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
         menu.setAttribute(owned, "");
@@ -399,7 +408,7 @@
             const item = doc.createElement("li"), link = doc.createElement("a");
             link.textContent = `# ${tag}`; link.href = core.tagUrl(tag);
             link.setAttribute("title", `# ${tag}`);
-            if (page.type === "tag" && page.tag === tag) link.setAttribute("aria-current", "page");
+            if (activeTag === tag) link.setAttribute("aria-current", "page");
             item.append(link); list.append(item);
           }
         }
