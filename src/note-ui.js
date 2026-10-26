@@ -348,7 +348,70 @@
       }
     }
     function visible(element) {
-      return element.isConnected && element.getBoundingClientRect().width > 0 && win.getComputedStyle(element).display !== "none";
+      if (!element.isConnected || element.getBoundingClientRect().width <= 0) return false;
+      for (let node = element; node; node = node.parentElement) {
+        const style = win.getComputedStyle(node);
+        if (node.hidden || style.display === "none" || style.visibility === "hidden") return false;
+      }
+      return true;
+    }
+    let mobile;
+    function closeMobile(focus = false) {
+      if (!mobile) return;
+      mobile.panel.hidden = true; mobile.button.setAttribute("aria-expanded", "false");
+      if (focus) mobile.button.focus();
+    }
+    function removeMobile() {
+      if (!mobile) return;
+      const focusInside = mobile.panel.contains(doc.activeElement) || doc.activeElement === mobile.button;
+      mobile.button.remove(); mobile.panel.remove(); mobile.parent.removeAttribute("data-hikikomori-note-mobile-logo");
+      if (focusInside && mobile.logo.isConnected) mobile.logo.focus();
+      mobile = undefined;
+    }
+    function syncMobile(active, url) {
+      if (mobile && (!active || !mobile.panel.isConnected || logoContainer(mobile.logo) !== mobile.parent)) removeMobile();
+      if (!active) return null;
+      if (!mobile) {
+        const logo = [...doc.querySelectorAll('header[data-header-state="navbar"]')]
+          .flatMap(header => [...header.querySelectorAll('a[href]')])
+          .find(a => isOfficialHeaderLogo(a) && visible(a) && logoContainer(a));
+        if (!logo) return null;
+        const header = logo.closest('header[data-header-state="navbar"]'), parent = logo.parentElement;
+        const panel = doc.createElement("div"); panel.setAttribute(owned, ""); panel.className = "hikikomori-note-mobile-panel";
+        panel.setAttribute("id", "hikikomori-note-mobile-navigation"); panel.hidden = true;
+        const button = doc.createElement("button"); button.type = "button"; button.setAttribute(owned, "");
+        button.className = "hikikomori-note-mobile-toggle"; button.textContent = "☰";
+        button.setAttribute("aria-label", "ナビゲーションメニュー"); button.setAttribute("aria-expanded", "false");
+        button.setAttribute("aria-controls", "hikikomori-note-mobile-navigation");
+        button.onclick = () => { panel.hidden = !panel.hidden; button.setAttribute("aria-expanded", String(!panel.hidden)); };
+        const escape = event => { if (event.key === "Escape") { event.preventDefault(); closeMobile(true); } };
+        button.onkeydown = escape; panel.onkeydown = escape;
+        panel.onclick = event => { if (event.target?.closest("a[href]")) closeMobile(); };
+        parent.prepend(button); parent.setAttribute("data-hikikomori-note-mobile-logo", ""); header.append(panel);
+        mobile = { logo, parent, button, panel, url };
+      }
+      if (mobile.url !== url) {
+        closeMobile(); mobile.url = url;
+        const input = mobile.form?.querySelector('input[name="q"]');
+        if (input) input.value = core.pageKind(url)?.type === "search" ? new URL(url).searchParams.get("q") || "" : "";
+      }
+      const header = mobile.logo.closest('header[data-header-state="navbar"]');
+      const officialSearch = [...header.querySelectorAll('input[name="q"]')].some(input => !input.closest(`[${owned}]`) && visible(input));
+      const needsSearch = core.pageKind(url)?.type === "following" && !officialSearch;
+      if (!needsSearch && mobile.form) { mobile.form.remove(); mobile.form = undefined; }
+      if (needsSearch && !mobile.form) {
+        const form = doc.createElement("form"); form.setAttribute("action", "https://note.com/search");
+        form.setAttribute("method", "get"); form.setAttribute("role", "search"); form.className = "hikikomori-note-mobile-search";
+        const input = doc.createElement("input"); input.setAttribute("type", "search"); input.setAttribute("name", "q");
+        input.setAttribute("aria-label", "キーワードやクリエイターで検索"); input.setAttribute("placeholder", "キーワードやクリエイターで検索");
+        const params = new URL(url).searchParams; input.value = core.pageKind(url)?.type === "search" ? params.get("q") || "" : "";
+        for (const [name, value] of [["context", "note"], ["mode", "search"]]) {
+          const field = doc.createElement("input"); field.setAttribute("type", "hidden"); field.setAttribute("name", name); field.value = value; form.append(field);
+        }
+        const submit = doc.createElement("button"); submit.type = "submit"; submit.textContent = "検索";
+        form.prepend(input); form.append(submit); mobile.panel.prepend(form); mobile.form = form;
+      }
+      return mobile.panel;
     }
     function sidebar() {
       return [...doc.querySelectorAll("aside")].find(element =>
@@ -376,8 +439,12 @@
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncPaidCards(settings, url);
-      if (!settings.enabled || settings.legacyMode || !page) { restore(); return; }
-      const nextHost = page.type === "profile" ? profile(page.user) : sidebar();
+      if (!settings.enabled || settings.legacyMode || !page) { removeMobile(); restore(); return; }
+      const common = ["following", "tag", "search", "topic"].includes(page.type);
+      const officialAside = common && [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky"));
+      const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);
+      const mobileHost = syncMobile(compact, url);
+      const nextHost = mobileHost || (page.type === "profile" ? profile(page.user) : sidebar());
       if (!nextHost) { restore(); return; }
       if (host !== nextHost || !menu?.isConnected) restore();
       host = nextHost;
@@ -390,7 +457,8 @@
         menu.className = page.type === "profile"
           ? "hikikomori-note-navigation hikikomori-note-profile-navigation" : "hikikomori-note-navigation";
         menu.setAttribute("aria-label", page.type === "profile" ? "フォロー中のTLへの移動" : "ひきこもりnote ナビゲーション");
-        host.prepend(menu);
+        if (host === mobileHost) host.append(menu);
+        else host.prepend(menu);
       }
       if (signature !== nextSignature) {
         menu.replaceChildren();
@@ -446,7 +514,7 @@
         signature = nextSignature;
       }
       // 独自メニューを挿入できてから、aside直下の公式メニューだけを隠す。
-      if (page.type !== "profile") {
+      if (page.type !== "profile" && host !== mobileHost) {
         for (const element of host.children) {
           if (element === menu) continue;
           if (!originals.has(element)) { element.setAttribute(hidden, ""); originals.add(element); }
@@ -454,7 +522,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; syncHeaderSettings(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
+    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; removeMobile(); syncHeaderSettings(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();

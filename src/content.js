@@ -77,6 +77,7 @@
     document.removeEventListener("click", onClick, true);
     window.removeEventListener("popstate", checkHome);
     window.removeEventListener("pageshow", checkHome);
+    window.removeEventListener("resize", checkHome);
     window.navigation?.removeEventListener("navigate", onNavigate);
     window.navigation?.removeEventListener("currententrychange", checkHome);
   }
@@ -133,6 +134,7 @@
       document.addEventListener("click", onClick, true);
       window.addEventListener("popstate", checkHome);
       window.addEventListener("pageshow", checkHome);
+      window.addEventListener("resize", checkHome);
       window.navigation?.addEventListener("navigate", onNavigate);
       window.navigation?.addEventListener("currententrychange", checkHome);
       observer = new MutationObserver(scheduleSync);

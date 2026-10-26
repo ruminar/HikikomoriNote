@@ -151,7 +151,7 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
  const moved=n.get('edit-tags').children;moved[0].fire('dragstart',{dataTransfer:{setData(){}}});moved[2].fire('drop',{clientY:39});await flush();assert.deepEqual(f.state.tagGroups[0].tags,['B','A','C']);
  n.get('home-menu').fire('keydown',{key:'End'});assert.equal(n.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,n.get('nav-settings'));
 });
-function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html",...actions})};}
+function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:query=>({matches:query.includes("max-width")?!win.wide:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
 const streamingLayout='<div class="min-h-screen lg:grid lg:grid-cols-[202px_minmax(0,1fr)]"><div class="py-4"></div><main id="main-content"><div class="py-4"></div></main></div>';
@@ -351,6 +351,70 @@ test('プレビューも狭幅・余白不足・重度・OFF・離脱で固定�
 });
 
 const logoHeaderHtml='<header data-header-state="navbar"><div><a href="/" target="_self"><svg role="img" aria-label="note"></svg></a></div></header>';
+test('狭幅の共通メニューはロゴ左のボタンで開閉し、広幅へ戻すと撤去・再狭幅では閉じる',()=>{
+ const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings(groups(['AI'])),url='https://note.com/following';
+ const aside=f.doc.querySelector('aside');aside.width=0;f.win.wide=false;
+ const toggle=()=>f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]');
+ const panel=()=>f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');
+ f.ui.update(settings,url);assert.ok(toggle());assert.equal(toggle().parentElement.children[0],toggle());assert.equal(panel().hidden,true);
+ assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-navigation"]').length,1);assert.equal(aside.children.length,1);
+ toggle().fire('click');assert.equal(panel().hidden,false);assert.equal(toggle().getAttribute('aria-expanded'),'true');
+ panel().fire('keydown',{key:'Escape'});assert.equal(panel().hidden,true);assert.equal(f.doc.activeElement,toggle());
+ toggle().fire('click');aside.width=180;f.win.wide=true;f.ui.update(settings,url);
+ assert.equal(toggle(),null);assert.equal(panel(),null);assert.equal(aside.querySelectorAll('[class="hikikomori-note-navigation"]').length,1);
+ aside.width=0;f.win.wide=false;f.ui.update(settings,url);assert.equal(panel().hidden,true);
+});
+
+test('TL専用のモバイル検索は公式欄に追従し、再描画で入力保持・他画面へのSPA移動で撤去',()=>{
+ const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings(groups()),url='https://note.com/following';
+ f.doc.querySelector('aside').width=0;f.win.wide=false;f.ui.update(settings,url);
+ const panel=()=>f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');
+ const form=()=>panel().querySelector('form');
+ assert.equal(form().getAttribute('action'),'https://note.com/search');assert.equal(form().getAttribute('method'),'get');
+ const input=form().querySelector('input[name="q"]');assert.equal(input.value,'');input.value='入力途中';
+ f.ui.update(settings,url);assert.equal(form().querySelector('input[name="q"]'),input);assert.equal(input.value,'入力途中');
+ assert.equal(form().querySelector('input[name="context"]').value,'note');
+ const official=f.doc.createElement('input');official.setAttribute('name','q');official.setAttribute('type','search');
+ const wrapper=f.doc.createElement('div');wrapper.append(official);f.doc.querySelector('header').prepend(wrapper);
+ f.ui.update(settings,url);assert.equal(form(),null);
+ f.win.getComputedStyle=e=>({display:e===wrapper?'none':'block'});f.ui.update(settings,url);assert.ok(form());
+ f.win.getComputedStyle=()=>({display:'block'});wrapper.remove();f.ui.update(settings,url);assert.ok(form());
+ for(const target of ['https://note.com/tag/AI','https://note.com/hashtag/AI','https://note.com/search?q=%23AI','https://note.com/topic/challenge']){
+  f.ui.update(settings,target);assert.equal(form(),null);assert.ok(panel().querySelector('nav'));
+  f.ui.update(settings,url);assert.ok(form());
+ }
+});
+
+test('モバイルでもグループ操作とタグ追加を既存処理へ送り、SPAでは閉じて新しいタグを示す',async()=>{
+ let selected,added;const f=uiFixture(logoHeaderHtml+sidebarHtml,{selectGroup:async id=>{selected=id;},addCurrentTag:async(...args)=>{added=args;}});
+ const settings=f.core.readSettings(groups(['AI']));f.doc.querySelector('aside').width=0;f.win.wide=false;
+ const url='https://note.com/tag/NewTag';f.ui.update(settings,url);
+ const panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');
+ f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]').fire('click');
+ panel.querySelector('[data-group-id="group2"]').fire('click');await flush();assert.equal(selected,'group2');assert.equal(panel.hidden,false);
+ panel.querySelector('[data-tag-add]').fire('click');await flush();assert.deepEqual(plain(added),['group1',0]);
+ f.ui.update(settings,'https://note.com/search?q=%23AI&context=user');assert.equal(panel.hidden,true);
+ assert.equal(panel.querySelector('ul').querySelector('a').getAttribute('aria-current'),'page');
+ assert.equal(panel.querySelector('[data-tag-add]'),null);
+ f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]').fire('click');panel.fire('click',{target:panel.querySelector('a')});assert.equal(panel.hidden,true);
+});
+
+test('モバイルの追加UIは重度・OFF・対象外・終了・ヘッダー差し替えで除去し、ロゴの歯車を維持',()=>{
+ const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true});
+ f.doc.querySelector('aside').width=0;f.win.wide=false;const url='https://note.com/search';
+ const toggle=()=>f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]');
+ for(const patch of [{enabled:false},{legacyMode:true}]){
+  f.ui.update(settings,url);assert.ok(toggle());f.ui.update({...settings,...patch},url);assert.equal(toggle(),null);
+ }
+ f.ui.update(settings,url);const gear=f.doc.querySelector('[class="hikikomori-note-header-settings"]');assert.equal(gear.href,'chrome-extension://self/home.html');
+ const header=f.doc.querySelector('header');header.remove();f.ui.update(settings,url);assert.equal(toggle(),null);
+ f.doc.root.prepend(header);f.ui.update(settings,url);assert.ok(toggle());
+ f.ui.update(settings,'https://note.com/settings/account');assert.equal(toggle(),null);
+ f.ui.update(settings,url);f.ui.stop();assert.equal(toggle(),null);assert.equal(f.doc.querySelector('[class="hikikomori-note-mobile-panel"]'),null);
+ const unknown=uiFixture('<header><a href="/"></a></header>'+sidebarHtml);unknown.win.wide=false;unknown.doc.querySelector('aside').width=0;
+ unknown.ui.update(unknown.core.readSettings(groups()),url);assert.equal(unknown.doc.querySelector('button'),null);
+});
+
 test('設定ONで公式ロゴ横に歯車を追加。重度・左メニューなしでも使え、OFFで撤去',()=>{
  for(const legacyMode of [false,true]){
   const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true,legacyMode});
