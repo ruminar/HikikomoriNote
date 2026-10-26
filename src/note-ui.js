@@ -236,7 +236,8 @@
       articleAuthor?.remove(); articleAuthor = undefined; authorSignature = undefined;
     }
     function syncArticleAuthor(article, url) {
-      const profileUrl = core.profileUrl(new URL(url).pathname.split("/")[1]);
+      const preview = core.isPreviewArticle(url);
+      let profileUrl = preview ? null : core.profileUrl(new URL(url).pathname.split("/")[1]);
       let author;
       for (const time of article.querySelectorAll("time")) {
         if (time.closest('[id="note-body"]')) continue;
@@ -244,13 +245,22 @@
         for (let depth = 0; region && region !== article && depth < 4; depth++, region = region.parentElement) {
           if (region.querySelector('[id="note-body"]')) break;
           const avatar = region.querySelector('[data-name="avatar"]');
-          const name = [...region.querySelectorAll("a[href]")].find(a => a.href === profileUrl && a.textContent.trim());
-          if (!avatar || avatar.closest("a")?.href !== profileUrl || !name) continue;
+          let candidateProfile = profileUrl;
+          if (preview) {
+            try {
+              const link = avatar?.closest("a")?.href;
+              if (core.pageKind(link)?.type !== "profile") continue;
+              candidateProfile = core.profileUrl(core.normalizeUserId(link));
+            } catch { continue; }
+          }
+          const name = [...region.querySelectorAll("a[href]")].find(a => a.href === candidateProfile && a.textContent.trim());
+          if (!avatar || avatar.closest("a")?.href !== candidateProfile || !name) continue;
           let image = "";
           try {
             const source = new URL(avatar.querySelector("img")?.getAttribute("src"));
             if (source.protocol === "https:" && source.hostname === "assets.st-note.com") image = source.href;
           } catch { /* 画像が不明な場合は名前だけ表示する */ }
+          profileUrl = candidateProfile;
           author = { name: name.textContent.trim(), image }; break;
         }
         if (author) break;
@@ -274,7 +284,7 @@
     }
     function syncArticleFollowing(settings, url) {
       const article = doc.querySelector('article[id="note-article"]');
-      const show = settings.enabled && !settings.legacyMode && core.isArticle(url) &&
+      const show = settings.enabled && !settings.legacyMode && (core.isArticle(url) || core.isPreviewArticle(url)) &&
         win.matchMedia("(min-width: 1100px)").matches && article && visible(article) &&
         article.getBoundingClientRect().left >= 228 && doc.body;
       if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); return; }

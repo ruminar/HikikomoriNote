@@ -310,6 +310,46 @@ function authorFixture(){
  return f;
 }
 
+test('プレビューURLはnoteの正しい記事パスだけを対象にし、通常記事の判定を広げない',()=>{
+ const {core}=fixture();
+ for(const url of ['https://note.com/preview/n123','https://note.com/preview/n123/?prev_access_key=test-only#body']){
+  assert.equal(core.isPreviewArticle(url),true);assert.equal(core.isArticle(url),false);
+ }
+ for(const url of ['https://other.test/preview/n123','http://note.com/preview/n123','https://note.com/preview','https://note.com/preview/n123/edit','https://note.com/preview/not-an-id','broken'])assert.equal(core.isPreviewArticle(url),false);
+});
+
+test('プレビューの作者を本文外のアバターと名前から特定し、動的な挿入・切り替えに対応',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/preview/n123?prev_access_key=test-only';
+ const author=()=>f.doc.querySelector('[class="hikikomori-note-article-author"]');
+ f.ui.update(settings,url);const first=author();assert.equal(first.href,'https://note.com/ruminar');
+ assert.equal(first.textContent,'るみなー先生');assert.equal(f.doc.querySelector('[class="hikikomori-note-article-following"]').href,'https://note.com/following');
+ f.ui.update(settings,url);assert.equal(author(),first);
+ const header=f.doc.getElementById('author-header');header.remove();f.ui.update(settings,url);assert.equal(author(),null);
+ f.doc.getElementById('note-article').prepend(header);
+ for(const a of header.querySelectorAll('a[href]'))a.href='https://note.com/other_user';
+ f.doc.getElementById('author-name').textContent='別の作者';f.ui.update(settings,'https://note.com/preview/n456');
+ assert.equal(author().href,'https://note.com/other_user');assert.equal(author().textContent,'別の作者');
+ f.doc.getElementById('note-body').append(header);f.ui.update(settings,url);assert.equal(author(),null);
+});
+
+test('プレビューも狭幅・余白不足・重度・OFF・離脱で固定リンクを除去し、不正な作者リンクは使わない',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/preview/n123';
+ const following=()=>f.doc.querySelector('[class="hikikomori-note-article-following"]');
+ const author=()=>f.doc.querySelector('[class="hikikomori-note-article-author"]');
+ for(const patch of [{enabled:false},{legacyMode:true}]){
+  f.ui.update(settings,url);assert.ok(author());f.ui.update({...settings,...patch},url);assert.equal(author(),null);assert.equal(following(),null);
+ }
+ f.win.wide=false;f.ui.update(settings,url);assert.equal(following(),null);f.win.wide=true;
+ const article=f.doc.getElementById('note-article');article.getBoundingClientRect=()=>({left:200,width:620});f.ui.update(settings,url);assert.equal(following(),null);
+ article.getBoundingClientRect=()=>({left:270,width:620});
+ for(const bad of ['https://other.test/ruminar','https://note.com/search','https://note.com/ruminar/n/n999']){
+  for(const a of f.doc.getElementById('author-header').querySelectorAll('a[href]'))a.href=bad;
+  f.ui.update(settings,url);assert.ok(following());assert.equal(author(),null);
+ }
+ f.ui.update(settings,'https://note.com/search');assert.equal(following(),null);
+ f.ui.update(settings,url);f.ui.stop();assert.equal(following(),null);
+});
+
 const logoHeaderHtml='<header data-header-state="navbar"><div><a href="/" target="_self"><svg role="img" aria-label="note"></svg></a></div></header>';
 test('設定ONで公式ロゴ横に歯車を追加。重度・左メニューなしでも使え、OFFで撤去',()=>{
  for(const legacyMode of [false,true]){

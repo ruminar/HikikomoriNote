@@ -119,6 +119,12 @@
       return parsed.origin === "https://note.com" && /^\/[a-zA-Z0-9_]+\/n\/n[a-zA-Z0-9]+\/?$/.test(parsed.pathname);
     } catch { return false; }
   }
+  function isPreviewArticle(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === "https://note.com" && /^\/preview\/n[a-zA-Z0-9]+\/?$/.test(parsed.pathname);
+    } catch { return false; }
+  }
   function pageKind(url) {
     try {
       const parsed = new URL(url);
@@ -139,5 +145,5 @@
     return normalized ? `https://note.com/${encodeURIComponent(normalized)}` : null;
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
-    normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
+    normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

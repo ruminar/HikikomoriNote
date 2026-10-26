@@ -1,4 +1,12 @@
-# ひきこもりnote 0.2.1
+# ひきこもりnote 0.2.2（開発版）
+
+0.2.2はFirefox Android対応に向けて開発中です。まずPC版Firefoxの狭幅表示を検証し、Android実機の拡張機能・操作確認は別途行います。現時点でAndroid対応完了とは扱いません。
+
+プレビュー記事（`/preview/n...`）にも、通常記事と同じ固定の「フォロー中のTL」と作者ページへのボタンを追加しました。幅1100px以上かつ左余白が十分な場合に表示し、重度モード・拡張OFFでは非表示にします。アクセスキーは保存しません。構文検証・自動テスト128件が成功しています。
+
+[0.2.2設計・開発状況](spec/hikikomori-note_SPEC_v0.2.2.md)
+
+## 0.2.1のリリース記録と継続機能
 
 2026-10-26に0.2.1をリリース用として固定します。タグは `0.2.1`（vなし）。ストアへの更新申請は利用者が行います。
 
@@ -89,7 +97,7 @@ Firefox（デスクトップ140以降）はFirefox用フォルダのmanifest.jso
 ./scripts/package.ps1
 ```
 
-`dist/HikikomoriNote-0.2.1-chromium/` と `dist/HikikomoriNote-0.2.1-firefox/`、各フォルダ名のZIPを生成します。必要な実行ファイルだけを含み、Firefox ZIPは未署名です。以前の提出物は `dist/submissions/` に固定してあり、この生成では変更しません。
+`dist/HikikomoriNote-0.2.2-chromium/` と `dist/HikikomoriNote-0.2.2-firefox/`、各フォルダ名のZIPを生成します。必要な実行ファイルだけを含み、Firefox ZIPは未署名です。以前の提出物は `dist/submissions/` に固定してあり、この生成では変更しません。
 
 ## 設定・失敗時の扱い
 

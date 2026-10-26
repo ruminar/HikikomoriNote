@@ -118,3 +118,7 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 未ログインで/hashtagは通常ホームへ、/hashtag/ComfyUIは/tag/ComfyUIへ転送された。タグの実DOMはmin-h-screen/lg:grid/lg:grid-cols-[12.625rem_minmax(0,1fr)]という親を使い、その下のdiv.hidden.lg:contentsを経て共通asideがある。aside自体は既存のsticky/w-[11.375rem]と急上昇navを維持。親認識へrem表記を追加し、CSSにラッパーを挟む経路を追加した。既存のpx表記・aside直下型も維持する。初回の先行制御は利用者より成功報告あり。今回追加した実レイアウトのちらつきの実拡張確認は別途必要。
 
 検索画面の追加確認：未ログインの/searchでは親は202px表記、左ラッパーはhidden lg:block。タグ画面のlg:contents用ルールだけでは公式メニューを抑止できないため、hiddenとlg:blockを両方持つ直接子ラッパーの経路を追加。mainはその兄弟であり、非表示対象に含めない。
+
+## 0.2.2 プレビュー記事（2026-10-26）
+
+利用者提供の共有プレビューを読み取り専用で確認。通常記事と同じarticle#note-article、本文#note-body、timeを含む作者欄があり、data-name="avatar"を囲むプロフィールリンクと名前のリンクが同じ公開プロフィールを指す。URLには作者名がないため、本文外のこの組み合わせから判定する。共有URL・アクセスキー・本文は記録しない。
