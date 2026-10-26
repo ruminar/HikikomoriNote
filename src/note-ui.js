@@ -7,10 +7,17 @@
   const productHidden = "data-hikikomori-note-product-hidden";
   const recommendationsHidden = "data-hikikomori-note-recommendations-hidden";
   const productCard = '[data-aicn-thing-card="true"], [data-testid="aicn-thing-card"]';
-  function isOfficialHeaderLogo(anchor) {
+  function isManagementPage(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === "https://note.com" &&
+        (/^\/(?:dashboard|settings)(?:\/|$)/.test(parsed.pathname) || /^\/user_verification\/?$/.test(parsed.pathname));
+    } catch { return false; }
+  }
+  function isOfficialHeaderLogo(anchor, url) {
     return anchor.isConnected && core.isHome(anchor.href) &&
       !anchor.closest("article") && !anchor.closest('[id="note-body"]') && !anchor.closest(`[${owned}]`) &&
-      Boolean(anchor.closest('header[data-header-state="navbar"]')) &&
+      Boolean(anchor.closest('header[data-header-state="navbar"]') || (isManagementPage(url) && anchor.closest("header"))) &&
       [...anchor.querySelectorAll('svg[aria-label="note"]')].some(svg => svg.getAttribute("role") === "img");
   }
   function selectedTag(page, url) {
@@ -82,7 +89,7 @@
     const settingsLayout = "data-hikikomori-note-logo-settings-layout";
     function logoContainer(logo) {
       const parent = logo.parentElement;
-      return isOfficialHeaderLogo(logo) && parent?.tagName === "DIV" &&
+      return isOfficialHeaderLogo(logo, currentUrl) && (parent?.tagName === "DIV" || (isManagementPage(currentUrl) && parent?.tagName === "HEADER")) &&
         [...parent.children].filter(child => !child.hasAttribute(owned)).length === 1 ? parent : null;
     }
     function syncHeaderSettings(active) {
@@ -92,7 +99,7 @@
         }
       }
       if (!active || !actions.settingsUrl) return;
-      for (const header of doc.querySelectorAll('header[data-header-state="navbar"]')) {
+      for (const header of doc.querySelectorAll("header")) {
         for (const logo of header.querySelectorAll('a[href]')) {
           const parent = logoContainer(logo);
           if (!parent || headerSettings.has(logo)) continue;

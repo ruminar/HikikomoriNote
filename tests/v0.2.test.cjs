@@ -364,6 +364,32 @@ test('設定ONで公式ロゴ横に歯車を追加。重度・左メニューな
  }
 });
 
+test('ダッシュボード・設定の本体と配下では管理ヘッダーロゴを認識し歯車を表示',()=>{
+ const logo='<a href="/"><svg role="img" aria-label="note"></svg></a>';
+ for(const html of ['<header>'+logo+'</header>','<header><div>'+logo+'</div></header>']){
+  for(const url of ['https://note.com/dashboard','https://note.com/dashboard/','https://note.com/dashboard/suggestions','https://note.com/dashboard/sales/report?year=2026','https://note.com/settings','https://note.com/settings/','https://note.com/settings/account','https://note.com/settings/account/notifications/','https://note.com/user_verification','https://note.com/user_verification/?test=1']){
+   const f=uiFixture(html),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true,legacyMode:true});
+   const anchor=f.doc.querySelector('a');assert.equal(f.isLogo(anchor,url),true);
+   f.ui.update(settings,url);const gear=f.doc.querySelector('[class="hikikomori-note-header-settings"]');assert.ok(gear);assert.equal(gear.href,'chrome-extension://self/home.html');
+   f.ui.update(settings,url);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-header-settings"]').length,1);
+   f.ui.update({...settings,noteLogoBrowserBack:false},url);assert.equal(gear.isConnected,false);
+   f.ui.update(settings,url);f.ui.update({...settings,enabled:false},url);assert.equal(f.doc.querySelector('[class="hikikomori-note-header-settings"]'),null);
+   f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(f.doc.querySelector('[class="hikikomori-note-header-settings"]'),null);
+  }
+ }
+});
+
+test('管理画面ヘッダーの追加対応は対象パスと公式ロゴだけで、本文・外部・類似パスを除外',()=>{
+ const html='<header><a href="/"><svg role="img" aria-label="note"></svg></a></header>';
+ for(const url of ['https://other.test/settings/account','https://note.com/dashboarding','https://note.com/settings-other/account','https://note.com/user_verification_other','https://note.com/user_verification/other','https://note.com/login','https://note.com/search']){
+  const f=uiFixture(html),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true});
+  assert.equal(f.isLogo(f.doc.querySelector('a'),url),false);f.ui.update(settings,url);assert.equal(f.doc.querySelector('[class="hikikomori-note-header-settings"]'),null);
+ }
+ for(const content of ['<article>'+html+'</article>',html.replace('aria-label="note"','aria-label="other"'),html.replace('href="/"','href="https://other.test/"')]){
+  const f=uiFixture(content);assert.equal(f.isLogo(f.doc.querySelector('a'),'https://note.com/settings/account'),false);
+ }
+});
+
 test('記事のTL・作者に設定リンクを追加せず、ロゴ設定ONでも固定位置をずらさない',()=>{
  const f=authorFixture(),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true}),url='https://note.com/ruminar/n/n123';
  f.ui.update(settings,url);assert.equal(f.doc.querySelector('[class="hikikomori-note-article-settings"]'),null);
