@@ -58,6 +58,26 @@
     const originals = new Set();
     const products = new Set();
     const recommendations = new Set();
+    const sidebarRoots = new Set();
+    const rootClass = "hikikomori-note-navigation-root";
+    const gridClass = "lg:grid-cols-[202px_minmax(0,1fr)]";
+    function prepareSidebar(url, settings) {
+      if (disposed) return;
+      const active = (!settings || (settings.enabled && !settings.legacyMode)) &&
+        ["following", "tag", "search", "topic"].includes(core.pageKind(url)?.type);
+      for (const root of sidebarRoots) {
+        if (!active || !root.isConnected || !root.classList.contains(gridClass)) {
+          root.classList.remove(rootClass); sidebarRoots.delete(root);
+        }
+      }
+      if (!active) return;
+      // 急上昇navやasideの完成を待たず、SSRで先に現れるレイアウトの親へ印を付ける。
+      for (const root of doc.querySelectorAll('div[class~="lg:grid"]')) {
+        if (!root.classList.contains("min-h-screen") || !root.classList.contains(gridClass) || root.closest("article")) continue;
+        if (!root.classList.contains(rootClass)) root.classList.add(rootClass);
+        sidebarRoots.add(root);
+      }
+    }
     const headerSettings = new Map();
     const settingsLayout = "data-hikikomori-note-logo-settings-layout";
     function logoContainer(logo) {
@@ -336,6 +356,7 @@
     }
     function update(settings, url) {
       if (disposed) return;
+      prepareSidebar(url, settings);
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
       currentSettings = settings; currentUrl = url;
       syncSearchClear(settings.enabled);
@@ -423,7 +444,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, invalidatePaidCards() { paidDirty = true; }, stop() { disposed = true; syncHeaderSettings(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
+    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; syncHeaderSettings(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();

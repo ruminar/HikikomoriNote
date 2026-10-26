@@ -4,7 +4,7 @@ class Element {
   set textContent(text) { this.replaceChildren(); this._text=String(text); }
   get textContent() { return this._text+this.children.map(child=>child.textContent).join(""); }
   get className() { return this.getAttribute("class")||""; } set className(value){this.setAttribute("class",value);}
-  get classList(){return {contains:value=>this.className.split(/\s+/).includes(value)};}
+  get classList(){return {contains:value=>this.className.split(/\s+/).includes(value),add:value=>{if(!this.className.split(/\s+/).includes(value))this.className=(this.className+' '+value).trim();},remove:value=>{this.className=this.className.split(/\s+/).filter(item=>item!==value).join(' ');}};}
   get isConnected(){return this===this.ownerDocument.root||Boolean(this.parentElement?.isConnected);}
   get href(){return this.getAttribute("href") ? new URL(this.getAttribute("href"),"https://note.com").href : "";} set href(value){this.setAttribute("href",value);}
   setAttribute(key,value){this.attributes.set(key,String(value));if(key==="id")this.ownerDocument.nodes.set(String(value),this);if(key==="hidden")this.hidden=true;}
@@ -16,7 +16,7 @@ class Element {
   prepend(child){child.remove();child.parentElement=this;this.children.unshift(child);}
   replaceChildren(...children){for(const child of this.children)child.parentElement=null;this.children=[];this._text="";this.append(...children);}
   contains(child){return child===this||this.children.some(node=>node.contains(child));}
-  matches(selector){const match=/^([\w-]+)?(?:\[([\w-]+)(?:="([^"]*)")?\])?$/.exec(selector);return !!match&&(!match[1]||this.tagName===match[1].toUpperCase())&&(!match[2]||(this.hasAttribute(match[2])&&(match[3]===undefined||this.getAttribute(match[2])===match[3])));}
+  matches(selector){const match=/^([\w-]+)?(?:\[([\w-]+)(?:(~?=)"([^"]*)")?\])?$/.exec(selector);return !!match&&(!match[1]||this.tagName===match[1].toUpperCase())&&(!match[2]||(this.hasAttribute(match[2])&&(match[4]===undefined||(match[3]==='~='?this.getAttribute(match[2]).split(/\s+/).includes(match[4]):this.getAttribute(match[2])===match[4]))));}
   querySelectorAll(selector){const list=[];for(const child of this.children){if(selector.split(",").some(s=>child.matches(s.trim())))list.push(child);list.push(...child.querySelectorAll(selector));}return list;}
   querySelector(selector){return this.querySelectorAll(selector)[0]??null;}
   closest(selector){return this.matches(selector)?this:this.parentElement?.closest(selector)??null;}

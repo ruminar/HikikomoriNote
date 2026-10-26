@@ -91,6 +91,7 @@
   function checkHome() {
     if (enabled() && core.shouldRedirect(location.href, settings)) location.replace(platform.homeUrl());
     if (!stopped && settings) noteUi?.update(settings, location.href);
+    else if (!stopped) noteUi?.prepareSidebar?.(location.href);
   }
   function scheduleSync(records) {
     const own = node => node.nodeType === 1 && (node.hasAttribute?.("data-hikikomori-note-owned") || node.closest?.("[data-hikikomori-note-owned]"));
@@ -136,6 +137,9 @@
       window.addEventListener("pageshow", checkHome);
       window.navigation?.addEventListener("navigate", onNavigate);
       window.navigation?.addEventListener("currententrychange", checkHome);
+      observer = new MutationObserver(scheduleSync);
+      observer.observe(document, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["href"] });
+      noteUi?.prepareSidebar?.(location.href);
       unsubscribe = platform.subscribe(value => {
         if (stopped) return;
         revision++;
@@ -147,8 +151,6 @@
       const stored = await platform.load();
       if (stopped) return;
       if (revision === before) settings = core.readSettings(stored);
-      observer = new MutationObserver(scheduleSync);
-      observer.observe(document, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["href"] });
       syncDashboardLinks();
       checkHome();
       interval = setInterval(checkHome, 250);

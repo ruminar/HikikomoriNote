@@ -154,6 +154,27 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:()=>({matches:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
+const streamingLayout='<div class="min-h-screen lg:grid lg:grid-cols-[202px_minmax(0,1fr)]"><div class="py-4"></div><main id="main-content"><div class="py-4"></div></main></div>';
+test('ローダーしかないSSR親へクラスを付け、後から現れる公式asideにも引き継ぐ',()=>{
+ const f=uiFixture(streamingLayout),layout=f.doc.root.children[0],url='https://note.com/following',settings=f.core.readSettings({...groups()});
+ assert.equal(f.doc.querySelector('aside'),null);f.ui.prepareSidebar(url);assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),true);
+ assert.equal(f.doc.querySelector('main').classList.contains('hikikomori-note-navigation-root'),false);
+ const aside=f.doc.createElement('aside');aside.className='sticky w-[11.375rem]';const outer=f.doc.createElement('div'),official=f.doc.createElement('div');official.className='flex flex-col gap-4';outer.append(official);aside.append(outer);layout.append(aside);
+ f.ui.update(settings,url);assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),true);assert.equal(aside.children.length,1);
+ const nav=f.doc.createElement('nav');nav.setAttribute('aria-label','急上昇');official.append(nav);f.ui.update(settings,url);
+ assert.equal(aside.children[0].hasAttribute('data-hikikomori-note-owned'),true);assert.equal(aside.children[0].classList.contains('flex'),false);assert.equal(f.doc.querySelector('main').isConnected,true);
+});
+
+test('先行ルートのクラスはOFF・重度・対象外・親の交換・停止で片付ける',()=>{
+ const f=uiFixture(streamingLayout),layout=f.doc.root.children[0],url='https://note.com/search',settings=f.core.readSettings({...groups()});
+ for(const next of [{...settings,enabled:false},{...settings,legacyMode:true}]){
+  f.ui.prepareSidebar(url);assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),true);f.ui.update(next,url);assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),false);
+ }
+ f.ui.update(settings,url);f.ui.update(settings,'https://note.com/ruminar');assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),false);
+ f.ui.prepareSidebar(url);layout.remove();f.ui.prepareSidebar(url,settings);assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),false);
+ f.doc.root.append(layout);f.ui.prepareSidebar(url);f.ui.stop();assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),false);assert.equal(layout.classList.contains('min-h-screen'),true);
+});
+
 test('お気に入りの#記事検索をハイライトし、SPAの検索語・検索対象変更で切り替える',()=>{
  const f=uiFixture(sidebarHtml),settings=f.core.readSettings({...groups(['るみなー先生','ComfyUI'])});
  const current=()=>f.doc.querySelector('aside').querySelector('[aria-current="page"]');

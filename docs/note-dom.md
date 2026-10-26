@@ -108,3 +108,7 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 ## 0.2.1 ロゴのブラウザバック（2026-10-26）
 
 確認ダイアログは廃止。公式ヘッダーロゴの識別境界を維持し、設定ONの通常クリックでNavigation APIを使い、同一オリジンへ戻れる場合だけ戻る。公式ロゴの右隣に歯車の設定入口を追加する。ロゴ親divがロゴ1個だけを含む場合に横並びにする。TL上の設定ボタンは廃止し、記事の固定位置はTL72px/作者120pxを維持する。外部直前履歴・履歴なし・API未対応・失敗はフラグメントなしの専用ホームへ移動する。実ブラウザでのクリック順序・履歴・配置は別途確認が必要。
+
+## 0.2.1 SSR親ルートの先行制御（試験）
+
+利用者のJavaScript停止HTMLでは、3点のpy-4はmin-h-screen/lg:grid/lg:grid-cols-[202px_minmax(0,1fr)]の直下で、mainの兄弟。asideは別のhiddenなS:0内にあり、B:0位置への反映処理を伴う。したがってaside内のローダーだけを指定した以前の試験はこの初期ローダーに一致しない。今回は既存グリッド親へhikikomori-note-navigation-rootを付け、直下py-4とaside>div>div.flex.flex-col.gap-4をCSSで先行非表示にする。記事領域は非表示にしない。実機での効果は未確認。

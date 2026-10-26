@@ -160,7 +160,7 @@ function contentFixture(stored, options = {}) {
   const location = { href: options.url ?? "https://note.com/ruminar", assign: url => moves.push(["assign", url]), replace: url => moves.push(["replace", url]) };
   const c = context({
     location,
-    HikikomoriNoteUi: options.logoDetector ? { create:()=>undefined, isOfficialHeaderLogo:options.logoDetector } : undefined,
+    HikikomoriNoteUi: options.ui ?? (options.logoDetector ? { create:()=>undefined, isOfficialHeaderLogo:options.logoDetector } : undefined),
     document: {
       addEventListener: (name, fn) => documentEvents.set(name, fn), removeEventListener: name => documentEvents.delete(name),
       querySelectorAll: () => anchors.filter(anchor => anchor.isConnected && anchor.href)
@@ -179,7 +179,7 @@ function contentFixture(stored, options = {}) {
       isAvailable: () => !options.invalid,
       homeUrl: () => home,
       goBack: () => { const result = options.back?.(); if (result !== undefined) return result; if (options.backResult === false) return false; moves.push(["back"]); return true; },
-      load: async () => { if (options.loadError) throw new Error("read failed"); return {...settingsData(),...stored}; },
+      load: async () => { await options.loadGate; if (options.loadError) throw new Error("read failed"); return {...settingsData(),...stored}; },
       subscribe(fn) { subscriber = fn; return () => { subscriber = undefined; }; }
     }
   });
@@ -196,6 +196,12 @@ function contentFixture(stored, options = {}) {
     addAnchor, mutate: () => { if (!disconnected) mutation?.(); },
     tick: () => tick?.(), changed: value => subscriber?.(value) };
 }
+test("設定読込待ちでも親の先行準備とDOM監視を開始し、設定確認後の更新へ引き継ぐ",async()=>{
+ let resolve;const calls=[];const f=contentFixture({}, {url:'https://note.com/following',loadGate:new Promise(done=>{resolve=done;}),ui:{create:()=>({prepareSidebar:url=>calls.push(['prepare',url]),update:()=>calls.push(['update'])})}});
+ assert.deepEqual(calls,[['prepare','https://note.com/following']]);f.mutate();await flush();assert.equal(calls.filter(call=>call[0]==='prepare').length,2);
+ resolve();await flush();assert.equal(calls.at(-1)[0],'update');
+});
+
 test("noteロゴの通常クリックはSPA処理の前に専用ホームへ直行", async () => {
   const f = contentFixture(); await flush();
   const event = f.click();
