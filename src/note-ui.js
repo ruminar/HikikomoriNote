@@ -60,20 +60,21 @@
     const recommendations = new Set();
     const sidebarRoots = new Set();
     const rootClass = "hikikomori-note-navigation-root";
-    const gridClass = "lg:grid-cols-[202px_minmax(0,1fr)]";
+    const gridClasses = ["lg:grid-cols-[202px_minmax(0,1fr)]", "lg:grid-cols-[12.625rem_minmax(0,1fr)]"];
+    const isSidebarGrid = root => gridClasses.some(name => root.classList.contains(name));
     function prepareSidebar(url, settings) {
       if (disposed) return;
       const active = (!settings || (settings.enabled && !settings.legacyMode)) &&
         ["following", "tag", "search", "topic"].includes(core.pageKind(url)?.type);
       for (const root of sidebarRoots) {
-        if (!active || !root.isConnected || !root.classList.contains(gridClass)) {
+        if (!active || !root.isConnected || !isSidebarGrid(root)) {
           root.classList.remove(rootClass); sidebarRoots.delete(root);
         }
       }
       if (!active) return;
       // 急上昇navやasideの完成を待たず、SSRで先に現れるレイアウトの親へ印を付ける。
       for (const root of doc.querySelectorAll('div[class~="lg:grid"]')) {
-        if (!root.classList.contains("min-h-screen") || !root.classList.contains(gridClass) || root.closest("article")) continue;
+        if (!root.classList.contains("min-h-screen") || !isSidebarGrid(root) || root.closest("article")) continue;
         if (!root.classList.contains(rootClass)) root.classList.add(rootClass);
         sidebarRoots.add(root);
       }

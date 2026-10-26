@@ -112,3 +112,7 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 ## 0.2.1 SSR親ルートの先行制御（試験）
 
 利用者のJavaScript停止HTMLでは、3点のpy-4はmin-h-screen/lg:grid/lg:grid-cols-[202px_minmax(0,1fr)]の直下で、mainの兄弟。asideは別のhiddenなS:0内にあり、B:0位置への反映処理を伴う。したがってaside内のローダーだけを指定した以前の試験はこの初期ローダーに一致しない。今回は既存グリッド親へhikikomori-note-navigation-rootを付け、直下py-4とaside>div>div.flex.flex-col.gap-4をCSSで先行非表示にする。記事領域は非表示にしない。実機での効果は未確認。
+
+## 0.2.1 類似レイアウトへの展開
+
+未ログインで/hashtagは通常ホームへ、/hashtag/ComfyUIは/tag/ComfyUIへ転送された。タグの実DOMはmin-h-screen/lg:grid/lg:grid-cols-[12.625rem_minmax(0,1fr)]という親を使い、その下のdiv.hidden.lg:contentsを経て共通asideがある。aside自体は既存のsticky/w-[11.375rem]と急上昇navを維持。親認識へrem表記を追加し、CSSにラッパーを挟む経路を追加した。既存のpx表記・aside直下型も維持する。初回の先行制御は利用者より成功報告あり。今回追加した実レイアウトのちらつきの実拡張確認は別途必要。

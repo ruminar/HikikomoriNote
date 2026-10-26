@@ -175,6 +175,17 @@ test('先行ルートのクラスはOFF・重度・対象外・親の交換・�
  f.doc.root.append(layout);f.ui.prepareSidebar(url);f.ui.stop();assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),false);assert.equal(layout.classList.contains('min-h-screen'),true);
 });
 
+test('rem表記・lg:contentsラッパーを持つタグ等の共通レイアウトも先行制御する',()=>{
+ for(const path of ['/following','/hashtag/ComfyUI','/tag/ComfyUI','/search?q=%23ComfyUI&context=note','/topic/education_learning']){
+  const f=uiFixture('<div class="min-h-screen lg:grid lg:grid-cols-[12.625rem_minmax(0,1fr)]"><div class="hidden lg:contents"><div class="py-4"></div></div><main id="main-content"><div class="py-4"></div></main></div>');
+  const root=f.doc.root.children[0],wrapper=root.children[0],url='https://note.com'+path,settings=f.core.readSettings({...groups()});
+  f.ui.prepareSidebar(url);assert.equal(root.classList.contains('hikikomori-note-navigation-root'),true);
+  const aside=f.doc.createElement('aside');aside.className='sticky w-[11.375rem]';const outer=f.doc.createElement('div'),official=f.doc.createElement('div'),nav=f.doc.createElement('nav');official.className='flex flex-col gap-4';nav.setAttribute('aria-label','急上昇');official.append(nav);outer.append(official);aside.append(outer);wrapper.append(aside);
+  f.ui.update(settings,url);assert.equal(aside.children[0].hasAttribute('data-hikikomori-note-owned'),true);assert.equal(f.doc.querySelector('main').hasAttribute('data-hikikomori-note-menu-hidden'),false);
+  f.ui.update({...settings,enabled:false},url);assert.equal(root.classList.contains('hikikomori-note-navigation-root'),false);
+ }
+});
+
 test('お気に入りの#記事検索をハイライトし、SPAの検索語・検索対象変更で切り替える',()=>{
  const f=uiFixture(sidebarHtml),settings=f.core.readSettings({...groups(['るみなー先生','ComfyUI'])});
  const current=()=>f.doc.querySelector('aside').querySelector('[aria-current="page"]');

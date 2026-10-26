@@ -265,7 +265,7 @@ TLの上へ追加していた「設定画面を表示」は全画面から撤去
 
 ## 12. 自動テスト計画と実装時の検証
 
-79件の0.2.0テストを新保存形式に適合させ、グループ・移動・ロゴのブラウザバック等を追加した。現在の自動検証は124件。以下の計画には自動検証と別途必要な実機確認が含まれる。自動テストの成功を全項目の実機検証済みとは扱わない。
+79件の0.2.0テストを新保存形式に適合させ、グループ・移動・ロゴのブラウザバック等を追加した。現在の自動検証は125件。以下の計画には自動検証と別途必要な実機確認が含まれる。自動テストの成功を全項目の実機検証済みとは扱わない。
 
 ### 12.1 データ・背景処理
 
@@ -371,9 +371,9 @@ note.com/topic/の後に空でないパスがある画面（例：/topic/educati
 
 利用者提供のJavaScript停止時HTMLで、初期ローダーはaside内ではなく、min-h-screen・lg:grid・lg:grid-cols-[202px_minmax(0,1fr)]のグリッド直下にあることを確認した。mainもこのグリッド直下にあり、asideの内容は別のhidden領域から挿入される構造となっている。
 
-対象URLは従来のfollowing/tag/search/topic。完成したasideや急上昇navを待たず、上記3クラスを持つdivにhikikomori-note-navigation-rootを付与する。既存MutationObserverの開始を設定読込より前へ移し、設定待ちでも親の出現に対応する。初期準備では対象URLなら先行適用し、設定確認後は通常モードかつ拡張ONだけで維持する。OFF・重度・対象外・停止・親の切断/構造変更で独自クラスだけを除去する。設定未確認の間はOFFでも一時的に適用される。
+対象URLは従来のfollowing/tag/search/topic。完成したasideや急上昇navを待たず、min-h-screen・lg:gridに加え、幅指定がlg:grid-cols-[202px_minmax(0,1fr)]またはlg:grid-cols-[12.625rem_minmax(0,1fr)]のdivにhikikomori-note-navigation-rootを付与する。既存MutationObserverの開始を設定読込より前へ移し、設定待ちでも親の出現に対応する。初期準備では対象URLなら先行適用し、設定確認後は通常モードかつ拡張ONだけで維持する。OFF・重度・対象外・停止・親の切断/構造変更で独自クラスだけを除去する。設定未確認の間はOFFでも一時的に適用される。
 
-CSSは.root > div.py-4で左ローダーを、.root > aside > div > div.flex.flex-col.gap-4で公式メニューを隠す（.rootはhikikomori-note-navigation-root）。main内のローダーや記事、独自ナビゲーションはこの構造に一致しない。後から追加される子要素にもCSSが自動で適用される。独自メニューの作成と復元は既存の方式を維持し、未確認の別グリッドにはクラスを付けない。
+CSSは.root > div.py-4で左ローダーを、.root > aside > div > div.flex.flex-col.gap-4で公式メニューを隠す（.rootはhikikomori-note-navigation-root）。タグ画面等のdiv.hidden.lg:contentsが間に入る構造にも、.root > div[class~="lg:contents"] > div.py-4と.root > div[class~="lg:contents"] > aside > div > div.flex.flex-col.gap-4で対応する。main内のローダーや記事、独自ナビゲーションはこの構造に一致しない。後から追加される子要素にもCSSが自動で適用される。独自メニューの作成と復元は既存の方式を維持し、未確認の別グリッドにはクラスを付けない。
 
 公式メニューの取得通信は変更しない。独自タイマーや追加権限は導入しない。親がまだ見つからない場合や公式DOMが変わった場合のちらつき解消は保証せず、実機で初回・SPA・低速描画を確認して採否を決める試験実装とする。
 
@@ -385,3 +385,5 @@ CSSは.root > div.py-4で左ローダーを、.root > aside > div > div.flex.fle
 - [MDN: Event.stopImmediatePropagation](https://developer.mozilla.org/en-US/docs/Web/API/Event/stopImmediatePropagation)：後続リスナーの停止と、すでに実行した先行リスナーは取り消せないという設計上の限界。
 
 - [HTML Standard: Navigation API](https://html.spec.whatwg.org/dev/nav-history-apis.html)：直前が異なるオリジンならcanGoBackはfalseとなり、backの履歴移動も同一オリジンに限定される。
+
+/hashtag/タグ名と/tag/タグ名は元から同じtag種別として共通処理する。未ログインの実DOMで/hashtag/ComfyUIから/tag/ComfyUIへの転送、rem表記の親とlg:contentsラッパーを確認。/hashtag自体は通常ホームへ転送されたため、新しいタグ一覧種別は追加しない。
