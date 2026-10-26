@@ -17,7 +17,6 @@
     if (page?.type === "tag") return page.tag;
     if (page?.type !== "search") return null;
     const params = new URL(url).searchParams;
-    if (params.has("context") && params.get("context") !== "note") return null;
     const query = params.get("q");
     return query?.startsWith("#") ? query.slice(1) : null;
   }

@@ -186,13 +186,16 @@ test('rem表記・lg:contentsと検索のlg:blockラッパーでも共通レイ�
  }
 });
 
-test('お気に入りの#記事検索をハイライトし、SPAの検索語・検索対象変更で切り替える',()=>{
+test('お気に入りの#検索は全検索対象でハイライトを維持し、検索語の変更で切り替える',()=>{
  const f=uiFixture(sidebarHtml),settings=f.core.readSettings({...groups(['るみなー先生','ComfyUI'])});
  const current=()=>f.doc.querySelector('aside').querySelector('[aria-current="page"]');
  f.ui.update(settings,f.core.tagUrl('るみなー先生'));assert.equal(current().textContent,'# るみなー先生');
  f.ui.update(settings,f.core.tagUrl('ComfyUI'));assert.equal(current().textContent,'# ComfyUI');
  f.ui.update(settings,'https://note.com/search?q=%23ComfyUI&context=note&sort=popular');assert.equal(current().textContent,'# ComfyUI');
- for(const url of ['https://note.com/search?q=ComfyUI&context=note','https://note.com/search?q=%23ComfyUI&context=user','https://note.com/search?q=%23ComfyUI&context=magazine','https://note.com/search?q=%23ComfyUI%20%23AI&context=note','https://note.com/search?q=%23Other&context=note']){
+ for(const context of ['note','magazine','user','circle']){
+  f.ui.update(settings,`https://note.com/search?context=${context}&q=${encodeURIComponent('#るみなー先生')}`);assert.equal(current().textContent,'# るみなー先生');assert.equal(f.doc.querySelector('[data-tag-add]'),null);
+ }
+ for(const url of ['https://note.com/search?q=ComfyUI&context=note','https://note.com/search?q=ComfyUI&context=user','https://note.com/search?q=%23ComfyUI%20%23AI&context=note','https://note.com/search?q=%23Other&context=note']){
   f.ui.update(settings,url);assert.equal(current(),null);assert.equal(f.doc.querySelector('[data-tag-add]'),null);
  }
  f.ui.update(settings,'https://note.com/tag/ComfyUI');assert.equal(current().textContent,'# ComfyUI');
