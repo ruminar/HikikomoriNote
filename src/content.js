@@ -38,12 +38,10 @@
   async function logoBack() {
     if (logoBackPending) return;
     logoBackPending = true;
-    const before = location.href;
     try {
-      let moved = false;
-      try { moved = await platform.goBack() === true; } catch { /* API利用不可も専用ホームへ */ }
-      // 待機中に利用者が別ページへ移動・設定変更した場合は割り込まない。
-      if (!moved && location.href === before && enabled() && settings.noteLogoBrowserBack) location.assign(platform.homeUrl());
+      await platform.goBack();
+    } catch {
+      // 戻れない・API利用不可・失敗時は現在のページにとどまる。
     } finally { logoBackPending = false; }
   }
   const hiddenLinks = new Set();

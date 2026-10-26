@@ -265,11 +265,13 @@ test("ロゴ以外・修飾キー・非trusted・設定OFFではブラウザバ�
  await assert.rejects(controllerFixture().controller.save({noteLogoBrowserBack:'true'}));
 });
 
-test("ロゴで戻れない・API失敗時はフラグメントなしの専用ホームへ1回移動",async()=>{
- for(const options of [{backResult:false},{back(){throw Error('unsupported');}},{back:()=>Promise.reject(Error('failed'))}]){
-  const f=contentFixture({noteLogoBrowserBack:true},{logoDetector:()=>true,...options});await flush();
+test("ロゴで戻れない・API失敗時は現在ページにとどまり、次のクリックを再試行できる",async()=>{
+ for(const options of [{backResult:false},{back(){throw Error('unsupported');}},{back:()=>Promise.reject(Error('failed'))},{back:()=>Promise.resolve(false)}]){
+  let calls=0;
+  const f=contentFixture({noteLogoBrowserBack:true},{logoDetector:()=>true,back(){calls++;return calls===1?(options.back?options.back():false):true;}});await flush();
   const event=f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(event.defaultPrevented,true);assert.equal(event.stopped,true);await flush();
-  assert.deepEqual(f.moves,[['assign',f.home]]);assert.equal(f.moves[0][1].includes('#'),false);
+  assert.deepEqual(f.moves,[]);
+  const retry=f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(retry.defaultPrevented,true);await flush();assert.equal(calls,2);assert.deepEqual(f.moves,[]);
  }
 });
 
