@@ -15,6 +15,8 @@ a[data-hikikomori-note-dashboard-hidden] {
 [data-hikikomori-note-recommendations-hidden] { display: none !important; }
 [data-hikikomori-note-paid-hidden] { display: none !important; }
 [data-hikikomori-note-logo-settings-layout] { display: flex; align-items: center; gap: 8px; }
+a[data-hikikomori-note-logo-back-unavailable],
+a[data-hikikomori-note-logo-back-unavailable] * { cursor: default !important; }
 .hikikomori-note-header-settings {
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px;
   width: 32px; height: 32px; border-radius: 6px; color: inherit; text-decoration: none;

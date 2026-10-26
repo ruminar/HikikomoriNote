@@ -86,6 +86,26 @@
       }
     }
     const headerSettings = new Map();
+    const inactiveLogos = new Set();
+    const inactiveLogo = "data-hikikomori-note-logo-back-unavailable";
+    function syncLogoCursor(active) {
+      let canGoBack = false;
+      try { canGoBack = win.navigation?.canGoBack === true && typeof win.navigation.back === "function"; }
+      catch { /* 判定できない場合も戻れない状態として扱う。 */ }
+      for (const logo of inactiveLogos) {
+        if (!active || canGoBack || !isOfficialHeaderLogo(logo, currentUrl)) {
+          logo.removeAttribute(inactiveLogo); inactiveLogos.delete(logo);
+        }
+      }
+      if (!active || canGoBack) return;
+      for (const header of doc.querySelectorAll("header")) {
+        for (const logo of header.querySelectorAll("a[href]")) {
+          if (isOfficialHeaderLogo(logo, currentUrl) && !inactiveLogos.has(logo)) {
+            logo.setAttribute(inactiveLogo, ""); inactiveLogos.add(logo);
+          }
+        }
+      }
+    }
     const settingsLayout = "data-hikikomori-note-logo-settings-layout";
     function logoContainer(logo) {
       const parent = logo.parentElement;
@@ -378,6 +398,7 @@
       currentSettings = settings; currentUrl = url;
       syncSearchClear(settings.enabled);
       syncHeaderSettings(settings.enabled && settings.noteLogoBrowserBack);
+      syncLogoCursor(settings.enabled && settings.noteLogoBrowserBack);
       const page = core.pageKind(url);
       syncArticleFollowing(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
@@ -461,7 +482,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; syncHeaderSettings(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
+    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; syncHeaderSettings(false); syncLogoCursor(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();

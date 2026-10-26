@@ -390,6 +390,24 @@ test('管理画面ヘッダーの追加対応は対象パスと公式ロゴだ�
  }
 });
 
+test('ロゴ戻り先がない・API未対応なら矢印用属性を付け、履歴・設定・DOM変更で解除',()=>{
+ const marker='data-hikikomori-note-logo-back-unavailable';
+ for(const [html,url] of [[logoHeaderHtml,'https://note.com/search'],['<header><a href="/"><svg role="img" aria-label="note"></svg></a></header>','https://note.com/settings/account']]){
+  const f=uiFixture(html),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true});const logo=f.doc.querySelector('a');
+  f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),true);
+  const gear=f.doc.querySelector('[class="hikikomori-note-header-settings"]');assert.equal(gear.hasAttribute(marker),false);
+  f.win.navigation={canGoBack:true,back(){}};f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),false);
+  f.win.navigation.canGoBack=false;f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),true);
+  f.ui.update({...settings,legacyMode:true},url);assert.equal(logo.hasAttribute(marker),true);
+  for(const patch of [{enabled:false},{noteLogoBrowserBack:false}]){
+   f.ui.update({...settings,...patch},url);assert.equal(logo.hasAttribute(marker),false);f.ui.update(settings,url);
+  }
+  logo.remove();f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),false);
+  f.doc.querySelector('header').append(logo);f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),true);
+  f.ui.stop();assert.equal(logo.hasAttribute(marker),false);
+ }
+});
+
 test('記事のTL・作者に設定リンクを追加せず、ロゴ設定ONでも固定位置をずらさない',()=>{
  const f=authorFixture(),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true}),url='https://note.com/ruminar/n/n123';
  f.ui.update(settings,url);assert.equal(f.doc.querySelector('[class="hikikomori-note-article-settings"]'),null);
