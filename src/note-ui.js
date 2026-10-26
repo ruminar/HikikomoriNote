@@ -403,6 +403,7 @@
         const form = doc.createElement("form"); form.setAttribute("action", "https://note.com/search");
         form.setAttribute("method", "get"); form.setAttribute("role", "search"); form.className = "hikikomori-note-mobile-search";
         const input = doc.createElement("input"); input.setAttribute("type", "search"); input.setAttribute("name", "q");
+        input.setAttribute("autocomplete", "off");
         input.setAttribute("aria-label", "キーワードやクリエイターで検索"); input.setAttribute("placeholder", "キーワードやクリエイターで検索");
         const params = new URL(url).searchParams; input.value = core.pageKind(url)?.type === "search" ? params.get("q") || "" : "";
         for (const [name, value] of [["context", "note"], ["mode", "search"]]) {
