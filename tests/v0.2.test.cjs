@@ -365,7 +365,7 @@ test('狭幅の共通メニューはロゴ左のボタンで開閉し、広幅�
  aside.width=0;f.win.wide=false;f.ui.update(settings,url);assert.equal(panel().hidden,true);
 });
 
-test('TL専用のモバイル検索は公式欄に追従し、再描画で入力保持・他画面へのSPA移動で撤去',()=>{
+test('TL・タグのモバイル検索は公式欄に追従し、入力保持・対象外へのSPA移動で撤去',()=>{
  const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings(groups()),url='https://note.com/following';
  f.doc.querySelector('aside').width=0;f.win.wide=false;f.ui.update(settings,url);
  const panel=()=>f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');
@@ -379,7 +379,12 @@ test('TL専用のモバイル検索は公式欄に追従し、再描画で入力
  f.ui.update(settings,url);assert.equal(form(),null);
  f.win.getComputedStyle=e=>({display:e===wrapper?'none':'block'});f.ui.update(settings,url);assert.ok(form());
  f.win.getComputedStyle=()=>({display:'block'});wrapper.remove();f.ui.update(settings,url);assert.ok(form());
- for(const target of ['https://note.com/tag/AI','https://note.com/hashtag/AI','https://note.com/search?q=%23AI','https://note.com/topic/challenge']){
+ for(const target of ['https://note.com/tag/AI','https://note.com/hashtag/AI']){
+  f.ui.update(settings,target);assert.ok(form());assert.equal(form().querySelector('input[name="q"]').value,'');
+  f.doc.querySelector('header').prepend(wrapper);f.ui.update(settings,target);assert.equal(form(),null);
+  wrapper.remove();f.ui.update(settings,target);assert.ok(form());
+ }
+ for(const target of ['https://note.com/search?q=%23AI','https://note.com/topic/challenge']){
   f.ui.update(settings,target);assert.equal(form(),null);assert.ok(panel().querySelector('nav'));
   f.ui.update(settings,url);assert.ok(form());
  }

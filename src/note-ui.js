@@ -397,7 +397,7 @@
       }
       const header = mobile.logo.closest('header[data-header-state="navbar"]');
       const officialSearch = [...header.querySelectorAll('input[name="q"]')].some(input => !input.closest(`[${owned}]`) && visible(input));
-      const needsSearch = core.pageKind(url)?.type === "following" && !officialSearch;
+      const needsSearch = ["following", "tag"].includes(core.pageKind(url)?.type) && !officialSearch;
       if (!needsSearch && mobile.form) { mobile.form.remove(); mobile.form = undefined; }
       if (needsSearch && !mobile.form) {
         const form = doc.createElement("form"); form.setAttribute("action", "https://note.com/search");
