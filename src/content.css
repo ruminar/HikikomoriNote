@@ -1,8 +1,10 @@
 /* 自分で付けた属性のある導線だけを非表示にし、設定解除時は属性を外す。 */
 .hikikomori-note-navigation-root > div.py-4,
 .hikikomori-note-navigation-root > div[class~="lg:contents"] > div.py-4,
+.hikikomori-note-navigation-root > div[class~="hidden"][class~="lg:block"] > div.py-4,
 .hikikomori-note-navigation-root > aside > div > div.flex.flex-col.gap-4,
-.hikikomori-note-navigation-root > div[class~="lg:contents"] > aside > div > div.flex.flex-col.gap-4 {
+.hikikomori-note-navigation-root > div[class~="lg:contents"] > aside > div > div.flex.flex-col.gap-4,
+.hikikomori-note-navigation-root > div[class~="hidden"][class~="lg:block"] > aside > div > div.flex.flex-col.gap-4 {
   display: none !important;
 }
 a[data-hikikomori-note-dashboard-hidden] {

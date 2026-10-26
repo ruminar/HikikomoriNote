@@ -387,3 +387,5 @@ CSSは.root > div.py-4で左ローダーを、.root > aside > div > div.flex.fle
 - [HTML Standard: Navigation API](https://html.spec.whatwg.org/dev/nav-history-apis.html)：直前が異なるオリジンならcanGoBackはfalseとなり、backの履歴移動も同一オリジンに限定される。
 
 /hashtag/タグ名と/tag/タグ名は元から同じtag種別として共通処理する。未ログインの実DOMで/hashtag/ComfyUIから/tag/ComfyUIへの転送、rem表記の親とlg:contentsラッパーを確認。/hashtag自体は通常ホームへ転送されたため、新しいタグ一覧種別は追加しない。
+
+検索画面の実DOMではグリッド直下がdiv.hidden.lg:blockで、その中に共通asideがある。lg:contentsに加え、このラッパー内の左ローダーと公式メニューにもCSSを適用する。main内の検索フォームは対象外。

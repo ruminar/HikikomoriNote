@@ -2,7 +2,7 @@
 
 ## 0.2.1 — 開発中・未リリース
 
-- タグ等の共通左領域の先行制御をrem表記の親グリッドとlg:contentsラッパーへ対応。hashtag/tagの双方を含む既存対象画面で共通利用。
+- タグ等の共通左領域の先行制御をrem表記の親グリッド、lg:contentsおよび検索画面のhidden lg:blockラッパーへ対応。hashtag/tagの双方を含む既存対象画面で共通利用。
 
 - 試験：SSRの共通グリッド親にhikikomori-note-navigation-rootを先行付与し、左ローダーと後から挿入される公式メニューをCSSで非表示。設定読込前から既存のDOM監視を開始し、OFF・重度・対象外で解除。
 
