@@ -108,7 +108,7 @@
     const anchor = event.composedPath().find(node => node?.tagName === "A");
     if (!anchor || anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) return;
     if (settings.noteLogoBrowserBack && event.isTrusted === true && event.cancelable === true && core.isHome(anchor.href) &&
-        globalThis.HikikomoriNoteUi?.isOfficialHeaderLogo(anchor)) {
+        globalThis.HikikomoriNoteUi?.isOfficialHeaderLogo(anchor, location.href)) {
       event.preventDefault(); event.stopImmediatePropagation();
       void logoBack();
       return;

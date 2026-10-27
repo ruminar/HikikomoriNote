@@ -105,7 +105,19 @@ test('重度の初期表示はキャッチコピーだけ。設定から解除�
  assert.equal(n.get('panel-intro').hidden,true);
  assert.deepEqual(f.patches,[{legacyMode:false}]);assert.deepEqual(f.state.tagGroups[0].tags,['A']);assert.equal(n.get('nav-tags').hidden,false);
  f.changed({noteUserId:'other_user',enabled:false});assert.equal(n.get('profile').href,'https://note.com/other_user');assert.equal(n.get('page-links').hidden,false);
- f.changed({noteUserId:'',legacyMode:true});assert.equal(n.get('profile').getAttribute('href'),null);assert.equal(n.get('profile').getAttribute('aria-disabled'),'true');assert.equal(n.get('profile').hidden,false);
+ f.changed({noteUserId:'',legacyMode:true});assert.equal(n.get('profile').getAttribute('href'),'#settings');assert.equal(n.get('profile').getAttribute('aria-disabled'),null);assert.equal(n.get('profile').hidden,false);
+});
+
+test('未設定の自分のページから設定とユーザー名欄へ移り、保存せず入力途中の文字も保持',async()=>{
+ for(const state of [{noteUserId:''},{noteUserId:'',legacyMode:true},{noteUserId:'',enabled:false}]){
+  const f=homeFixture({state});await flush();const n=f.nodes,link=n.get('profile');
+  assert.equal(link.getAttribute('href'),'#settings');assert.equal(link.getAttribute('aria-disabled'),null);
+  n.get('note-user').value='入力途中';n.get('note-user').fire('input');
+  const event=link.fire('click');assert.equal(event.defaultPrevented,true);assert.equal(n.get('panel-settings').hidden,false);
+  assert.equal(n.get('nav-settings').getAttribute('aria-current'),'page');assert.equal(f.document.activeElement,n.get('note-user'));
+  assert.equal(n.get('note-user').value,'入力途中');assert.deepEqual(f.patches,[]);assert.deepEqual(f.moves,[]);
+  f.changed({noteUserId:'ruminar'});assert.equal(link.href,'https://note.com/ruminar');assert.equal(link.fire('click').defaultPrevented,undefined);
+ }
 });
 
 test('別タブの更新は編集中タグと既存設定の未保存入力を消さない',async()=>{
@@ -310,6 +322,29 @@ function authorFixture(){
  return f;
 }
 
+test('公式の固定作者プロフィールを追加ボタンの下へずらし、後挿入・作者なし・OFF等で復元',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/ruminar/n/n123';
+ const container=f.doc.createElement('div');container.className='fixed top-24 left-8 max-[1124px]:hidden print:hidden';container.setAttribute('style','padding: 0');
+ const profile=f.doc.createElement('div');profile.setAttribute('data-testid','side-creator-profile');profile.setAttribute('aria-hidden','false');
+ const follow=f.doc.createElement('button');profile.append(follow);container.append(profile);
+ f.ui.update(settings,url);f.doc.body.append(container);f.ui.update(settings,url);
+ const marker='data-hikikomori-note-side-profile-offset';assert.equal(container.getAttribute(marker),'author');assert.equal(follow.isConnected,true);assert.equal(profile.parentElement,container);assert.equal(container.getAttribute('style'),'padding: 0');
+ f.doc.getElementById('author-header').remove();f.ui.update(settings,url);assert.equal(container.getAttribute(marker),'following');
+ for(const patch of [{enabled:false},{legacyMode:true}]){f.ui.update({...settings,...patch},url);assert.equal(container.hasAttribute(marker),false);f.ui.update(settings,url);}
+ f.win.wide=false;f.ui.update(settings,url);assert.equal(container.hasAttribute(marker),false);f.win.wide=true;
+ f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(container.hasAttribute(marker),false);
+ f.ui.update(settings,url);container.remove();f.ui.update(settings,url);assert.equal(container.hasAttribute(marker),false);
+ f.doc.body.append(container);f.ui.update(settings,url);f.ui.stop();assert.equal(container.hasAttribute(marker),false);assert.equal(container.getAttribute('style'),'padding: 0');
+});
+
+test('公式プロフィールでも本文内や未確認の固定枠は移動しない',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/ruminar/n/n123';
+ for(const [parent,classes] of [[f.doc.getElementById('note-body'),'fixed top-24 left-8'],[f.doc.body,'fixed top-24 right-8']]){
+  const container=f.doc.createElement('div');container.className=classes;const profile=f.doc.createElement('div');profile.setAttribute('data-testid','side-creator-profile');container.append(profile);parent.append(container);
+  f.ui.update(settings,url);assert.equal(container.hasAttribute('data-hikikomori-note-side-profile-offset'),false);
+ }
+});
+
 test('プレビューURLはnoteの正しい記事パスだけを対象にし、通常記事の判定を広げない',()=>{
  const {core}=fixture();
  for(const url of ['https://note.com/preview/n123','https://note.com/preview/n123/?prev_access_key=test-only#body']){
@@ -412,10 +447,10 @@ test('モバイルの追加UIは重度・OFF・対象外・終了・ヘッダー
   f.ui.update(settings,url);assert.ok(toggle());f.ui.update({...settings,...patch},url);assert.equal(toggle(),null);
  }
  f.ui.update(settings,url);const gear=f.doc.querySelector('[class="hikikomori-note-header-settings"]');assert.equal(gear.href,'chrome-extension://self/home.html');
- const header=f.doc.querySelector('header');header.remove();f.ui.update(settings,url);assert.equal(toggle(),null);
+ const header=f.doc.querySelector('header'),logo=header.querySelector('a');assert.equal(logo.hasAttribute('data-hikikomori-note-logo-back-unavailable'),true);header.remove();f.ui.update(settings,url);assert.equal(toggle(),null);assert.equal(logo.hasAttribute('data-hikikomori-note-logo-back-unavailable'),false);
  f.doc.root.prepend(header);f.ui.update(settings,url);assert.ok(toggle());
  f.ui.update(settings,'https://note.com/settings/account');assert.equal(toggle(),null);
- f.ui.update(settings,url);f.ui.stop();assert.equal(toggle(),null);assert.equal(f.doc.querySelector('[class="hikikomori-note-mobile-panel"]'),null);
+ f.ui.update(settings,url);f.ui.stop();assert.equal(toggle(),null);assert.equal(f.doc.querySelector('[class="hikikomori-note-mobile-panel"]'),null);assert.equal(logo.hasAttribute('data-hikikomori-note-logo-back-unavailable'),false);assert.equal(header.querySelector('[class="hikikomori-note-header-settings"]'),null);
  const unknown=uiFixture('<header><a href="/"></a></header>'+sidebarHtml);unknown.win.wide=false;unknown.doc.querySelector('aside').width=0;
  unknown.ui.update(unknown.core.readSettings(groups()),url);assert.equal(unknown.doc.querySelector('button'),null);
 });
@@ -430,6 +465,50 @@ test('設定ONで公式ロゴ横に歯車を追加。重度・左メニューな
   f.ui.update(settings,'https://note.com/settings');assert.equal(gear.isConnected,true);assert.equal(parent.children.length,2);
   f.ui.update({...settings,noteLogoBrowserBack:false},'https://note.com/settings');assert.equal(gear.isConnected,false);assert.equal(parent.hasAttribute('data-hikikomori-note-logo-settings-layout'),false);
   f.ui.update(settings,'https://note.com/settings');f.ui.update({...settings,enabled:false},'https://note.com/settings');assert.equal(parent.children.length,1);
+ }
+});
+
+test('ダッシュボード・設定の本体と配下では管理ヘッダーロゴを認識し歯車を表示',()=>{
+ const logo='<a href="/"><svg role="img" aria-label="note"></svg></a>';
+ for(const html of ['<header>'+logo+'</header>','<header><div>'+logo+'</div></header>']){
+  for(const url of ['https://note.com/dashboard','https://note.com/dashboard/','https://note.com/dashboard/suggestions','https://note.com/dashboard/sales/report?year=2026','https://note.com/settings','https://note.com/settings/','https://note.com/settings/account','https://note.com/settings/account/notifications/','https://note.com/user_verification','https://note.com/user_verification/?test=1']){
+   const f=uiFixture(html),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true,legacyMode:true});
+   const anchor=f.doc.querySelector('a');assert.equal(f.isLogo(anchor,url),true);
+   f.ui.update(settings,url);const gear=f.doc.querySelector('[class="hikikomori-note-header-settings"]');assert.ok(gear);assert.equal(gear.href,'chrome-extension://self/home.html');
+   f.ui.update(settings,url);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-header-settings"]').length,1);
+   f.ui.update({...settings,noteLogoBrowserBack:false},url);assert.equal(gear.isConnected,false);
+   f.ui.update(settings,url);f.ui.update({...settings,enabled:false},url);assert.equal(f.doc.querySelector('[class="hikikomori-note-header-settings"]'),null);
+   f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(f.doc.querySelector('[class="hikikomori-note-header-settings"]'),null);
+  }
+ }
+});
+
+test('管理画面ヘッダーの追加対応は対象パスと公式ロゴだけで、本文・外部・類似パスを除外',()=>{
+ const html='<header><a href="/"><svg role="img" aria-label="note"></svg></a></header>';
+ for(const url of ['https://other.test/settings/account','https://note.com/dashboarding','https://note.com/settings-other/account','https://note.com/user_verification_other','https://note.com/user_verification/other','https://note.com/login','https://note.com/search']){
+  const f=uiFixture(html),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true});
+  assert.equal(f.isLogo(f.doc.querySelector('a'),url),false);f.ui.update(settings,url);assert.equal(f.doc.querySelector('[class="hikikomori-note-header-settings"]'),null);
+ }
+ for(const content of ['<article>'+html+'</article>',html.replace('aria-label="note"','aria-label="other"'),html.replace('href="/"','href="https://other.test/"')]){
+  const f=uiFixture(content);assert.equal(f.isLogo(f.doc.querySelector('a'),'https://note.com/settings/account'),false);
+ }
+});
+
+test('ロゴ戻り先がない・API未対応なら矢印用属性を付け、履歴・設定・DOM変更で解除',()=>{
+ const marker='data-hikikomori-note-logo-back-unavailable';
+ for(const [html,url] of [[logoHeaderHtml,'https://note.com/search'],['<header><a href="/"><svg role="img" aria-label="note"></svg></a></header>','https://note.com/settings/account']]){
+  const f=uiFixture(html),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true});const logo=f.doc.querySelector('a');
+  f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),true);
+  const gear=f.doc.querySelector('[class="hikikomori-note-header-settings"]');assert.equal(gear.hasAttribute(marker),false);
+  f.win.navigation={canGoBack:true,back(){}};f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),false);
+  f.win.navigation.canGoBack=false;f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),true);
+  f.ui.update({...settings,legacyMode:true},url);assert.equal(logo.hasAttribute(marker),true);
+  for(const patch of [{enabled:false},{noteLogoBrowserBack:false}]){
+   f.ui.update({...settings,...patch},url);assert.equal(logo.hasAttribute(marker),false);f.ui.update(settings,url);
+  }
+  logo.remove();f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),false);
+  f.doc.querySelector('header').append(logo);f.ui.update(settings,url);assert.equal(logo.hasAttribute(marker),true);
+  f.ui.stop();assert.equal(logo.hasAttribute(marker),false);
  }
 });
 

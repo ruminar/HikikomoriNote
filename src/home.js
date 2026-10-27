@@ -122,7 +122,7 @@
     const profile = core.profileUrl(state.noteUserId);
     byId("profile").textContent = profile ? `${state.noteUserId}のページ` : "自分のページ（未設定）";
     if (profile) { byId("profile").href = profile; byId("profile").removeAttribute("aria-disabled"); }
-    else { byId("profile").removeAttribute("href"); byId("profile").setAttribute("aria-disabled", "true"); }
+    else { byId("profile").setAttribute("href", "#settings"); byId("profile").removeAttribute("aria-disabled"); }
     byId("mode").textContent = state.enabled
       ? `拡張ON：通常ホームを専用ホームへ転送します。 ${state.legacyMode ? "重度ひきこもりモード" : "通常モード（ひとみしりモード）"}`
       : "拡張OFF：通常のnoteを利用できます。拡張アイコンからONへ戻せます。";
@@ -225,6 +225,12 @@
     selectView(visible[index], true);
   };
   byId("previous-page").onclick = () => platform.goBackUnrestricted();
+  byId("profile").onclick = event => {
+    if (state?.noteUserId) return;
+    event.preventDefault();
+    selectView("settings");
+    byId(byId("note-user").disabled ? "nav-settings" : "note-user").focus();
+  };
   byId("normal").onclick = () => { void perform(() => platform.save({ enabled: false }), { off: true }); };
   byId("retry").onclick = () => { void refresh(); };
   platform.subscribe(value => { revision++; show(value); });

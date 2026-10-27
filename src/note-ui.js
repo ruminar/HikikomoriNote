@@ -7,10 +7,17 @@
   const productHidden = "data-hikikomori-note-product-hidden";
   const recommendationsHidden = "data-hikikomori-note-recommendations-hidden";
   const productCard = '[data-aicn-thing-card="true"], [data-testid="aicn-thing-card"]';
-  function isOfficialHeaderLogo(anchor) {
+  function isManagementPage(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === "https://note.com" &&
+        (/^\/(?:dashboard|settings)(?:\/|$)/.test(parsed.pathname) || /^\/user_verification\/?$/.test(parsed.pathname));
+    } catch { return false; }
+  }
+  function isOfficialHeaderLogo(anchor, url) {
     return anchor.isConnected && core.isHome(anchor.href) &&
       !anchor.closest("article") && !anchor.closest('[id="note-body"]') && !anchor.closest(`[${owned}]`) &&
-      Boolean(anchor.closest('header[data-header-state="navbar"]')) &&
+      Boolean(anchor.closest('header[data-header-state="navbar"]') || (isManagementPage(url) && anchor.closest("header"))) &&
       [...anchor.querySelectorAll('svg[aria-label="note"]')].some(svg => svg.getAttribute("role") === "img");
   }
   function selectedTag(page, url) {
@@ -79,10 +86,30 @@
       }
     }
     const headerSettings = new Map();
+    const inactiveLogos = new Set();
+    const inactiveLogo = "data-hikikomori-note-logo-back-unavailable";
+    function syncLogoCursor(active) {
+      let canGoBack = false;
+      try { canGoBack = win.navigation?.canGoBack === true && typeof win.navigation.back === "function"; }
+      catch { /* 判定できない場合も戻れない状態として扱う。 */ }
+      for (const logo of inactiveLogos) {
+        if (!active || canGoBack || !isOfficialHeaderLogo(logo, currentUrl)) {
+          logo.removeAttribute(inactiveLogo); inactiveLogos.delete(logo);
+        }
+      }
+      if (!active || canGoBack) return;
+      for (const header of doc.querySelectorAll("header")) {
+        for (const logo of header.querySelectorAll("a[href]")) {
+          if (isOfficialHeaderLogo(logo, currentUrl) && !inactiveLogos.has(logo)) {
+            logo.setAttribute(inactiveLogo, ""); inactiveLogos.add(logo);
+          }
+        }
+      }
+    }
     const settingsLayout = "data-hikikomori-note-logo-settings-layout";
     function logoContainer(logo) {
       const parent = logo.parentElement;
-      return isOfficialHeaderLogo(logo) && parent?.tagName === "DIV" &&
+      return isOfficialHeaderLogo(logo, currentUrl) && (parent?.tagName === "DIV" || (isManagementPage(currentUrl) && parent?.tagName === "HEADER")) &&
         [...parent.children].filter(child => !child.hasAttribute(owned)).length === 1 ? parent : null;
     }
     function syncHeaderSettings(active) {
@@ -92,7 +119,7 @@
         }
       }
       if (!active || !actions.settingsUrl) return;
-      for (const header of doc.querySelectorAll('header[data-header-state="navbar"]')) {
+      for (const header of doc.querySelectorAll("header")) {
         for (const logo of header.querySelectorAll('a[href]')) {
           const parent = logoContainer(logo);
           if (!parent || headerSettings.has(logo)) continue;
@@ -235,6 +262,23 @@
     function clearArticleAuthor() {
       articleAuthor?.remove(); articleAuthor = undefined; authorSignature = undefined;
     }
+    const sideProfiles = new Set();
+    const sideProfileOffset = "data-hikikomori-note-side-profile-offset";
+    function syncSideProfiles(active) {
+      const current = new Set();
+      if (active) {
+        for (const profile of doc.querySelectorAll('[data-testid="side-creator-profile"]')) {
+          const container = profile.parentElement;
+          if (profile.closest("article") || profile.closest('[id="note-body"]') ||
+              container?.tagName !== "DIV" || !["fixed", "top-24", "left-8"].every(name => container.classList.contains(name))) continue;
+          const offset = articleAuthor?.isConnected ? "author" : "following";
+          if (container.getAttribute(sideProfileOffset) !== offset) container.setAttribute(sideProfileOffset, offset);
+          current.add(container);
+        }
+      }
+      for (const container of sideProfiles) if (!current.has(container)) container.removeAttribute(sideProfileOffset);
+      sideProfiles.clear(); for (const container of current) sideProfiles.add(container);
+    }
     function syncArticleAuthor(article, url) {
       const preview = core.isPreviewArticle(url);
       let profileUrl = preview ? null : core.profileUrl(new URL(url).pathname.split("/")[1]);
@@ -287,7 +331,7 @@
       const show = settings.enabled && !settings.legacyMode && (core.isArticle(url) || core.isPreviewArticle(url)) &&
         win.matchMedia("(min-width: 1100px)").matches && article && visible(article) &&
         article.getBoundingClientRect().left >= 228 && doc.body;
-      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); return; }
+      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); syncSideProfiles(false); return; }
       if (!articleFollowing?.isConnected) {
         articleFollowing = doc.createElement("a");
         articleFollowing.setAttribute(owned, "");
@@ -297,6 +341,7 @@
         doc.body.append(articleFollowing);
       }
       syncArticleAuthor(article, url);
+      syncSideProfiles(true);
     }
     function isRecommendations(element) {
       if (element.tagName !== "DIV" || !element.classList.contains("pt-6") ||
@@ -374,7 +419,7 @@
       if (!mobile) {
         const logo = [...doc.querySelectorAll('header[data-header-state="navbar"]')]
           .flatMap(header => [...header.querySelectorAll('a[href]')])
-          .find(a => isOfficialHeaderLogo(a) && visible(a) && logoContainer(a));
+          .find(a => isOfficialHeaderLogo(a, currentUrl) && visible(a) && logoContainer(a));
         if (!logo) return null;
         const header = logo.closest('header[data-header-state="navbar"]'), parent = logo.parentElement;
         const panel = doc.createElement("div"); panel.setAttribute(owned, ""); panel.className = "hikikomori-note-mobile-panel";
@@ -435,6 +480,7 @@
       currentSettings = settings; currentUrl = url;
       syncSearchClear(settings.enabled);
       syncHeaderSettings(settings.enabled && settings.noteLogoBrowserBack);
+      syncLogoCursor(settings.enabled && settings.noteLogoBrowserBack);
       const page = core.pageKind(url);
       syncArticleFollowing(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
@@ -523,7 +569,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; removeMobile(); syncHeaderSettings(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
+    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; removeMobile(); syncHeaderSettings(false); syncLogoCursor(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); syncSideProfiles(false); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();

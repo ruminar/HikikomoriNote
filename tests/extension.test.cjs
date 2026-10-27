@@ -440,6 +440,9 @@ test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホ�
   assert.deepEqual(m.content_scripts[0].css, ["src/content.css"]);
   assert.equal(source("src/content.css").includes("> body"), false);
   for (const file of [m.background.service_worker, ...m.content_scripts[0].js, ...m.content_scripts[0].css, ...Object.values(m.icons), "home.html"]) assert.ok(fs.existsSync(path.join(root, file)));
-  for (const match of source("home.html").matchAll(/(?:src|href)="([^"]+)"/g)) if (!match[1].startsWith("https://")) assert.ok(fs.existsSync(path.join(root, match[1])));
+  for (const match of source("home.html").matchAll(/(?:src|href)="([^"]+)"/g)) {
+    if (match[1].startsWith("#")) assert.ok(source("home.html").includes(`id="${match[1].slice(1)}"`));
+    else if (!match[1].startsWith("https://")) assert.ok(fs.existsSync(path.join(root, match[1])));
+  }
   assert.equal(/<script[^>]*>[^<]+<\/script>/.test(source("home.html")), false);
 });
