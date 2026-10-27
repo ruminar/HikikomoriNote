@@ -310,6 +310,29 @@ function authorFixture(){
  return f;
 }
 
+test('公式の固定作者プロフィールを追加ボタンの下へずらし、後挿入・作者なし・OFF等で復元',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/ruminar/n/n123';
+ const container=f.doc.createElement('div');container.className='fixed top-24 left-8 max-[1124px]:hidden print:hidden';container.setAttribute('style','padding: 0');
+ const profile=f.doc.createElement('div');profile.setAttribute('data-testid','side-creator-profile');profile.setAttribute('aria-hidden','false');
+ const follow=f.doc.createElement('button');profile.append(follow);container.append(profile);
+ f.ui.update(settings,url);f.doc.body.append(container);f.ui.update(settings,url);
+ const marker='data-hikikomori-note-side-profile-offset';assert.equal(container.getAttribute(marker),'author');assert.equal(follow.isConnected,true);assert.equal(profile.parentElement,container);assert.equal(container.getAttribute('style'),'padding: 0');
+ f.doc.getElementById('author-header').remove();f.ui.update(settings,url);assert.equal(container.getAttribute(marker),'following');
+ for(const patch of [{enabled:false},{legacyMode:true}]){f.ui.update({...settings,...patch},url);assert.equal(container.hasAttribute(marker),false);f.ui.update(settings,url);}
+ f.win.wide=false;f.ui.update(settings,url);assert.equal(container.hasAttribute(marker),false);f.win.wide=true;
+ f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(container.hasAttribute(marker),false);
+ f.ui.update(settings,url);container.remove();f.ui.update(settings,url);assert.equal(container.hasAttribute(marker),false);
+ f.doc.body.append(container);f.ui.update(settings,url);f.ui.stop();assert.equal(container.hasAttribute(marker),false);assert.equal(container.getAttribute('style'),'padding: 0');
+});
+
+test('公式プロフィールでも本文内や未確認の固定枠は移動しない',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/ruminar/n/n123';
+ for(const [parent,classes] of [[f.doc.getElementById('note-body'),'fixed top-24 left-8'],[f.doc.body,'fixed top-24 right-8']]){
+  const container=f.doc.createElement('div');container.className=classes;const profile=f.doc.createElement('div');profile.setAttribute('data-testid','side-creator-profile');container.append(profile);parent.append(container);
+  f.ui.update(settings,url);assert.equal(container.hasAttribute('data-hikikomori-note-side-profile-offset'),false);
+ }
+});
+
 test('プレビューURLはnoteの正しい記事パスだけを対象にし、通常記事の判定を広げない',()=>{
  const {core}=fixture();
  for(const url of ['https://note.com/preview/n123','https://note.com/preview/n123/?prev_access_key=test-only#body']){

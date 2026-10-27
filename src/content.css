@@ -49,6 +49,12 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-article-author { top: 120px; display: flex; align-items: center; gap: 8px; text-align: left; }
 .hikikomori-note-article-author img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .hikikomori-note-article-author span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+[data-hikikomori-note-side-profile-offset="author"] {
+  top: 184px !important; max-height: calc(100vh - 200px); overflow-y: auto;
+}
+[data-hikikomori-note-side-profile-offset="following"] {
+  top: 124px !important; max-height: calc(100vh - 140px); overflow-y: auto;
+}
 @media (max-width: 1099px) { .hikikomori-note-article-following, .hikikomori-note-article-author { display: none; } }
 .hikikomori-note-navigation { margin: 0 0 16px; color: inherit; font: inherit; overflow-wrap: anywhere; }
 .hikikomori-note-navigation ul { list-style: none; padding: 0; margin: 0; }

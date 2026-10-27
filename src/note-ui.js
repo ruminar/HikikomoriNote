@@ -262,6 +262,23 @@
     function clearArticleAuthor() {
       articleAuthor?.remove(); articleAuthor = undefined; authorSignature = undefined;
     }
+    const sideProfiles = new Set();
+    const sideProfileOffset = "data-hikikomori-note-side-profile-offset";
+    function syncSideProfiles(active) {
+      const current = new Set();
+      if (active) {
+        for (const profile of doc.querySelectorAll('[data-testid="side-creator-profile"]')) {
+          const container = profile.parentElement;
+          if (profile.closest("article") || profile.closest('[id="note-body"]') ||
+              container?.tagName !== "DIV" || !["fixed", "top-24", "left-8"].every(name => container.classList.contains(name))) continue;
+          const offset = articleAuthor?.isConnected ? "author" : "following";
+          if (container.getAttribute(sideProfileOffset) !== offset) container.setAttribute(sideProfileOffset, offset);
+          current.add(container);
+        }
+      }
+      for (const container of sideProfiles) if (!current.has(container)) container.removeAttribute(sideProfileOffset);
+      sideProfiles.clear(); for (const container of current) sideProfiles.add(container);
+    }
     function syncArticleAuthor(article, url) {
       const preview = core.isPreviewArticle(url);
       let profileUrl = preview ? null : core.profileUrl(new URL(url).pathname.split("/")[1]);
@@ -314,7 +331,7 @@
       const show = settings.enabled && !settings.legacyMode && (core.isArticle(url) || core.isPreviewArticle(url)) &&
         win.matchMedia("(min-width: 1100px)").matches && article && visible(article) &&
         article.getBoundingClientRect().left >= 228 && doc.body;
-      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); return; }
+      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); syncSideProfiles(false); return; }
       if (!articleFollowing?.isConnected) {
         articleFollowing = doc.createElement("a");
         articleFollowing.setAttribute(owned, "");
@@ -324,6 +341,7 @@
         doc.body.append(articleFollowing);
       }
       syncArticleAuthor(article, url);
+      syncSideProfiles(true);
     }
     function isRecommendations(element) {
       if (element.tagName !== "DIV" || !element.classList.contains("pt-6") ||
@@ -482,7 +500,7 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; syncHeaderSettings(false); syncLogoCursor(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
+    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; syncHeaderSettings(false); syncLogoCursor(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); syncSideProfiles(false); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();
