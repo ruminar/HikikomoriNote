@@ -105,7 +105,19 @@ test('重度の初期表示はキャッチコピーだけ。設定から解除�
  assert.equal(n.get('panel-intro').hidden,true);
  assert.deepEqual(f.patches,[{legacyMode:false}]);assert.deepEqual(f.state.tagGroups[0].tags,['A']);assert.equal(n.get('nav-tags').hidden,false);
  f.changed({noteUserId:'other_user',enabled:false});assert.equal(n.get('profile').href,'https://note.com/other_user');assert.equal(n.get('page-links').hidden,false);
- f.changed({noteUserId:'',legacyMode:true});assert.equal(n.get('profile').getAttribute('href'),null);assert.equal(n.get('profile').getAttribute('aria-disabled'),'true');assert.equal(n.get('profile').hidden,false);
+ f.changed({noteUserId:'',legacyMode:true});assert.equal(n.get('profile').getAttribute('href'),'#settings');assert.equal(n.get('profile').getAttribute('aria-disabled'),null);assert.equal(n.get('profile').hidden,false);
+});
+
+test('未設定の自分のページから設定とユーザー名欄へ移り、保存せず入力途中の文字も保持',async()=>{
+ for(const state of [{noteUserId:''},{noteUserId:'',legacyMode:true},{noteUserId:'',enabled:false}]){
+  const f=homeFixture({state});await flush();const n=f.nodes,link=n.get('profile');
+  assert.equal(link.getAttribute('href'),'#settings');assert.equal(link.getAttribute('aria-disabled'),null);
+  n.get('note-user').value='入力途中';n.get('note-user').fire('input');
+  const event=link.fire('click');assert.equal(event.defaultPrevented,true);assert.equal(n.get('panel-settings').hidden,false);
+  assert.equal(n.get('nav-settings').getAttribute('aria-current'),'page');assert.equal(f.document.activeElement,n.get('note-user'));
+  assert.equal(n.get('note-user').value,'入力途中');assert.deepEqual(f.patches,[]);assert.deepEqual(f.moves,[]);
+  f.changed({noteUserId:'ruminar'});assert.equal(link.href,'https://note.com/ruminar');assert.equal(link.fire('click').defaultPrevented,undefined);
+ }
 });
 
 test('別タブの更新は編集中タグと既存設定の未保存入力を消さない',async()=>{
