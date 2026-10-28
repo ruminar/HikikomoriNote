@@ -992,3 +992,22 @@ test('チップ枠の後挿入・構造変更に追従し、本文や不明な�
   const other=tipFixture(),wrapper=other.doc.root.children[0];change(other);other.ui.update(settings,url);assert.equal(wrapper.hasAttribute(marker),false);assert.equal(other.doc.querySelector('section').hasAttribute(marker),false);
  }
 });
+
+test('おすすめが未挿入でも記事の親へ先行クラスを付け、OFF・離脱・親の差し替え・停止で除去',()=>{
+ const f=uiFixture('<div id="article-root"><article id="note-article"><div id="note-body"></div></article></div>');
+ const settings=f.core.readSettings({...groups(),hideArticleRecommendations:true}),url='https://note.com/ruminar/n/n123',root=f.doc.getElementById('article-root'),marker='hikikomori-note-recommendations-root';
+ f.ui.update(settings,url);assert.equal(root.classList.contains(marker),true);assert.equal(f.doc.getElementById('note-body').classList.contains(marker),false);
+ f.ui.update({...settings,legacyMode:true},url);assert.equal(root.classList.contains(marker),true);
+ for(const patch of [{enabled:false},{hideArticleRecommendations:false}]){f.ui.update({...settings,...patch},url);assert.equal(root.classList.contains(marker),false);f.ui.update(settings,url);}
+ f.ui.update(settings,'https://note.com/search');assert.equal(root.classList.contains(marker),false);f.ui.update(settings,url);
+ const next=f.doc.createElement('div');next.append(f.doc.getElementById('note-article'));f.doc.root.append(next);f.ui.update(settings,url);assert.equal(root.classList.contains(marker),false);assert.equal(next.classList.contains(marker),true);
+ f.ui.stop();assert.equal(next.classList.contains(marker),false);
+});
+test('ラベルなしの新しいおすすめasideも隠し、本文・コメントや未知のasideは維持',()=>{
+ const f=uiFixture('<div class="pt-6"><div><h2></h2></div><aside class="p-8" aria-busy="true"></aside></div>');
+ const section=f.doc.root.children[0],heading=f.doc.querySelector('h2'),aside=f.doc.querySelector('aside'),settings=f.core.readSettings({...groups(),hideArticleRecommendations:true}),url='https://note.com/ruminar/n/n123';
+ heading.textContent='あなたへのおすすめ';f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),true);
+ aside.setAttribute('aria-busy','false');f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),true);
+ aside.className='unknown';f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),false);
+ heading.textContent='コメント';aside.className='p-8';f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),false);
+});

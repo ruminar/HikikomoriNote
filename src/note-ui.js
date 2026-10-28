@@ -360,9 +360,19 @@
       const headings = [...element.querySelectorAll("h2")];
       return title.tagName === "DIV" && title.children.length === 1 && headings.length === 1 &&
         title.children[0] === headings[0] && headings[0].textContent.trim() === "あなたへのおすすめ" &&
-        list.tagName === "ASIDE" && list.getAttribute("aria-label") === "記事";
+        list.tagName === "ASIDE" && (list.getAttribute("aria-label") === "記事" ||
+          (list.classList.contains("p-8") && ["true", "false"].includes(list.getAttribute("aria-busy"))));
     }
+    const recommendationRoots = new Set();
+    const recommendationRoot = "hikikomori-note-recommendations-root";
     function syncRecommendations(active) {
+      const article = doc.querySelector('article[id="note-article"]');
+      const root = article?.parentElement;
+      const nextRoot = active && root?.tagName === "DIV" && !root.closest("article") && !root.closest('[id="note-body"]') ? root : null;
+      for (const previous of recommendationRoots) {
+        if (previous !== nextRoot || !previous.isConnected) { previous.classList.remove(recommendationRoot); recommendationRoots.delete(previous); }
+      }
+      if (nextRoot && !recommendationRoots.has(nextRoot)) { nextRoot.classList.add(recommendationRoot); recommendationRoots.add(nextRoot); }
       for (const element of recommendations) {
         if (!active || !element.isConnected || !isRecommendations(element)) {
           element.removeAttribute(recommendationsHidden); recommendations.delete(element);
