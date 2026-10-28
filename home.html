@@ -20,6 +20,7 @@
         <nav id="home-menu" aria-label="専用ホーム" hidden>
           <button type="button" id="nav-tags" aria-controls="panel-tags">お気に入りタグ</button>
           <button type="button" id="nav-settings" aria-controls="panel-settings">設定</button>
+          <button type="button" id="nav-transfer" aria-controls="panel-transfer">設定の移行</button>
         </nav>
         <div id="page-links" class="page-links" hidden>
           <button id="previous-page" type="button" class="secondary">前の画面に戻る</button>
@@ -72,6 +73,24 @@
           <hr>
           <p class="muted">通常のnoteを表示すると、ホーム転送・ダッシュボード制限・おすすめ欄の非表示を解除します。保存済みの設定は保持します。</p>
           <button id="normal" class="secondary" type="button" disabled>通常のnoteを表示（拡張OFF）</button>
+        </section>
+        <section id="panel-transfer" aria-labelledby="transfer-heading" hidden>
+          <h2 id="transfer-heading">設定の書き出しと読み込み</h2>
+          <p>設定をJSON形式で別のブラウザや端末に持ち運べます。</p>
+          <div class="settings-actions">
+            <button id="export-settings" type="button" disabled>設定の書き出し</button>
+            <button id="clear-settings-json" class="secondary" type="button" disabled>クリア</button>
+          </div>
+          <p class="muted">保存済みの設定を書き出します。未保存の入力は含みません。</p>
+          <label for="settings-json">設定JSON</label>
+          <textarea id="settings-json" rows="12" maxlength="1048576" spellcheck="false" autocomplete="off" aria-describedby="transfer-validation" placeholder="ここに設定JSONを貼り付けてください。書き出し時もここに表示されます。"></textarea>
+          <p id="transfer-validation" class="muted" role="status">設定JSONを入力してください。</p>
+          <div class="settings-actions">
+            <button id="copy-settings" class="secondary" type="button" disabled>コピー</button>
+            <button id="import-settings" type="button" disabled>設定の読み込み</button>
+          </div>
+          <p id="transfer-status" class="muted" role="status" aria-live="polite"></p>
+          <p class="muted">読み込みは、拡張のON/OFF・ユーザー名・表示設定・4グループのタグをすべて置き換えます。JSONはnoteの下書き記事などへ手動で貼り付けて保存できます。</p>
         </section>
       </div>
     </div>

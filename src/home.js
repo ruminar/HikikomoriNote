@@ -3,11 +3,34 @@
   const core = globalThis.HikikomoriNote;
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
-  const views = ["tags", "settings"];
+  const views = ["tags", "settings", "transfer"];
   const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", legacyMode: "legacy-mode" };
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();
+  let copying = false, validatedText, parsedImport;
+  function transferControls() {
+    const text = byId("settings-json").value;
+    if (text !== validatedText) {
+      validatedText = text; parsedImport = undefined;
+      let message = "設定JSONを入力してください。";
+      if (text.trim()) {
+        try {
+          parsedImport = core.parseSettingsExport(text);
+          message = `読み込み可能です。4グループ・タグ${parsedImport.tagGroups.reduce((total, group) => total + group.tags.length, 0)}件。`;
+        } catch (error) { message = error.message; }
+      }
+      byId("transfer-validation").textContent = message;
+    }
+    let healthy = false;
+    try { if (state) { core.settingsToken(state); healthy = true; } } catch { /* 不正な保存値を正常な書き出しとして扱わない。 */ }
+    const blocked = !healthy || busy || uncertain || copying;
+    byId("export-settings").disabled = blocked;
+    byId("import-settings").disabled = blocked || !parsedImport;
+    byId("copy-settings").disabled = busy || copying || !text.trim();
+    byId("clear-settings-json").disabled = busy || copying || !text.length;
+    byId("settings-json").disabled = busy && ["import", "export"].includes(pendingState);
+  }
   let state, selected = location.hash === "#settings" ? "settings" : "tags", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectView(name, focus = false) {
     if (!state && name !== "settings") return;
@@ -25,17 +48,19 @@
     const blocked = !state || busy || uncertain;
     const tagBlocked = blocked || state?.legacyMode || Boolean(state?.tagWarning) || Boolean(state?.groupSelectionInvalid);
     for (const id of ["normal", "save"]) byId(id).disabled = blocked;
-    for (const id of Object.values(fields)) byId(id).disabled = !state || uncertain || (busy && pendingState === "settings");
-    byId("tag-input").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning);
+    for (const id of Object.values(fields)) byId(id).disabled = !state || uncertain || (busy && ["settings", "import"].includes(pendingState));
+    byId("tag-input").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning) || (busy && pendingState === "import");
     byId("add-tag").disabled = tagBlocked;
-    byId("group-name").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning);
+    byId("group-name").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning) || (busy && pendingState === "import");
     byId("save-group-name").disabled = tagBlocked;
     for (const id of ["edit-groups"]) byId(id).querySelectorAll("button").forEach(button => { button.disabled = blocked || state?.legacyMode || Boolean(state?.tagWarning); });
     byId("edit-tags").querySelectorAll("button").forEach(button => { button.disabled = tagBlocked || button.dataset.edge === "true"; });
     for (const row of byId("edit-tags").children) row.draggable = !tagBlocked;
     byId("edit-tags").querySelectorAll("select").forEach(select => { select.disabled = tagBlocked; });
     byId("retry").disabled = busy;
+    byId("nav-transfer").disabled = !state;
     byId("edit-tags").setAttribute("aria-busy", String(busy));
+    transferControls();
   }
   function renderTags() {
     const editor = byId("edit-tags");
@@ -158,7 +183,10 @@
     byId("status").textContent = "保存しています…";
     try {
       const result = await task();
-      if (options.kind === "settings") dirty.clear();
+      if (options.kind === "settings" || options.kind === "import") dirty.clear();
+      if (options.kind === "import") {
+        drafts.clear(); dragTag = null; byId("tag-input").value = "";
+      }
       if (options.addInput !== undefined) {
         const savedDraft = draft(options.groupId);
         if (state.selectedTagGroupId === options.groupId && byId("tag-input").value === options.addInput) byId("tag-input").value = "";
@@ -167,12 +195,14 @@
       if (options.rename && draft(options.rename.groupId).name === options.rename.name) draft(options.rename.groupId).nameDirty = false;
       show(before === revision ? result : state);
       byId("status").textContent = "保存しました。";
+      if (options.kind === "import") byId("transfer-status").textContent = "設定を読み込みました。各画面へ反映しました。";
       if (options.off) location.assign("https://note.com/");
       if (options.focusTagInput && !state.legacyMode) byId("tag-input").focus();
       if (options.focusGroup) byId(options.focusGroup[0]).querySelector(`[data-group-id="${options.focusGroup[1]}"]`)?.focus();
     } catch (error) {
       uncertain = error.code === "UNCONFIRMED";
       byId("status").textContent = `処理できませんでした。${error.message}`;
+      if (options.kind === "import") byId("transfer-status").textContent = `読み込みを完了できませんでした。${error.message}`;
       if (uncertain) selectView("settings", true);
       if (["CONFLICT", "LEGACY_MODE", "INVALID_TAGS"].includes(error.code)) {
         try { show(await platform.getState()); } catch { uncertain = true; }
@@ -215,7 +245,7 @@
   };
   for (const name of views) byId(`nav-${name}`).onclick = () => selectView(name);
   byId("home-menu").onkeydown = event => {
-    const visible = state?.legacyMode || !state ? ["settings"] : views;
+    const visible = !state ? ["settings"] : state.legacyMode ? ["settings", "transfer"] : views;
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     let index = visible.indexOf(selected);
@@ -233,6 +263,45 @@
   };
   byId("normal").onclick = () => { void perform(() => platform.save({ enabled: false }), { off: true }); };
   byId("retry").onclick = () => { void refresh(); };
+  byId("settings-json").oninput = () => { byId("transfer-status").textContent = ""; transferControls(); };
+  byId("clear-settings-json").onclick = () => {
+    if (byId("clear-settings-json").disabled) return;
+    byId("settings-json").value = "";
+    byId("transfer-status").textContent = "";
+    transferControls();
+    byId("settings-json").focus();
+  };
+  byId("export-settings").onclick = async () => {
+    if (byId("export-settings").disabled) return;
+    if (byId("settings-json").value && !confirm("テキストエリアの内容を、保存済み設定のJSONで置き換えますか？")) return;
+    busy = true; pendingState = "export"; controls();
+    const before = revision;
+    try {
+      const saved = await platform.getState();
+      if (before === revision) show(saved);
+      const json = core.exportSettings(before === revision ? saved : state);
+      core.parseSettingsExport(json);
+      byId("settings-json").value = json;
+      byId("transfer-status").textContent = "JSONを表示しました。「コピー」またはテキストの選択でコピーして保存してください。";
+    } catch (error) { byId("transfer-status").textContent = `書き出せませんでした。${error.message}`; }
+    finally { busy = false; pendingState = false; controls(); }
+  };
+  byId("copy-settings").onclick = async () => {
+    if (byId("copy-settings").disabled) return;
+    copying = true; transferControls();
+    try {
+      await navigator.clipboard.writeText(byId("settings-json").value);
+      byId("transfer-status").textContent = "設定をクリップボードにコピーしました。移行先の「設定の移行」に貼り付けるか、テキストファイルやnoteの下書きなどに保存してください。";
+    } catch { byId("transfer-status").textContent = "コピーできませんでした。テキストエリアから手動でコピーしてください。"; }
+    finally { copying = false; transferControls(); }
+  };
+  byId("import-settings").onclick = () => {
+    transferControls();
+    if (byId("import-settings").disabled) return;
+    const json = byId("settings-json").value, expectedToken = core.settingsToken(state);
+    if (!confirm("現在の設定とお気に入りタグをすべて置き換えます。未保存の入力も破棄します。読み込みますか？")) return;
+    void perform(() => platform.importSettings({ json, expectedToken }), { kind: "import" });
+  };
   platform.subscribe(value => { revision++; show(value); });
   void refresh();
 })();

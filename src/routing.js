@@ -74,6 +74,22 @@
         }
         return core.readSettings(storedValue(raw, next));
       }),
+      importSettings: patch => run(async () => {
+        if (!patch || Object.keys(patch).length !== 2 || typeof patch.expectedToken !== "string" || !Object.hasOwn(patch, "json")) throw new Error("読み込み要求が正しくありません。");
+        const imported = core.parseSettingsExport(patch.json);
+        const previous = core.readSettings(await port.load());
+        if (core.settingsToken(previous) !== patch.expectedToken) throw failure("別の画面で設定が変更されました。状態を再確認し、もう一度読み込んでください。", "CONFLICT");
+        const next = { ...imported, tagSchemaVersion: 2,
+          groupSelectionRevision: increment(previous.groupSelectionRevision), tagGroupsRevision: increment(previous.tagGroupsRevision) };
+        await port.setRules(rules(next.enabled, next.dashboardDisabled));
+        try { await port.store(next); }
+        catch (error) {
+          try { await port.setRules(rules(previous.enabled, previous.dashboardDisabled)); }
+          catch { throw failure("保存と転送設定の復旧に失敗しました。状態を再確認してください。", "UNCONFIRMED"); }
+          throw error;
+        }
+        return core.readSettings(next);
+      }),
       tag: (operation, options = {}) => run(async () => {
         if (!operation || !["ADD_TAG", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
             Object.keys(operation).some(key => !["type", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName"].includes(key)) ||

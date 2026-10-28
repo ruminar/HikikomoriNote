@@ -144,6 +144,46 @@
     const normalized = normalizeUserId(id);
     return normalized ? `https://note.com/${encodeURIComponent(normalized)}` : null;
   }
+  const transferFlags = ["enabled", "dashboardDisabled", "legacyMode", "hideArticleRecommendations", "hidePaidArticles", "noteLogoBrowserBack"];
+  function exactKeys(value, keys) {
+    return value && typeof value === "object" && !Array.isArray(value) &&
+      Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+  }
+  function validateTransferSettings(value) {
+    if (!exactKeys(value, [...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId"])) throw new Error("設定の項目に不足または未対応の項目があります。");
+    for (const key of transferFlags) if (typeof value[key] !== "boolean") throw new Error(`${key}はtrueまたはfalseを指定してください。`);
+    if (typeof value.noteUserId !== "string" || normalizeUserId(value.noteUserId) !== value.noteUserId) throw new Error("ユーザー名の保存値が正しくありません。");
+    if (!Array.isArray(value.tagGroups) || value.tagGroups.length !== 4 || !groupIds.includes(value.selectedTagGroupId)) throw new Error("4グループと選択グループを確認してください。");
+    const groups = value.tagGroups.map((group, index) => {
+      if (!exactKeys(group, ["id", "name", "tags"]) || group.id !== groupIds[index] ||
+          normalizeGroupName(group.name) !== group.name || !Array.isArray(group.tags) || inspectTags(group.tags).warning) {
+        throw new Error(`グループ${index + 1}の名前・タグ・並び順が正しくありません。`);
+      }
+      return { id: group.id, name: group.name, tags: [...group.tags] };
+    });
+    return { ...Object.fromEntries(transferFlags.map(key => [key, value[key]])), noteUserId: value.noteUserId,
+      tagGroups: groups, selectedTagGroupId: value.selectedTagGroupId };
+  }
+  function transferSettings(settings) {
+    if (settings.tagWarning || settings.groupSelectionInvalid) throw new Error("保存データに異常があります。状態を再確認してください。");
+    return validateTransferSettings(Object.fromEntries([...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId"].map(key => [key, settings[key]])));
+  }
+  function exportSettings(settings) {
+    return JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 1, settings: transferSettings(settings) }, null, 2);
+  }
+  function parseSettingsExport(text) {
+    if (typeof text !== "string" || text.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
+    let document;
+    try { document = JSON.parse(text); } catch { throw new Error("JSONの書式が正しくありません。"); }
+    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || document.schemaVersion !== 1) {
+      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1）を入力してください。");
+    }
+    return validateTransferSettings(document.settings);
+  }
+  function settingsToken(settings) {
+    return JSON.stringify([transferSettings(settings), settings.groupSelectionRevision, settings.tagGroupsRevision]);
+  }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
+    exportSettings, parseSettingsExport, settingsToken,
     normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

@@ -37,6 +37,7 @@
     },
     getState: () => request("get-state"),
     save: patch => request("save-settings", patch),
+    importSettings: patch => request("import-settings", patch),
     tag: operation => request("tag-operation", operation),
     addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision, pageUrl: globalThis.location.href }),
     selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),

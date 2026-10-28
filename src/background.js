@@ -28,6 +28,7 @@ port.onMessage((message, sender, respond) => {
   if (port.isHomeSender(sender)) {
     if (message?.type === "get-state") operation = controller.getState();
     else if (message?.type === "save-settings") operation = controller.save(message.patch);
+    else if (message?.type === "import-settings") operation = controller.importSettings(message.patch);
     else if (message?.type === "tag-operation") operation = controller.tag(message.patch);
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;

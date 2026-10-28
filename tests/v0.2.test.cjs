@@ -161,7 +161,7 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
  n.get('edit-tags').children[1].children[1].onclick();await flush();assert.deepEqual(f.state.tagGroups[0].tags,['B','A','C']);
  const rows=n.get('edit-tags').children;rows[2].fire('dragstart',{dataTransfer:{setData(){}}});rows[0].fire('drop');await flush();assert.deepEqual(f.state.tagGroups[0].tags,['C','B','A']);
  const moved=n.get('edit-tags').children;moved[0].fire('dragstart',{dataTransfer:{setData(){}}});moved[2].fire('drop',{clientY:39});await flush();assert.deepEqual(f.state.tagGroups[0].tags,['B','A','C']);
- n.get('home-menu').fire('keydown',{key:'End'});assert.equal(n.get('panel-settings').hidden,false);assert.equal(f.document.activeElement,n.get('nav-settings'));
+ n.get('home-menu').fire('keydown',{key:'End'});assert.equal(n.get('panel-transfer').hidden,false);assert.equal(f.document.activeElement,n.get('nav-transfer'));
 });
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:query=>({matches:query.includes("max-width")?!win.wide:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
@@ -1079,4 +1079,85 @@ test('ラベルなしの新しいおすすめasideも隠し、本文・コメン
  aside.setAttribute('aria-busy','false');f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),true);
  aside.className='unknown';f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),false);
  heading.textContent='コメント';aside.className='p-8';f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),false);
+});
+
+test('設定JSONは全設定と4グループを往復し、内部番号・診断・未対応項目を持ち込まない',()=>{
+ const f=fixture({...groups(['AI','ComfyUI']),noteUserId:'ruminar',enabled:false,legacyMode:true,hidePaidArticles:true,hideArticleRecommendations:true,noteLogoBrowserBack:true,dashboardDisabled:true,selectedTagGroupId:'group3',groupSelectionRevision:12,tagGroupsRevision:20});
+ const json=f.core.exportSettings(f.stored),document=JSON.parse(json);assert.equal(document.format,'hikikomori-note-settings');assert.equal(document.schemaVersion,1);
+ assert.equal(Object.hasOwn(document.settings,'tagGroupsRevision'),false);assert.equal(Object.hasOwn(document.settings,'tagSchemaVersion'),false);
+ const parsed=f.core.parseSettingsExport(json);assert.equal(parsed.enabled,false);assert.equal(parsed.legacyMode,true);assert.equal(parsed.selectedTagGroupId,'group3');assert.deepEqual(plain(parsed.tagGroups[0].tags),['AI','ComfyUI']);
+ assert.equal(f.core.exportSettings({...f.stored,groupSelectionRevision:99}),json);assert.throws(()=>f.core.exportSettings({...f.stored,tagWarning:'invalid'}));
+ const mutate=fn=>{const doc=JSON.parse(json);fn(doc);return JSON.stringify(doc);};
+ for(const text of ['{}','[]','null','broken',mutate(d=>d.schemaVersion=2),mutate(d=>d.format='other'),mutate(d=>delete d.settings.enabled),mutate(d=>d.settings.enabled='true'),mutate(d=>d.settings.extra=true),mutate(d=>d.settings.noteUserId='https://note.com/ruminar'),mutate(d=>d.settings.tagGroups.pop()),mutate(d=>d.settings.tagGroups.reverse()),mutate(d=>d.settings.tagGroups[0].tags=['AI','AI']),mutate(d=>d.settings.tagGroups[0].tags=[' #AI ']),mutate(d=>d.settings.tagGroups[0].name=' X '),mutate(d=>d.settings.selectedTagGroupId='group5')])assert.throws(()=>f.core.parseSettingsExport(text));
+ const doc=JSON.parse(json);doc.settings.tagGroups[1].tags=['AI'];assert.doesNotThrow(()=>f.core.parseSettingsExport(JSON.stringify(doc)));
+ assert.throws(()=>f.core.parseSettingsExport(' '.repeat(1048577)));
+});
+
+test('設定読み込みは1回の保存で全置換し、更新番号を進め、古いタグ操作と競合する',async()=>{
+ const f=fixture({...groups(['old']),groupSelectionRevision:5,tagGroupsRevision:8}),target=fixture({...groups(['new']),noteUserId:'new_user',enabled:false,dashboardDisabled:true});
+ const json=target.core.exportSettings(target.stored),expectedToken=f.core.settingsToken(f.stored);
+ const state=await f.controller.importSettings({json,expectedToken});assert.equal(f.writes,1);assert.equal(state.noteUserId,'new_user');assert.equal(state.enabled,false);assert.deepEqual(plain(state.tagGroups[0].tags),['new']);assert.deepEqual(f.rules,[]);
+ assert.equal(state.groupSelectionRevision,6);assert.equal(state.tagGroupsRevision,9);
+ await assert.rejects(f.controller.tag({type:'ADD_TAG',tag:'late',groupId:'group1'},{selectionRevision:5}),/変わりました/);
+ await assert.rejects(f.controller.importSettings({json,expectedToken}),/変更されました/);assert.equal(f.writes,1);
+});
+
+test('保存キューで先行した設定変更を検知し、読み込みで黙って上書きしない',async()=>{
+ const f=fixture(),json=f.core.exportSettings(f.stored),expectedToken=f.core.settingsToken(f.stored);
+ const save=f.controller.save({noteUserId:'other_user'}),imported=f.controller.importSettings({json,expectedToken});
+ await save;await assert.rejects(imported,/変更されました/);assert.equal(f.stored.noteUserId,'other_user');assert.equal(f.writes,1);
+});
+
+test('読み込みの検証・ルール適用・保存失敗はデータを変えず、保存失敗時は転送ルールを復元',async()=>{
+ const core=fixture().core,original=settingsData(),target={...settingsData(),enabled:false,dashboardDisabled:true};let stored=plain(original),stores=0,calls=0,failRules=false,failStore=false,ruleValues=[];
+ const context=vm.createContext({URL});for(const file of ['src/common.js','src/routing.js'])vm.runInContext(source(file),context);
+ const controller=context.HikikomoriNoteRouting.createController({load:async()=>stored,store:async value=>{stores++;if(failStore)throw Error('store failed');stored=plain(value);},setRules:async value=>{calls++;if(failRules)throw Error('rules failed');ruleValues.push(plain(value));}});
+ const patch={json:core.exportSettings(target),expectedToken:core.settingsToken(original)};
+ await assert.rejects(controller.importSettings({...patch,json:'{}'}));assert.equal(calls,0);assert.equal(stores,0);
+ failRules=true;await assert.rejects(controller.importSettings(patch),/rules failed/);assert.equal(stores,0);
+ failRules=false;failStore=true;await assert.rejects(controller.importSettings(patch),/store failed/);assert.deepEqual(stored,original);assert.equal(ruleValues.at(-1).length,2);
+ failStore=false;await controller.importSettings(patch);assert.equal(stored.enabled,false);assert.equal(stores,2);
+});
+
+test('移行画面は重度・OFFでも開け、保存済みJSONの表示・コピー・手動コピー案内が使える',async()=>{
+ for(const state of [{},{legacyMode:true},{enabled:false}]){
+  const f=homeFixture({state});await flush();const n=f.nodes;
+  n.get('nav-transfer').fire('click');assert.equal(n.get('panel-transfer').hidden,false);assert.equal(n.get('nav-transfer').getAttribute('aria-current'),'page');
+  n.get('note-user').value='unsaved';n.get('note-user').fire('input');
+  await n.get('export-settings').onclick();const json=n.get('settings-json').value;assert.equal(JSON.parse(json).settings.noteUserId,'ruminar');assert.equal(n.get('import-settings').disabled,false);
+  await n.get('copy-settings').onclick();assert.deepEqual(f.copies,[json]);assert.match(n.get('transfer-status').textContent,/コピーしました/);
+  f.options.copyError=true;await n.get('copy-settings').onclick();assert.match(n.get('transfer-status').textContent,/手動でコピー/);assert.equal(n.get('settings-json').value,json);
+  f.options.confirm=()=>false;await n.get('export-settings').onclick();assert.equal(n.get('settings-json').value,json);assert.deepEqual(f.patches,[]);
+  const saved=plain(f.state);n.get('clear-settings-json').fire('click');assert.equal(n.get('settings-json').value,'');assert.equal(n.get('transfer-status').textContent,'');assert.equal(n.get('import-settings').disabled,true);assert.equal(n.get('copy-settings').disabled,true);assert.equal(n.get('clear-settings-json').disabled,true);assert.equal(f.document.activeElement,n.get('settings-json'));assert.deepEqual(plain(f.state),saved);
+ }
+});
+
+test('JSON検証と確認後に全置換し、未保存入力を破棄するがJSONと移行画面は維持',async()=>{
+ const f=homeFixture({notifyOnStore:true});await flush();const n=f.nodes,core=f.c.HikikomoriNote;
+ n.get('nav-transfer').fire('click');n.get('settings-json').value='{}';n.get('settings-json').fire('input');assert.equal(n.get('import-settings').disabled,true);
+ const target={...settingsData(),enabled:false,legacyMode:true,noteUserId:'imported',...groups(['new'])},json=core.exportSettings(target);
+ n.get('settings-json').value=json;n.get('settings-json').fire('input');assert.equal(n.get('import-settings').disabled,false);
+ n.get('note-user').value='draft';n.get('note-user').fire('input');n.get('tag-input').value='draft tag';
+ f.options.confirm=()=>false;n.get('import-settings').fire('click');await flush();assert.equal(f.state.noteUserId,'ruminar');
+ f.options.confirm=()=>true;n.get('import-settings').fire('click');await flush();
+ assert.equal(f.state.noteUserId,'imported');assert.equal(f.state.enabled,false);assert.equal(n.get('note-user').value,'imported');assert.equal(n.get('tag-input').value,'');
+ assert.equal(n.get('settings-json').value,json);assert.equal(n.get('panel-transfer').hidden,false);assert.deepEqual(f.moves,[]);assert.match(n.get('transfer-status').textContent,/読み込みました/);
+});
+
+test('読み込みの失敗・結果未確認でもJSONと既存設定を維持し、未確認時は再確認を要求',async()=>{
+ for(const options of [{saveError:true},{importUnconfirmed:true}]){
+  const f=homeFixture(options);await flush();const n=f.nodes;
+  const json=f.c.HikikomoriNote.exportSettings({...f.state,noteUserId:'new_user'});n.get('settings-json').value=json;n.get('settings-json').fire('input');
+  n.get('import-settings').fire('click');await flush();assert.equal(f.state.noteUserId,'ruminar');assert.equal(n.get('settings-json').value,json);assert.match(n.get('transfer-status').textContent,/完了できません/);
+  if(options.importUnconfirmed)assert.equal(n.get('import-settings').disabled,true);
+ }
+});
+
+test('設定の読み込みは専用ホームのメッセージだけ許可し、note側からの置き換えを拒否',async()=>{
+ const f=fixture();let handler,answer;
+ const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:sender=>sender.url==='extension-home',isNoteSender:()=>true};
+ const context=vm.createContext({console,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>f.controller}});vm.runInContext(source('src/background.js'),context);await flush();
+ const patch={json:f.core.exportSettings({...f.stored,noteUserId:'imported'}),expectedToken:f.core.settingsToken(f.stored)};
+ assert.equal(handler({type:'import-settings',patch},{url:'https://note.com/search'},value=>{answer=value;}),false);assert.equal(f.writes,0);assert.equal(answer,undefined);
+ assert.equal(handler({type:'import-settings',patch},{url:'extension-home'},value=>{answer=value;}),true);await flush();assert.equal(answer.ok,true);assert.equal(f.stored.noteUserId,'imported');assert.equal(f.writes,1);
 });
