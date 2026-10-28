@@ -207,14 +207,22 @@
     }
     const paidCards = new Map();
     const paidHidden = "data-hikikomori-note-paid-hidden";
+    const membershipLock = "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2Zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2Zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2Z";
+    function isMembershipLock(path) {
+      return path.getAttribute("d") === membershipLock && Boolean(path.closest("svg") && path.closest("h3"));
+    }
+    function isPaidPrice(price) {
+      return price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*[〜～]?\s*$/.test(price.textContent.trim());
+    }
     let paidDirty = true, paidSignature;
     function isPaidCard(card) {
       if (!card.isConnected || card.closest('article') || card.closest('[id="note-body"]')) return false;
       return [...card.querySelectorAll('a[href]')].some(link =>
         link.parentElement?.parentElement === card && link.classList.contains("absolute") &&
         link.classList.contains("inset-0") && link.getAttribute("title") && link.getAttribute("aria-label") && core.isArticle(link.href) &&
-        link.parentElement.querySelector("h3") && [...link.parentElement.querySelectorAll("span[class]")].some(price =>
-          price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(price.textContent.trim())));
+        link.parentElement.querySelector("h3") &&
+        ([...link.parentElement.querySelectorAll("span[class]")].some(isPaidPrice) ||
+          [...link.parentElement.querySelectorAll("path[d]")].some(isMembershipLock)));
     }
     function paidCardContainer(card) {
       // カード内だけでなく、一覧で1件分の場所を占める既知のラッパーも隠す。
@@ -246,10 +254,11 @@
         }
       }
       if (!active) return;
-      for (const price of doc.querySelectorAll("span[class]")) {
-        if (!price.classList.contains("text-text-success") || !/^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(price.textContent.trim())) continue;
-        let card = price.parentElement;
-        for (let depth = 0; card && depth < 6; depth++, card = card.parentElement) {
+      const prices = [...doc.querySelectorAll("span[class]")].filter(isPaidPrice);
+      const locks = [...doc.querySelectorAll("path[d]")].filter(isMembershipLock);
+      for (const indicator of [...prices, ...locks]) {
+        let card = indicator.parentElement;
+        for (let depth = 0; card && depth < 10; depth++, card = card.parentElement) {
           if (!card.classList.contains("grid-rows-subgrid")) continue;
           if (isPaidCard(card)) {
             const container = paidCardContainer(card);
