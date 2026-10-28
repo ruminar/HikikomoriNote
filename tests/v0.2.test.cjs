@@ -677,6 +677,35 @@ test('価格付き記事カードを両モードで隠し、OFF・購入済み�
  }
 });
 
+const membershipLockPath='M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2Zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2Zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2Z';
+function membershipFixture(){
+ const f=paidFixture();f.doc.querySelector('span').remove();
+ const svg=f.doc.createElement('svg'),path=f.doc.createElement('path');path.setAttribute('d',membershipLockPath);svg.append(path);f.doc.querySelector('h3').append(svg);
+ return {f,svg,path,card:f.doc.root.children[0]};
+}
+test('価格のない鍵付きメンバーシップ記事も両モードで余白ごと隠し、購入済み・OFF・設定解除で復元',()=>{
+ for(const legacyMode of [false,true]){
+  const {f,card}=membershipFixture(),settings=f.core.readSettings({...groups(),hidePaidArticles:true,legacyMode});
+  const wrapper=f.doc.createElement('div');wrapper.className='contents';card.remove();wrapper.append(card);f.doc.root.append(wrapper);
+  const url='https://note.com/search?q=%23ComfyUI&context=note&mode=search&sort=new';
+  f.ui.update({...settings,hidePaidArticles:false},url);assert.equal(wrapper.hasAttribute(paidMarker),false);
+  f.ui.update(settings,url);assert.equal(wrapper.hasAttribute(paidMarker),true);assert.equal(card.hasAttribute(paidMarker),false);
+  f.ui.update(settings,'https://note.com/notes/purchased?mode=new');assert.equal(wrapper.hasAttribute(paidMarker),false);
+  f.ui.update(settings,url);f.ui.update({...settings,enabled:false},url);assert.equal(wrapper.hasAttribute(paidMarker),false);
+  f.ui.update(settings,url);f.ui.stop();assert.equal(wrapper.hasAttribute(paidMarker),false);
+ }
+});
+test('鍵の後挿入・除去を再評価し、タイトル以外の鍵・絵文字・未知のアイコンは隠さない',()=>{
+ const {f,svg,path,card}=membershipFixture(),settings=f.core.readSettings({...groups(),hidePaidArticles:true}),url='https://note.com/search';
+ svg.remove();f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),false);
+ f.doc.querySelector('h3').append(svg);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),true);
+ svg.remove();card.append(svg);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),false);
+ f.doc.querySelector('h3').append(svg);path.setAttribute('d','unknown');f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),false);
+ svg.remove();f.doc.querySelector('h3').textContent='🔒タイトル';f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),false);
+ const bad=membershipFixture();bad.f.doc.querySelector('a').href='https://other.test/article';bad.f.ui.update(settings,url);assert.equal(bad.card.hasAttribute(paidMarker),false);
+ const body=membershipFixture(),article=body.f.doc.createElement('article');body.card.remove();article.append(body.card);body.f.doc.root.append(article);body.f.ui.update(settings,url);assert.equal(body.card.hasAttribute(paidMarker),false);
+});
+
 test('無料・価格不明・本文中の価格・商品・不明なカード構造を隠さない',()=>{
  for(const value of ['無料','300円','¥0','¥300から','¥300 月額','おすすめ商品 ¥300']){
   const f=paidFixture();f.doc.querySelector('span').textContent=value;
