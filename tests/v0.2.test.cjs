@@ -1037,3 +1037,46 @@ test('コンテンツ操作はクリック時のURLを送信し、次のSPA遷�
  await context.HikikomoriNotePlatform.addCurrentTag('group1',0);location.href='https://note.com/tag/AI';await context.HikikomoriNotePlatform.selectGroup('group2');
  assert.equal(sent[0].patch.pageUrl,'https://note.com/hashtag/ComfyUI');assert.equal(sent[1].patch.pageUrl,location.href);
 });
+
+const tipHtml='<div class="mx-4 mt-6 mb-4 empty:hidden"><div><section class="flex flex-col bg-surface-quaternary"><h2></h2><div><span></span></div><button type="button" data-name="Button"><span></span></button></section></div></div>';
+function tipFixture(){const f=uiFixture(tipHtml);f.doc.querySelector('h2').textContent='いいなと思ったら応援しよう！';f.doc.querySelector('button').textContent='チップで応援する';return f;}
+test('有料記事非表示でチップ枠も両モードで余白ごと隠し、設定解除・OFF・画面移動・停止で復元',()=>{
+ for(const legacyMode of [false,true]){
+  const f=tipFixture(),container=f.doc.root.children[0],marker='data-hikikomori-note-tip-hidden',url='https://note.com/ichigo_mon/n/n123';
+  const settings=f.core.readSettings({...groups(),hidePaidArticles:true,legacyMode});
+  f.ui.update({...settings,hidePaidArticles:false},url);assert.equal(container.hasAttribute(marker),false);
+  f.ui.update(settings,url);assert.equal(container.hasAttribute(marker),true);
+  f.ui.update({...settings,enabled:false},url);assert.equal(container.hasAttribute(marker),false);
+  f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(container.hasAttribute(marker),false);
+  f.ui.update(settings,url);f.ui.update(settings,'https://note.com/notes/purchased');assert.equal(container.hasAttribute(marker),false);
+  f.ui.update(settings,'https://note.com/preview/n123');assert.equal(container.hasAttribute(marker),true);
+  f.ui.stop();assert.equal(container.hasAttribute(marker),false);assert.equal(f.doc.querySelector('button').textContent,'チップで応援する');
+ }
+});
+test('チップ枠の後挿入・構造変更に追従し、本文や不明な枠・他のボタンを誤って隠さない',()=>{
+ const f=tipFixture(),container=f.doc.root.children[0],marker='data-hikikomori-note-tip-hidden',url='https://note.com/ruminar/n/n123',settings=f.core.readSettings({...groups(),hidePaidArticles:true});
+ container.remove();f.ui.update(settings,url);f.doc.root.append(container);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(container.hasAttribute(marker),true);
+ f.doc.querySelector('button').textContent='別のボタン';f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(container.hasAttribute(marker),false);
+ for(const change of [f=>f.doc.querySelector('h2').textContent='記事の見出し',f=>f.doc.querySelector('section').className='unknown',f=>{const body=f.doc.createElement('div');body.setAttribute('id','note-body');const wrapper=f.doc.root.children[0];wrapper.remove();body.append(wrapper);f.doc.root.append(body);}]){
+  const other=tipFixture(),wrapper=other.doc.root.children[0];change(other);other.ui.update(settings,url);assert.equal(wrapper.hasAttribute(marker),false);assert.equal(other.doc.querySelector('section').hasAttribute(marker),false);
+ }
+});
+
+test('おすすめが未挿入でも記事の親へ先行クラスを付け、OFF・離脱・親の差し替え・停止で除去',()=>{
+ const f=uiFixture('<div id="article-root"><article id="note-article"><div id="note-body"></div></article></div>');
+ const settings=f.core.readSettings({...groups(),hideArticleRecommendations:true}),url='https://note.com/ruminar/n/n123',root=f.doc.getElementById('article-root'),marker='hikikomori-note-recommendations-root';
+ f.ui.update(settings,url);assert.equal(root.classList.contains(marker),true);assert.equal(f.doc.getElementById('note-body').classList.contains(marker),false);
+ f.ui.update({...settings,legacyMode:true},url);assert.equal(root.classList.contains(marker),true);
+ for(const patch of [{enabled:false},{hideArticleRecommendations:false}]){f.ui.update({...settings,...patch},url);assert.equal(root.classList.contains(marker),false);f.ui.update(settings,url);}
+ f.ui.update(settings,'https://note.com/search');assert.equal(root.classList.contains(marker),false);f.ui.update(settings,url);
+ const next=f.doc.createElement('div');next.append(f.doc.getElementById('note-article'));f.doc.root.append(next);f.ui.update(settings,url);assert.equal(root.classList.contains(marker),false);assert.equal(next.classList.contains(marker),true);
+ f.ui.stop();assert.equal(next.classList.contains(marker),false);
+});
+test('ラベルなしの新しいおすすめasideも隠し、本文・コメントや未知のasideは維持',()=>{
+ const f=uiFixture('<div class="pt-6"><div><h2></h2></div><aside class="p-8" aria-busy="true"></aside></div>');
+ const section=f.doc.root.children[0],heading=f.doc.querySelector('h2'),aside=f.doc.querySelector('aside'),settings=f.core.readSettings({...groups(),hideArticleRecommendations:true}),url='https://note.com/ruminar/n/n123';
+ heading.textContent='あなたへのおすすめ';f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),true);
+ aside.setAttribute('aria-busy','false');f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),true);
+ aside.className='unknown';f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),false);
+ heading.textContent='コメント';aside.className='p-8';f.ui.update(settings,url);assert.equal(section.hasAttribute(recommendationMarker),false);
+});

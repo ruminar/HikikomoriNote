@@ -6,6 +6,7 @@
   const hidden = "data-hikikomori-note-menu-hidden";
   const productHidden = "data-hikikomori-note-product-hidden";
   const recommendationsHidden = "data-hikikomori-note-recommendations-hidden";
+  const tipHidden = "data-hikikomori-note-tip-hidden";
   const productCard = '[data-aicn-thing-card="true"], [data-testid="aicn-thing-card"]';
   function isManagementPage(url) {
     try {
@@ -359,9 +360,19 @@
       const headings = [...element.querySelectorAll("h2")];
       return title.tagName === "DIV" && title.children.length === 1 && headings.length === 1 &&
         title.children[0] === headings[0] && headings[0].textContent.trim() === "あなたへのおすすめ" &&
-        list.tagName === "ASIDE" && list.getAttribute("aria-label") === "記事";
+        list.tagName === "ASIDE" && (list.getAttribute("aria-label") === "記事" ||
+          (list.classList.contains("p-8") && ["true", "false"].includes(list.getAttribute("aria-busy"))));
     }
+    const recommendationRoots = new Set();
+    const recommendationRoot = "hikikomori-note-recommendations-root";
     function syncRecommendations(active) {
+      const article = doc.querySelector('article[id="note-article"]');
+      const root = article?.parentElement;
+      const nextRoot = active && root?.tagName === "DIV" && !root.closest("article") && !root.closest('[id="note-body"]') ? root : null;
+      for (const previous of recommendationRoots) {
+        if (previous !== nextRoot || !previous.isConnected) { previous.classList.remove(recommendationRoot); recommendationRoots.delete(previous); }
+      }
+      if (nextRoot && !recommendationRoots.has(nextRoot)) { nextRoot.classList.add(recommendationRoot); recommendationRoots.add(nextRoot); }
       for (const element of recommendations) {
         if (!active || !element.isConnected || !isRecommendations(element)) {
           element.removeAttribute(recommendationsHidden); recommendations.delete(element);
@@ -374,6 +385,35 @@
         if (element && isRecommendations(element) && !recommendations.has(element)) {
           element.setAttribute(recommendationsHidden, ""); recommendations.add(element);
         }
+      }
+    }
+    const tips = new Map();
+    let tipsDirty = true, tipsSignature;
+    function tipContainer(section) {
+      if (!section.isConnected || section.closest('[id="note-body"]') ||
+          section.tagName !== "SECTION" || !section.classList.contains("bg-surface-quaternary") ||
+          !section.classList.contains("flex-col")) return null;
+      const heading = [...section.children].find(child => child.tagName === "H2");
+      if (heading?.textContent.trim() !== "いいなと思ったら応援しよう！" ||
+          ![...section.children].some(child => child.tagName === "BUTTON" && child.getAttribute("data-name") === "Button" &&
+            child.getAttribute("type") === "button" && child.textContent.trim() === "チップで応援する")) return null;
+      const inner = section.parentElement, outer = inner?.parentElement;
+      return inner?.tagName === "DIV" && inner.children.length === 1 && outer?.tagName === "DIV" && outer.children.length === 1 &&
+        ["mx-4", "mt-6", "mb-4"].every(name => outer.classList.contains(name)) ? outer : section;
+    }
+    function syncTips(settings, url) {
+      const active = settings.enabled && settings.hidePaidArticles && (core.isArticle(url) || core.isPreviewArticle(url));
+      const signature = JSON.stringify([active, url]);
+      if (!tipsDirty && tipsSignature === signature) return;
+      tipsDirty = false; tipsSignature = signature;
+      for (const [section, container] of tips) {
+        if (!active || tipContainer(section) !== container) { container.removeAttribute(tipHidden); tips.delete(section); }
+      }
+      if (!active) return;
+      for (const heading of doc.querySelectorAll("h2")) {
+        if (heading.textContent.trim() !== "いいなと思ったら応援しよう！") continue;
+        const section = heading.parentElement, container = tipContainer(section);
+        if (container && !tips.has(section)) { container.setAttribute(tipHidden, ""); tips.set(section, container); }
       }
     }
     function restore() {
@@ -494,6 +534,7 @@
       syncArticleFollowing(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
+      syncTips(settings, url);
       syncPaidCards(settings, url);
       if (!settings.enabled || settings.legacyMode || !page) { removeMobile(); restore(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
@@ -578,7 +619,33 @@
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
     }
-    return Object.freeze({ update, prepareSidebar, invalidatePaidCards() { paidDirty = true; }, stop() { for (const root of sidebarRoots) root.classList.remove(rootClass); sidebarRoots.clear(); disposed = true; removeMobile(); syncHeaderSettings(false); syncLogoCursor(false); syncSearchClear(false); articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); syncSideProfiles(false); restore(); syncProducts(false); syncRecommendations(false); for (const container of paidCards.values()) container.removeAttribute(paidHidden); paidCards.clear(); } });
+    return Object.freeze({
+      update, prepareSidebar,
+      invalidatePaidCards() {
+        paidDirty = true;
+        tipsDirty = true;
+      },
+      stop() {
+        for (const root of sidebarRoots) root.classList.remove(rootClass);
+        sidebarRoots.clear();
+        disposed = true;
+        removeMobile();
+        syncHeaderSettings(false);
+        syncLogoCursor(false);
+        syncSearchClear(false);
+        articleFollowing?.remove();
+        articleFollowing = undefined;
+        clearArticleAuthor();
+        syncSideProfiles(false);
+        restore();
+        syncProducts(false);
+        syncRecommendations(false);
+        for (const container of tips.values()) container.removeAttribute(tipHidden);
+        tips.clear();
+        for (const container of paidCards.values()) container.removeAttribute(paidHidden);
+        paidCards.clear();
+      }
+    });
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();

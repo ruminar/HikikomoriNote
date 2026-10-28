@@ -122,3 +122,7 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 ## 0.2.2 プレビュー記事（2026-10-26）
 
 利用者提供の共有プレビューを読み取り専用で確認。通常記事と同じarticle#note-article、本文#note-body、timeを含む作者欄があり、data-name="avatar"を囲むプロフィールリンクと名前のリンクが同じ公開プロフィールを指す。URLには作者名がないため、本文外のこの組み合わせから判定する。共有URL・アクセスキー・本文は記録しない。
+
+## 2026-10-28 記事おすすめの構造変更
+
+利用者指定の公開記事で確認。おすすめの見出しはpt-6 px-4 md:px-0のdiv内、一覧はaside.p-8[aria-busy="false"]でaria-label="記事"はない。記事親divの直下にborder-t・print:hiddenの領域があり、そのdivide-y.divide-border-default内におすすめdivがある。親からの子孫CSSセレクタでおすすめ1枠だけが一致し、記事本文とコメントsectionは対象外であることを読み取り専用のDOM検査で確認。拡張適用後の実表示確認とは区別する。
