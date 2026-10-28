@@ -14,6 +14,7 @@ a[data-hikikomori-note-dashboard-hidden] {
 [data-hikikomori-note-product-hidden] { display: none !important; }
 [data-hikikomori-note-recommendations-hidden] { display: none !important; }
 [data-hikikomori-note-paid-hidden] { display: none !important; }
+[data-hikikomori-note-tip-hidden] { display: none !important; }
 [data-hikikomori-note-logo-settings-layout] { display: flex; align-items: center; gap: 8px; }
 a[data-hikikomori-note-logo-back-unavailable],
 a[data-hikikomori-note-logo-back-unavailable] * { cursor: default !important; }
