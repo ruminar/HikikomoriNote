@@ -29,7 +29,7 @@ test("両ブラウザの日本語メタデータが既存表示のまま解決�
     }
   }
 });
-test("FirefoxのManifestだけ背景処理・ID・データ収集宣言を変更し、Chromium版は維持", async () => {
+test("FirefoxのManifestだけ背景処理・ID・Android対応・データ収集宣言を変更し、Chromium版は維持", async () => {
   const { createManifest } = await packager();
   const chromium = await createManifest("chromium");
   const firefox = await createManifest("firefox");
@@ -37,6 +37,8 @@ test("FirefoxのManifestだけ背景処理・ID・データ収集宣言を変更
   assert.equal(chromium.background.scripts, undefined);
   assert.equal(firefox.background.service_worker, undefined);
   assert.deepEqual(firefox.background.scripts, ["src/common.js", "src/platform/browser-api.js", "src/routing.js", "src/background.js"]);
+  assert.equal(chromium.browser_specific_settings, undefined);
+  assert.deepEqual(firefox.browser_specific_settings.gecko_android, { strict_min_version: "140.0" });
   assert.equal(firefox.browser_specific_settings.gecko.id, "hikikomori-note@ruminar");
   assert.equal(firefox.browser_specific_settings.gecko.strict_min_version, "140.0");
   assert.deepEqual(firefox.browser_specific_settings.gecko.data_collection_permissions, { required: ["none"] });
