@@ -706,8 +706,20 @@ test('鍵の後挿入・除去を再評価し、タイトル以外の鍵・絵�
  const body=membershipFixture(),article=body.f.doc.createElement('article');body.card.remove();article.append(body.card);body.f.doc.root.append(article);body.f.ui.update(settings,url);assert.equal(body.card.hasAttribute(paidMarker),false);
 });
 
+test('割引価格の¥300〜・全角波線・入れ子の通貨記号も判定し、購入済み一覧と解除では復元',()=>{
+ for(const amount of ['300〜','300～','1,200〜',' 300 〜 ']){
+  const f=paidFixture(),card=f.doc.root.children[0],price=f.doc.querySelector('span'),settings=f.core.readSettings({...groups(),hidePaidArticles:true});
+  const symbol=f.doc.createElement('span');symbol.textContent='¥';const value=f.doc.createElement('span');value.textContent=amount;price.replaceChildren(symbol,value);
+  const badge=f.doc.createElement('span');badge.textContent='割引あり';price.parentElement.append(badge);
+  const url='https://note.com/search?q=%23ComfyUI&context=note&mode=search&sort=new';
+  f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),true);
+  f.ui.update(settings,'https://note.com/notes/purchased');assert.equal(card.hasAttribute(paidMarker),false);
+  f.ui.update(settings,url);f.ui.update({...settings,hidePaidArticles:false},url);assert.equal(card.hasAttribute(paidMarker),false);
+ }
+});
+
 test('無料・価格不明・本文中の価格・商品・不明なカード構造を隠さない',()=>{
- for(const value of ['無料','300円','¥0','¥300から','¥300 月額','おすすめ商品 ¥300']){
+ for(const value of ['無料','300円','¥0','¥0〜','¥〜','¥300〜月額','¥300から','¥300 月額','おすすめ商品 ¥300']){
   const f=paidFixture();f.doc.querySelector('span').textContent=value;
   f.ui.update(f.core.readSettings({...groups(),hidePaidArticles:true}),'https://note.com/search');assert.equal(f.doc.root.children[0].hasAttribute(paidMarker),false);
  }

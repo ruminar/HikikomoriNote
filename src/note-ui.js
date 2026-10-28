@@ -211,6 +211,9 @@
     function isMembershipLock(path) {
       return path.getAttribute("d") === membershipLock && Boolean(path.closest("svg") && path.closest("h3"));
     }
+    function isPaidPrice(price) {
+      return price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*[〜～]?\s*$/.test(price.textContent.trim());
+    }
     let paidDirty = true, paidSignature;
     function isPaidCard(card) {
       if (!card.isConnected || card.closest('article') || card.closest('[id="note-body"]')) return false;
@@ -218,8 +221,7 @@
         link.parentElement?.parentElement === card && link.classList.contains("absolute") &&
         link.classList.contains("inset-0") && link.getAttribute("title") && link.getAttribute("aria-label") && core.isArticle(link.href) &&
         link.parentElement.querySelector("h3") &&
-        ([...link.parentElement.querySelectorAll("span[class]")].some(price =>
-          price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(price.textContent.trim())) ||
+        ([...link.parentElement.querySelectorAll("span[class]")].some(isPaidPrice) ||
           [...link.parentElement.querySelectorAll("path[d]")].some(isMembershipLock)));
     }
     function paidCardContainer(card) {
@@ -252,8 +254,7 @@
         }
       }
       if (!active) return;
-      const prices = [...doc.querySelectorAll("span[class]")].filter(price =>
-        price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(price.textContent.trim()));
+      const prices = [...doc.querySelectorAll("span[class]")].filter(isPaidPrice);
       const locks = [...doc.querySelectorAll("path[d]")].filter(isMembershipLock);
       for (const indicator of [...prices, ...locks]) {
         let card = indicator.parentElement;
