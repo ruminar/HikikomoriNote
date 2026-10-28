@@ -113,7 +113,7 @@ settingsにはenabled、noteUserId、dashboardDisabled、legacyMode、hideArticl
 
 ## リリース時の互換性・検証
 
-- Firefox Manifestの `browser_specific_settings.gecko_android.strict_min_version` は `140.0`。既存のデスクトップ最低版・権限は維持する。AMOのAndroid掲載に必要な宣言を含める。
+- Firefox Manifestの `browser_specific_settings.gecko_android.strict_min_version` は `142.0`。既存のデスクトップ最低版・権限は維持する。AMOのAndroid掲載に必要な宣言を含める。
 - 0.2.1と同じ保存キー・形式を使うため、更新時に設定を初期化しない。0.1.x・0.2.0からの移行コードは追加しない。
 - FirefoxからEdgeへの設定移行成功を利用者が確認。構文検証・自動テスト153件が成功。実機確認の範囲は `docs/manual-test.md` に記録する。
 - 提出物・更新説明・審査用メモは `docs/releases/0.2.2.md` を参照する。

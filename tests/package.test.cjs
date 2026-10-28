@@ -38,7 +38,7 @@ test("FirefoxのManifestだけ背景処理・ID・Android対応・データ収�
   assert.equal(firefox.background.service_worker, undefined);
   assert.deepEqual(firefox.background.scripts, ["src/common.js", "src/platform/browser-api.js", "src/routing.js", "src/background.js"]);
   assert.equal(chromium.browser_specific_settings, undefined);
-  assert.deepEqual(firefox.browser_specific_settings.gecko_android, { strict_min_version: "140.0" });
+  assert.deepEqual(firefox.browser_specific_settings.gecko_android, { strict_min_version: "142.0" });
   assert.equal(firefox.browser_specific_settings.gecko.id, "hikikomori-note@ruminar");
   assert.equal(firefox.browser_specific_settings.gecko.strict_min_version, "140.0");
   assert.deepEqual(firefox.browser_specific_settings.gecko.data_collection_permissions, { required: ["none"] });
