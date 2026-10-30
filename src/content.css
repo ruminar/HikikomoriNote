@@ -96,6 +96,9 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 [data-hikikomori-note-side-profile-offset="following"] {
   top: 124px !important; max-height: calc(100vh - 140px); overflow-y: auto;
 }
+[data-hikikomori-note-side-profile-follow-hidden] > div > button[data-name="ToggleButton"][type="button"][aria-pressed="false"][aria-haspopup="dialog"] {
+  display: none !important;
+}
 @media (max-width: 1099px) { .hikikomori-note-article-following, .hikikomori-note-article-author { display: none; } }
 .hikikomori-note-navigation { margin: 0 0 16px; color: inherit; font: inherit; overflow-wrap: anywhere; }
 .hikikomori-note-navigation ul { list-style: none; padding: 0; margin: 0; }

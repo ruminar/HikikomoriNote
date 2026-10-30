@@ -132,3 +132,8 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 指定の公開記事2件を未ログインで確認。article#note-article内・#note-body外のdiv#note-paywall.note-paywallは後挿入される。先頭sectionの「ここから先は」と、内側section.flex.flex-col.rounded-lg.border.border-border-strong.px-4を照合する。単品は「記事」＋円価格＋button[data-name="Button"][type="button"]「購入手続きへ」。会員限定は同じ枠の本人/membershipリンク＋「参加手続きへ」。単品価格0でも会員限定の場合があり、価格だけでは判定しない。本文・チップ・生成IDは使わない。実装した検出の全ケースの実機確認とは区別する。
 
 /yekuのプロフィールを幅390pxで確認。h1から5段程度の祖先にavatarと本人の/followingsリンクが同居し、その領域は幅343pxで表示される。プロフィール用操作欄はこの本人領域へ追加する。既存のTLメニューとは別管理とし、重度・全体OFFでも手動変更を残す。見つからない構造では挿入しない。
+
+## 0.2.3 固定作者情報のフォローボタン
+
+記事の左側に固定表示される公式の作者情報では、未フォロー状態の「フォロー」ボタンだけを非表示にする。記事上部の「フォローする」リンクとアバターのホバーカード内のフォローボタンは維持する。確認済みfixed/top-24/left-8の親を持つside-creator-profileに専用属性を付け、直下divのToggleButton（type=button、aria-pressed=false、aria-haspopup=dialog）を子孫CSSで隠す。後挿入のボタンにも適用する。通常／重度・記事／プレビューで有効。拡張OFF・対象外・DOM撤去・停止で属性を外し、公式DOMやフォロー状態そのものは変更しない。
+根拠は利用者提供の固定作者情報HTMLと画像。ホバーのポップアップや記事上部の作者欄には専用属性を付けない。実ブラウザでの非表示効果は別途確認する。

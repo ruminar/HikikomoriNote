@@ -293,6 +293,22 @@
     }
     const sideProfiles = new Set();
     const sideProfileOffset = "data-hikikomori-note-side-profile-offset";
+    const sideProfileFollowRoots = new Set();
+    const sideProfileFollowHidden = "data-hikikomori-note-side-profile-follow-hidden";
+    function syncSideProfileFollow(settings, url) {
+      const current = new Set();
+      if (settings.enabled && (core.isArticle(url) || core.isPreviewArticle(url))) {
+        for (const profile of doc.querySelectorAll('[data-testid="side-creator-profile"]')) {
+          const container = profile.parentElement;
+          if (profile.closest("article") || profile.closest('[id="note-body"]') ||
+              container?.tagName !== "DIV" || !["fixed", "top-24", "left-8"].every(name => container.classList.contains(name))) continue;
+          if (!profile.hasAttribute(sideProfileFollowHidden)) profile.setAttribute(sideProfileFollowHidden, "");
+          current.add(profile);
+        }
+      }
+      for (const profile of sideProfileFollowRoots) if (!current.has(profile)) profile.removeAttribute(sideProfileFollowHidden);
+      sideProfileFollowRoots.clear(); for (const profile of current) sideProfileFollowRoots.add(profile);
+    }
     function syncSideProfiles(active) {
       const current = new Set();
       if (active) {
@@ -552,6 +568,7 @@
       syncLogoCursor(settings.enabled && settings.noteLogoBrowserBack);
       const page = core.pageKind(url);
       syncArticleFollowing(settings, url);
+      syncSideProfileFollow(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncTips(settings, url);
@@ -659,6 +676,8 @@
         articleFollowing = undefined;
         clearArticleAuthor();
         syncSideProfiles(false);
+        for (const profile of sideProfileFollowRoots) profile.removeAttribute(sideProfileFollowHidden);
+        sideProfileFollowRoots.clear();
         restore();
         syncProducts(false);
         syncRecommendations(false);

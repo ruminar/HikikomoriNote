@@ -344,6 +344,30 @@ test('公式プロフィールでも本文内や未確認の固定枠は移動�
   f.ui.update(settings,url);assert.equal(container.hasAttribute('data-hikikomori-note-side-profile-offset'),false);
  }
 });
+test('記事の固定作者情報にだけフォロー非表示ルートを付け、後挿入・重度・OFF・離脱・停止に追従',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/ruminar/n/n123',marker='data-hikikomori-note-side-profile-follow-hidden';
+ const container=f.doc.createElement('div');container.className='fixed top-24 left-8';
+ const profile=f.doc.createElement('div');profile.setAttribute('data-testid','side-creator-profile');container.append(profile);
+ f.ui.update(settings,url);f.doc.body.append(container);f.ui.update(settings,url);assert.equal(profile.hasAttribute(marker),true);
+ const inner=f.doc.createElement('div'),button=f.doc.createElement('button');button.setAttribute('data-name','ToggleButton');button.setAttribute('type','button');button.setAttribute('aria-pressed','false');button.setAttribute('aria-haspopup','dialog');inner.append(button);profile.append(inner);
+ assert.equal(profile.hasAttribute(marker),true);assert.equal(button.isConnected,true);
+ const headerLink=f.doc.createElement('a');headerLink.href='https://note.com/ruminar';f.doc.getElementById('author-header').append(headerLink);
+ const hover=f.doc.createElement('div');hover.setAttribute('data-testid','side-creator-profile');f.doc.body.append(hover);f.ui.update({...settings,legacyMode:true},url);
+ assert.equal(profile.hasAttribute(marker),true);assert.equal(hover.hasAttribute(marker),false);assert.equal(headerLink.isConnected,true);
+ f.ui.update({...settings,enabled:false},url);assert.equal(profile.hasAttribute(marker),false);
+ f.ui.update(settings,'https://note.com/preview/n123');assert.equal(profile.hasAttribute(marker),true);
+ f.ui.update(settings,'https://note.com/ruminar');assert.equal(profile.hasAttribute(marker),false);
+ f.ui.update(settings,url);container.remove();f.ui.update(settings,url);assert.equal(profile.hasAttribute(marker),false);
+ f.doc.body.append(container);f.ui.update(settings,url);f.ui.stop();assert.equal(profile.hasAttribute(marker),false);
+ const css=source('src/content.css');assert.ok(css.includes('[data-hikikomori-note-side-profile-follow-hidden] > div > button[data-name="ToggleButton"][type="button"][aria-pressed="false"][aria-haspopup="dialog"]'));
+});
+test('本文内や未知の配置のユーザー情報にはフォロー非表示ルートを付けない',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups());
+ for(const [parent,classes] of [[f.doc.getElementById('note-body'),'fixed top-24 left-8'],[f.doc.body,'fixed top-24 right-8']]){
+   const container=f.doc.createElement('div');container.className=classes;const profile=f.doc.createElement('div');profile.setAttribute('data-testid','side-creator-profile');container.append(profile);parent.append(container);
+   f.ui.update(settings,'https://note.com/ruminar/n/n123');assert.equal(profile.hasAttribute('data-hikikomori-note-side-profile-follow-hidden'),false);
+ }
+});
 
 test('プレビューURLはnoteの正しい記事パスだけを対象にし、通常記事の判定を広げない',()=>{
  const {core}=fixture();
