@@ -31,7 +31,7 @@
     byId("clear-settings-json").disabled = busy || copying || !text.length;
     byId("settings-json").disabled = busy && ["import", "export"].includes(pendingState);
   }
-  let state, selected = location.hash === "#settings" ? "settings" : "tags", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
+  let state, selected = location.hash === "#authors" ? "authors" : location.hash === "#settings" ? "settings" : "tags", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectView(name, focus = false) {
     if (!state && name !== "settings") return;
     selected = state?.legacyMode && name === "tags" ? "intro" : name;
@@ -61,7 +61,6 @@
     byId("nav-transfer").disabled = !state;
     byId("nav-authors").disabled = !state;
     const authorBlocked = blocked || !state?.noteUserId || Boolean(state?.authorWarning);
-    for (const id of ["author-user", "author-name", "author-action", "author-add"]) byId(id).disabled = authorBlocked;
     for (const id of ["authors-hidden", "authors-allowed"]) for (const button of byId(id).querySelectorAll("button")) {
       button.disabled = blocked || Boolean(state?.authorWarning) || (button.dataset.remove !== "true" && (authorBlocked || button.dataset.self === "true"));
     }
@@ -132,7 +131,8 @@
   function renderAuthors() {
     byId("authors-state").textContent = state.authorWarning || (!state.noteUserId
       ? "自分を対象外にするため、設定で自分のnoteユーザー名を登録してください。登録の解除は可能です。"
-      : `一覧への適用：${state.enabled ? "有効" : "拡張OFFのため停止"}。有料記事検出時の確認：${state.enabled && state.hidePaidArticles ? "有効" : "停止"}。手動管理はいつでも可能です。`);
+      : "");
+    byId("authors-state").hidden = !byId("authors-state").textContent;
     for (const [id, action] of [["authors-hidden", "hide"], ["authors-allowed", "allow"]]) {
       const list = byId(id); list.replaceChildren();
       const rules = core.sortAuthors(state.authorDisplayRules.filter(rule => rule.action === action));
@@ -170,7 +170,7 @@
     const active = document.activeElement;
     const hiddenFocus = state.legacyMode &&
       (byId("panel-tags").contains(active) || active === byId("nav-tags") || active === byId("following"));
-    if (state.legacyMode && ((firstLoad && location.hash !== "#settings") || selected === "tags")) selected = "intro";
+    if (state.legacyMode && ((firstLoad && !["#settings", "#authors"].includes(location.hash)) || selected === "tags")) selected = "intro";
     if (!state.legacyMode && selected === "intro") selected = "tags";
     for (const [field, id] of Object.entries(fields)) {
       if (dirty.has(field)) continue;
@@ -223,7 +223,6 @@
       if (options.kind === "settings" || options.kind === "import") dirty.clear();
       if (options.kind === "import") {
         drafts.clear(); dragTag = null; byId("tag-input").value = "";
-        byId("author-user").value = ""; byId("author-name").value = "";
       }
       if (options.addInput !== undefined) {
         const savedDraft = draft(options.groupId);
@@ -301,16 +300,6 @@
   };
   byId("normal").onclick = () => { void perform(() => platform.save({ enabled: false }), { off: true }); };
   byId("retry").onclick = () => { void refresh(); };
-  byId("author-form").onsubmit = event => {
-    event.preventDefault();
-    if (byId("author-add").disabled) return;
-    try {
-      const userId = core.authorId(byId("author-user").value), displayName = core.authorName(byId("author-name").value);
-      if (core.isSelf(state, userId)) throw new Error("自分は登録できません。");
-      const operation = authorOperation({ userId, displayName }, byId("author-action").value);
-      void perform(() => platform.author(operation), { kind: "author" });
-    } catch (error) { byId("status").textContent = error.message; }
-  };
   byId("settings-json").oninput = () => { byId("transfer-status").textContent = ""; transferControls(); };
   byId("clear-settings-json").onclick = () => {
     if (byId("clear-settings-json").disabled) return;

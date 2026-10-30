@@ -206,7 +206,7 @@ test("noteロゴの通常クリックはSPA処理の前に専用ホームへ直�
   const f = contentFixture(); await flush();
   const event = f.click();
   assert.equal(event.defaultPrevented, true); assert.equal(event.stopped, true);
-  assert.deepEqual(f.moves, [["assign", f.home]]);
+  assert.deepEqual(f.moves, [["assign", f.home + "#authors"]]);
 });
 
 test("検索の他対象タブから記事へ戻るURLだけ新着にし、検索語と追加条件を維持", () => {
@@ -261,7 +261,7 @@ test("ロゴ以外・修飾キー・非trusted・設定OFFではブラウザバ�
  const f=contentFixture({noteLogoBrowserBack:true},options);await flush();
  for(const event of [{isTrusted:true,cancelable:true,ctrlKey:true},{isTrusted:false,cancelable:true},{isTrusted:true,cancelable:false},{isTrusted:true,cancelable:true,button:1}])f.click(undefined,event);
  assert.equal(calls,0);f.changed({enabled:true,noteLogoBrowserBack:false});f.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);
- const other=contentFixture({noteLogoBrowserBack:true},{...options,logoDetector:()=>false});await flush();other.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);assert.deepEqual(other.moves,[['assign',other.home]]);
+ const other=contentFixture({noteLogoBrowserBack:true},{...options,logoDetector:()=>false});await flush();other.click(undefined,{isTrusted:true,cancelable:true});assert.equal(calls,0);assert.deepEqual(other.moves,[['assign',other.home + '#authors']]);
  await assert.rejects(controllerFixture().controller.save({noteLogoBrowserBack:'true'}));
 });
 
@@ -287,7 +287,7 @@ test("JSによるホーム遷移も可能なら通信開始前にキャンセル
   const f = contentFixture(); await flush();
   let canceled = false;
   f.navigationEvents.get("navigate")({ cancelable: true, destination: { url: "https://note.com/?x=1" }, preventDefault() { canceled = true; } });
-  assert.equal(canceled, true); assert.deepEqual(f.moves, [["assign", f.home]]);
+  assert.equal(canceled, true); assert.deepEqual(f.moves, [["assign", f.home + "#authors"]]);
 });
 test("履歴操作等でホームへ着いた場合のフォールバックとOFF維持", async () => {
   const f = contentFixture(); await flush();
@@ -445,4 +445,10 @@ test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホ�
     else if (!match[1].startsWith("https://")) assert.ok(fs.existsSync(path.join(root, match[1])));
   }
   assert.equal(/<script[^>]*>[^<]+<\/script>/.test(source("home.html")), false);
+});
+
+test('プロフィールの専用ホーム導線は作者管理へ直行し、記事や検索からは従来の初期画面',async()=>{
+ let actions;const f=contentFixture({}, {ui:{create(doc,win,a){actions=a;return {update(){}};}}});await flush();
+ assert.equal(actions.settingsUrl(),f.home+'#authors');
+ for(const url of ['https://note.com/yeku/n/n123','https://note.com/search?q=AI']){f.location.href=url;assert.equal(actions.settingsUrl(),f.home);f.click();assert.equal(f.moves.at(-1)[1],f.home);}
 });

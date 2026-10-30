@@ -103,8 +103,10 @@
         if (operation.action !== null && (!settings.noteUserId || core.isSelf(settings, userId))) throw new Error("自分のnoteユーザー名を確認してください。自分は登録できません。");
         if (options.fromArticle && (!settings.enabled || !settings.hidePaidArticles || core.isSelf(settings, userId) || core.authorRule(settings, userId))) throw failure("有料記事の確認条件が変わりました。状態を再確認してください。", "CONFLICT");
         const previous = core.authorRule(settings, userId);
+        if (options.requireExisting && !previous) throw failure("新規登録は作者のページで行ってください。", "CONFLICT");
         const rules = settings.authorDisplayRules.filter(rule => rule.userId.toLowerCase() !== userId.toLowerCase());
-        if (operation.action !== null) rules.push({ userId, displayName: displayName || previous?.displayName || "", action: operation.action });
+        if (operation.action !== null) rules.push({ userId: options.requireExisting ? previous.userId : userId,
+          displayName: options.requireExisting ? previous.displayName : displayName || previous?.displayName || "", action: operation.action });
         const next = { ...raw, authorDisplayRules: rules, authorDisplayRevision: increment(settings.authorDisplayRevision) };
         if (JSON.stringify(next).length > 1048576) throw new Error("設定データが大きすぎます。登録を整理してください。");
         await port.store(next);

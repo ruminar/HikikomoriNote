@@ -42,6 +42,14 @@
     }
     return container;
   }
+  function cardCreatorId(card, link) {
+    try {
+      const userId = core.authorId(new URL(link.href).pathname.split("/")[1]);
+      return [...card.querySelectorAll('a[data-name="avatar"]')].some(a => {
+        try { return core.authorId(a.href).toLowerCase() === userId.toLowerCase(); } catch { return false; }
+      }) ? userId : null;
+    } catch { return null; }
+  }
   function create(doc, win, actions = {}) {
     const authorControls = createAuthorControls(doc, win, actions);
     let host, menu, signature;
@@ -132,6 +140,9 @@
       for (const [logo, control] of headerSettings) {
         if (!active || logoContainer(logo) !== control.parent || !control.link.isConnected) {
           control.link.remove(); control.parent.removeAttribute(settingsLayout); headerSettings.delete(logo);
+        } else if (actions.settingsUrl) {
+          const destination = actions.settingsUrl();
+          if (control.link.href !== destination) control.link.href = destination;
         }
       }
       if (!active || !actions.settingsUrl) return;
@@ -231,14 +242,20 @@
       return price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*[〜～]?\s*$/.test(price.textContent.trim());
     }
     let paidDirty = true, paidSignature;
-    function isPaidCard(card) {
+    function isPaidCard(card, settings) {
       if (!card.isConnected || card.closest('article') || card.closest('[id="note-body"]')) return false;
       return [...card.querySelectorAll('a[href]')].some(link =>
         link.parentElement?.parentElement === card && link.classList.contains("absolute") &&
         link.classList.contains("inset-0") && link.getAttribute("title") && link.getAttribute("aria-label") && core.isArticle(link.href) &&
         link.parentElement.querySelector("h3") &&
+        !isAllowedCard(card, link, settings) &&
         ([...link.parentElement.querySelectorAll("span[class]")].some(isPaidPrice) ||
           [...link.parentElement.querySelectorAll("path[d]")].some(isMembershipLock)));
+    }
+    function isAllowedCard(card, link, settings) {
+      if (!settings.noteUserId || settings.authorWarning) return false;
+      const userId = cardCreatorId(card, link);
+      return Boolean(userId && !core.isSelf(settings, userId) && core.authorRule(settings, userId)?.action === "allow");
     }
     function paidCardContainer(card) { return articleCardContainer(card); }
     function syncPaidCards(settings, url) {
@@ -248,11 +265,11 @@
         active = settings.enabled && settings.hidePaidArticles === true && page.origin === "https://note.com" &&
           !/^\/notes\/purchased(?:\/|$)/.test(page.pathname);
       } catch { /* 不明なURLでは解除 */ }
-      const signature = JSON.stringify([active, url]);
+      const signature = JSON.stringify([active, url, settings.noteUserId, settings.authorDisplayRules, settings.authorWarning]);
       if (!paidDirty && paidSignature === signature) return;
       paidDirty = false; paidSignature = signature;
       for (const [card, container] of paidCards) {
-        if (!active || !isPaidCard(card) || paidCardContainer(card) !== container) {
+        if (!active || !isPaidCard(card, settings) || paidCardContainer(card) !== container) {
           container.removeAttribute(paidHidden); paidCards.delete(card);
         }
       }
@@ -263,7 +280,7 @@
         let card = indicator.parentElement;
         for (let depth = 0; card && depth < 10; depth++, card = card.parentElement) {
           if (!card.classList.contains("grid-rows-subgrid")) continue;
-          if (isPaidCard(card)) {
+          if (isPaidCard(card, settings)) {
             const container = paidCardContainer(card);
             container.setAttribute(paidHidden, ""); paidCards.set(card, container);
           }
@@ -685,11 +702,8 @@
       return null;
     }
     function cardAuthor(card, link) {
-      try {
-        const userId = core.authorId(new URL(link.href).pathname.split("/")[1]);
-        const profile = [...card.querySelectorAll('a[data-name="avatar"]')].find(a => idFromLink(a)?.toLowerCase() === userId.toLowerCase());
-        return profile ? { userId } : null;
-      } catch { return null; }
+      const userId = cardCreatorId(card, link);
+      return userId ? { userId } : null;
     }
     function containerFor(card) { return articleCardContainer(card); }
     function syncCards() {
@@ -800,7 +814,7 @@
       const heading = doc.createElement("h2"); heading.id = "hikikomori-note-author-dialog-title"; heading.setAttribute("id", heading.id); heading.textContent = "有料記事を検出しました　この作者の記事を今後どう表示しますか？";
       modal.setAttribute("aria-labelledby", heading.id);
       const creator = doc.createElement("p"); creator.textContent = `作者：${core.authorLabel(author)}。`;
-      const description = doc.createElement("p"); description.textContent = "「非表示」にすると無料記事も一覧から非表示になります。記事や作者ページへの直接アクセスは制限しません。「表示を許可」でも「有料記事を非表示」の設定は適用されます。";
+      const description = doc.createElement("p"); description.textContent = "「非表示」にすると無料記事も一覧から非表示になります。記事や作者ページへの直接アクセスは制限しません。「表示を許可」した作者は、有料記事も一覧に表示します。";
       const status = doc.createElement("p"); status.setAttribute("role", "status");
       modal.append(heading, creator, description, status);
       const context = snapshot(author); let dismiss;
@@ -850,7 +864,7 @@
       }
       select.value = core.authorRule(settings, owner.userId)?.action || "";
       const saveButton = doc.createElement("button"); saveButton.type = "button"; saveButton.textContent = "変更を保存"; saveButton.setAttribute("data-author-save", "");
-      const help = doc.createElement("p"); help.textContent = settings.authorWarning || (!settings.noteUserId ? "自分を対象外にするため、専用ホームでnoteユーザー名を設定してください。" : "非表示にすると無料記事も一覧から隠します。記事や作者ページは直接開けます。表示許可でも有料記事の非表示設定は適用されます。");
+      const help = doc.createElement("p"); help.textContent = settings.authorWarning || (!settings.noteUserId ? "自分を対象外にするため、専用ホームでnoteユーザー名を設定してください。" : "非表示にすると無料記事も一覧から隠します。記事や作者ページは直接開けます。表示を許可した作者は、有料記事も表示します。");
       const status = doc.createElement("p"); status.setAttribute("role", "status");
       saveButton.onclick = () => { const result = save(owner, select.value || null, "profile", status, snapshot(owner)); refreshDisabled(); void result; };
       profileBlock.append(label, saveButton, help, status); refreshButton(profileBlock, status); owner.host.prepend(profileBlock); refreshDisabled();

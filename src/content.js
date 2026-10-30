@@ -11,7 +11,7 @@
     return state;
   }
   const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
-    settingsUrl: () => platform.homeUrl(),
+    settingsUrl: () => homeDestination(),
     async setAuthor(operation, source) {
       const before = revision;
       const value = await platform.currentAuthor(operation, source);
@@ -93,6 +93,9 @@
     catch { stop(); return false; }
     return settings?.enabled === true;
   }
+  function homeDestination() {
+    return platform.homeUrl() + (core.pageKind(location.href)?.type === "profile" ? "#authors" : "");
+  }
   function checkHome() {
     if (enabled() && core.shouldRedirect(location.href, settings)) location.replace(platform.homeUrl());
     if (!stopped && settings) noteUi?.update(settings, location.href);
@@ -128,12 +131,12 @@
     if (!core.shouldRedirect(anchor.href, settings)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    location.assign(platform.homeUrl());
+    location.assign(homeDestination());
   }
   function onNavigate(event) {
     if (!enabled() || !event.cancelable || !core.shouldRedirect(event.destination.url, settings)) return;
     event.preventDefault();
-    location.assign(platform.homeUrl());
+    location.assign(homeDestination());
   }
   async function start() {
     try {

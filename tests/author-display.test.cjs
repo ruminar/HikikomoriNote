@@ -145,11 +145,34 @@ test('ユーザーページではIDフィルターを外し、有料カードだ
  f.update('https://note.com/search');assert.equal(free.hasAttribute('data-hikikomori-note-author-hidden'),true);
  f.update('https://note.com/yeku');assert.equal(free.hasAttribute('data-hikikomori-note-author-hidden'),false);assert.equal(paid.hasAttribute('data-hikikomori-note-paid-hidden'),true);
 });
-test('専用ホームは名前の辞書順・ID付きで表示し、OFFでも登録・変更・解除と形式1の確認が可能',async()=>{
- const f=homeFixture({state:{enabled:false,legacyMode:true,authorDisplayRevision:0,authorDisplayRules:[{userId:'z',displayName:'か',action:'hide'},{userId:'b',displayName:'あ',action:'hide'}]}});await flush();const n=f.nodes;
- n.get('nav-authors').onclick();assert.equal(n.get('panel-authors').hidden,false);assert.match(n.get('authors-hidden').children[0].textContent,/あ（b）/);
- n.get('author-user').value='yeku';n.get('author-name').value='YeKu';n.get('author-action').value='allow';n.get('author-form').fire('submit');await flush();assert.equal(f.state.authorDisplayRules.find(x=>x.userId==='yeku').action,'allow');assert.equal(f.state.enabled,false);
- const row=n.get('authors-allowed').children[0];row.querySelectorAll('button')[1].onclick();await flush();assert.equal(f.state.authorDisplayRules.some(x=>x.userId==='yeku'),false);
+test('表示許可は値札付き・鍵付きカードも表示し、解除すると有料非表示へ戻る',()=>{
+ const lock='M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2Zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2Zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2Z';
+ for(const kind of ['price','lock']){
+   const f=ui('<main>'+card+'</main>',{hidePaidArticles:true,authorDisplayRules:[]}),c=f.doc.querySelector('main').children[0];
+   if(kind==='price')c.querySelector('span').textContent='¥300';else {const svg=f.doc.createElement('svg'),path=f.doc.createElement('path');path.setAttribute('d',lock);svg.append(path);c.querySelector('h3').append(svg);}
+   f.update('https://note.com/search');assert.equal(c.hasAttribute('data-hikikomori-note-paid-hidden'),true,kind);
+   f.backend.state.authorDisplayRules=[{userId:'yeku',displayName:'作者名',action:'allow'}];f.update('https://note.com/search');assert.equal(c.hasAttribute('data-hikikomori-note-paid-hidden'),false,kind);
+   f.update('https://note.com/yeku');assert.equal(c.hasAttribute('data-hikikomori-note-paid-hidden'),false,kind);
+   f.backend.state.authorDisplayRules=[];f.update('https://note.com/yeku');assert.equal(c.hasAttribute('data-hikikomori-note-paid-hidden'),true,kind);
+ }
+});
+test('作者の照合が不明・自分・自己ID未設定の場合は表示許可で有料判定を解除しない',()=>{
+ for(const kind of ['mismatch','self','unset']){
+   const f=ui('<main>'+card+'</main>',{hidePaidArticles:true,noteUserId:kind==='self'?'yeku':kind==='unset'?'':'me',authorDisplayRules:[{userId:'yeku',displayName:'名前',action:'allow'}]}),c=f.doc.querySelector('main').children[0];
+   c.querySelector('span').textContent='¥300';if(kind==='mismatch')c.querySelector('a[data-name="avatar"]').href='https://note.com/other';
+   f.update('https://note.com/search');assert.equal(c.hasAttribute('data-hikikomori-note-paid-hidden'),true,kind);
+ }
+});
+test('管理画面では通常の説明を省き、自己ID未設定・破損時だけ案内を表示',async()=>{
+ const f=homeFixture();await flush();assert.equal(f.nodes.get('authors-state').hidden,true);assert.equal(f.nodes.get('authors-state').textContent,'');
+ f.changed({noteUserId:''});assert.equal(f.nodes.get('authors-state').hidden,false);assert.match(f.nodes.get('authors-state').textContent,/noteユーザー名/);
+ f.changed({noteUserId:'me',authorDisplayRules:[{userId:'bad',displayName:'',action:'bad'}],authorDisplayRevision:0});assert.equal(f.nodes.get('authors-state').hidden,false);assert.match(f.nodes.get('authors-state').textContent,/異常/);
+});
+test('専用ホームは辞書順の既存ユーザーの状態変更・解除だけができ、新規登録欄がない',async()=>{
+ const f=homeFixture({hash:'#authors',state:{enabled:false,legacyMode:true,authorDisplayRevision:0,authorDisplayRules:[{userId:'z',displayName:'か',action:'hide'},{userId:'b',displayName:'あ',action:'hide'}]}});await flush();const n=f.nodes;
+ assert.equal(n.get('panel-authors').hidden,false);assert.equal(n.get('author-form'),undefined);assert.equal(n.get('author-user'),undefined);assert.match(n.get('authors-hidden').children[0].textContent,/あ（b）/);
+ n.get('authors-hidden').children[0].querySelector('button').onclick();await flush();assert.equal(f.state.authorDisplayRules.find(x=>x.userId==='b').action,'allow');assert.equal(f.state.enabled,false);
+ n.get('authors-allowed').children[0].querySelectorAll('button')[1].onclick();await flush();assert.equal(f.state.authorDisplayRules.some(x=>x.userId==='b'),false);
  const doc=JSON.parse(f.c.HikikomoriNote.exportSettings(f.c.HikikomoriNote.readSettings(f.state)));doc.schemaVersion=1;delete doc.settings.authorDisplayRules;n.get('settings-json').value=JSON.stringify(doc);n.get('settings-json').oninput();n.get('import-settings').onclick();await flush();assert.match(f.confirmations.at(-1),/作者設定も解除/);assert.deepEqual(f.state.authorDisplayRules,[]);
 });
 test('作者操作の送信元検証はトップフレーム・現URL・本人・pendingUrlを確認する',async()=>{
@@ -180,4 +203,15 @@ test('作者変更後は古い設定JSONの確認トークンを拒否し、自�
  await f.controller.author(operation(f));await assert.rejects(f.controller.importSettings({json,expectedToken}),{code:'CONFLICT'});
  await f.controller.save({noteUserId:'YeKu'});assert.equal(f.core.isSelf(f.core.readSettings(f.state),'yeku'),true);assert.equal(f.state.authorDisplayRules.length,1);
  await f.controller.author(operation(f,'yeku',null));assert.equal(f.state.authorDisplayRules.length,0);
+});
+
+test('管理画面の背景要求では新規登録を拒否し、既存ユーザーの名前を変えず状態だけを変更',async()=>{
+ const f=backend();await assert.rejects(f.controller.author(operation(f),{requireExisting:true}),{code:'CONFLICT'});assert.equal(f.writes,0);
+ await f.controller.author(operation(f));await f.controller.author(operation(f,'yeku','allow','別の名前'),{requireExisting:true});assert.equal(f.state.authorDisplayRules[0].displayName,'YeKu@「知る」を優しさに。');assert.equal(f.state.authorDisplayRules[0].action,'allow');
+ await f.controller.author(operation(f,'yeku',null),{requireExisting:true});assert.equal(f.state.authorDisplayRules.length,0);
+});
+test('歯車はプロフィールから管理画面へ直行し、SPAで他の画面へ戻ると通常の専用ホームへ戻す',()=>{
+ let destination='chrome-extension://self/home.html#authors';const header='<header data-header-state="navbar"><div><a href="/"><svg role="img" aria-label="note"></svg></a></div></header>';
+ const f=ui(header,{noteLogoBrowserBack:true},{settingsUrl:()=>destination});f.update('https://note.com/yeku');const gear=f.doc.querySelector('a[data-hikikomori-note-owned]');assert.equal(gear.href,destination);
+ destination='chrome-extension://self/home.html';f.update('https://note.com/search');assert.equal(gear.href,destination);
 });

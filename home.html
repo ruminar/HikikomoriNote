@@ -77,18 +77,7 @@
         </section>
         <section id="panel-authors" aria-labelledby="authors-heading" hidden>
           <h2 id="authors-heading">ユーザーの表示管理</h2>
-          <p>非表示にした作者の無料記事を含む記事一覧のカードを隠します。記事や作者ページへの直接アクセスは制限しません。</p>
-          <p>「表示を許可」は作者による非表示を免除し、有料記事検出時の確認を出しません。「有料記事を非表示」の設定は引き続き適用されます。</p>
           <p id="authors-state" class="muted" role="status"></p>
-          <form id="author-form" class="tag-form">
-            <label for="author-user">noteユーザー名 または 公開プロフィールURL</label>
-            <input id="author-user" type="text" autocomplete="off" placeholder="例：yeku" disabled>
-            <label for="author-name">表示名（任意）</label>
-            <input id="author-name" type="text" maxlength="200" autocomplete="off" disabled>
-            <label for="author-action">表示設定</label>
-            <select id="author-action" disabled><option value="hide">非表示</option><option value="allow">表示を許可</option></select>
-            <button id="author-add" type="submit" disabled>登録・変更</button>
-          </form>
           <h3 id="authors-hidden-heading">非表示</h3>
           <ul id="authors-hidden" class="author-list"></ul>
           <h3 id="authors-allowed-heading">表示を許可</h3>
