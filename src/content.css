@@ -99,6 +99,12 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 [data-hikikomori-note-side-profile-follow-hidden] > div > button[data-name="ToggleButton"][type="button"][aria-pressed="false"][aria-haspopup="dialog"] {
   display: none !important;
 }
+/* 投稿一覧の運営案内エリア。親を先に識別し、PC/スマホ・後挿入も同じCSSで制御する。 */
+[data-hikikomori-note-notes-promotions] > div[class~="hidden"][class~="md:block"],
+[data-hikikomori-note-notes-promotions] > div.flex.flex-col.gap-4 > div[class~="border-border-default"][class~="border-b"][class~="bg-background-primary"][class~="md:hidden"],
+[data-hikikomori-note-notes-promotions] > div.flex.flex-col.gap-4 > section[class~="hidden"][class~="rounded-lg"][class~="bg-surface-normal"][class~="p-6"][class~="md:block"] {
+  display: none !important;
+}
 @media (max-width: 1099px) { .hikikomori-note-article-following, .hikikomori-note-article-author { display: none; } }
 .hikikomori-note-navigation { margin: 0 0 16px; color: inherit; font: inherit; overflow-wrap: anywhere; }
 .hikikomori-note-navigation ul { list-style: none; padding: 0; margin: 0; }

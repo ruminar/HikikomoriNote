@@ -137,3 +137,9 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 
 記事の左側に固定表示される公式の作者情報では、未フォロー状態の「フォロー」ボタンだけを非表示にする。記事上部の「フォローする」リンクとアバターのホバーカード内のフォローボタンは維持する。確認済みfixed/top-24/left-8の親を持つside-creator-profileに専用属性を付け、直下divのToggleButton（type=button、aria-pressed=false、aria-haspopup=dialog）を子孫CSSで隠す。後挿入のボタンにも適用する。通常／重度・記事／プレビューで有効。拡張OFF・対象外・DOM撤去・停止で属性を外し、公式DOMやフォロー状態そのものは変更しない。
 根拠は利用者提供の固定作者情報HTMLと画像。ホバーのポップアップや記事上部の作者欄には専用属性を付けない。実ブラウザでの非表示効果は別途確認する。
+
+## 0.2.3 自分の記事一覧の運営案内
+
+利用者提供の/notesのHTMLを参照。外側flex flex-col gap-4の直下に、hidden md:blockの画像バナーと、flex flex-col gap-4の提案グループがある。バナーはflex-nowrap/overflow-x-auto/md:flex-wrapの中のrelative flex w-60 min-w-60 items-stretch md:w-full。imgのaltとnote.comへのabsolute inset-0リンクのaria-label/titleを確認する。提案はスマホ用border-border-default border-b bg-background-primary md:hidden内のdetails/summaryと、PC用section.hidden.rounded-lg.bg-surface-normal.p-6.md:blockに分かれ、「あなたへの提案」見出しとhttps://note.com/monetization-guideへのリンクがある。
+
+おすすめ非表示ONの/notesだけで親にdata-hikikomori-note-notes-promotionsを付け、確認済み子孫をCSSで非表示。画像はカレンダー等にも入れ替わるため、画像ファイル名・広告文言を固定しない。提供HTMLに基づく確認であり、確認用ブラウザでは未ログインのため実表示は未検証。

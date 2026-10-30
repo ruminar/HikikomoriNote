@@ -400,6 +400,52 @@
     }
     const recommendationRoots = new Set();
     const recommendationRoot = "hikikomori-note-recommendations-root";
+    const notesPromotionRoots = new Set();
+    const notesPromotionRoot = "data-hikikomori-note-notes-promotions";
+    let notesPromotionsDirty = true, notesPromotionsSignature;
+    function hasClasses(element, names) { return names.every(name => element.classList.contains(name)); }
+    function notesBanner(block) {
+      if (block.tagName !== "DIV" || !hasClasses(block, ["hidden", "md:block"])) return false;
+      return [...block.children].some(scroller => scroller.tagName === "DIV" &&
+        hasClasses(scroller, ["flex", "flex-nowrap", "gap-2", "overflow-x-auto", "md:flex-wrap"]) &&
+        [...scroller.children].some(card => card.tagName === "DIV" &&
+          hasClasses(card, ["relative", "flex", "w-60", "min-w-60", "items-stretch", "md:w-full"]) &&
+          [...card.children].some(child => child.tagName === "IMG" && child.getAttribute("alt")) &&
+          [...card.children].some(child => {
+            if (child.tagName !== "A" || !hasClasses(child, ["absolute", "inset-0"]) || !child.getAttribute("aria-label") || !child.getAttribute("title")) return false;
+            try { return new URL(child.href).origin === "https://note.com"; } catch { return false; }
+          })));
+    }
+    function notesSuggestion(group) {
+      if (group.tagName !== "DIV" || !hasClasses(group, ["flex", "flex-col", "gap-4"])) return false;
+      return [...group.children].some(block => {
+        const desktop = block.tagName === "SECTION" && hasClasses(block, ["hidden", "rounded-lg", "bg-surface-normal", "p-6", "md:block"]);
+        const mobile = block.tagName === "DIV" && hasClasses(block, ["border-border-default", "border-b", "bg-background-primary", "md:hidden"]);
+        if (!desktop && !mobile) return false;
+        const title = desktop ? [...block.children].find(n => n.tagName === "H2") : block.querySelector("summary");
+        return title?.textContent.trim() === "あなたへの提案" && [...block.querySelectorAll("a[href]")].some(a => {
+          try { const url = new URL(a.href); return url.origin === "https://note.com" && url.pathname === "/monetization-guide"; } catch { return false; }
+        });
+      });
+    }
+    function syncNotesPromotions(settings, url) {
+      let active = false;
+      try { const page = new URL(url); active = settings.enabled && settings.hideArticleRecommendations && page.origin === "https://note.com" && /^\/notes\/?$/.test(page.pathname); } catch { /* 不明なURLでは解除 */ }
+      const signature = JSON.stringify([Boolean(active), url]);
+      if (!notesPromotionsDirty && notesPromotionsSignature === signature) return;
+      notesPromotionsDirty = false; notesPromotionsSignature = signature;
+      const current = new Set();
+      if (active) {
+        for (const root of doc.querySelectorAll("div[class]")) {
+          if (!hasClasses(root, ["flex", "flex-col", "gap-4"]) || root.closest("article") || root.closest('[id="note-body"]') || root.closest(`[${owned}]`)) continue;
+          if (![...root.children].some(block => notesBanner(block) || notesSuggestion(block))) continue;
+          if (!root.hasAttribute(notesPromotionRoot)) root.setAttribute(notesPromotionRoot, "");
+          current.add(root);
+        }
+      }
+      for (const root of notesPromotionRoots) if (!current.has(root)) root.removeAttribute(notesPromotionRoot);
+      notesPromotionRoots.clear(); for (const root of current) notesPromotionRoots.add(root);
+    }
     function syncRecommendations(active) {
       const article = doc.querySelector('article[id="note-article"]');
       const root = article?.parentElement;
@@ -571,6 +617,7 @@
       syncSideProfileFollow(settings, url);
       syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
+      syncNotesPromotions(settings, url);
       syncTips(settings, url);
       syncPaidCards(settings, url);
       if (!settings.enabled || settings.legacyMode || !page) { removeMobile(); restore(); return; }
@@ -660,6 +707,7 @@
       update, prepareSidebar,
       invalidatePaidCards() {
         authorControls.invalidate();
+        notesPromotionsDirty = true;
         paidDirty = true;
         tipsDirty = true;
       },
@@ -681,6 +729,8 @@
         restore();
         syncProducts(false);
         syncRecommendations(false);
+        for (const root of notesPromotionRoots) root.removeAttribute(notesPromotionRoot);
+        notesPromotionRoots.clear();
         for (const container of tips.values()) container.removeAttribute(tipHidden);
         tips.clear();
         for (const container of paidCards.values()) container.removeAttribute(paidHidden);

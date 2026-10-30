@@ -734,6 +734,43 @@ test('別タブの記事おすすめ設定を同期し、モードでも表示�
 const recommendationHtml='<div class="pt-6 px-4 md:px-0"><div><h2></h2></div><aside aria-label="記事"></aside></div>';
 const articleUrl='https://note.com/ruminar/n/n36b92cdcd987';
 const recommendationMarker='data-hikikomori-note-recommendations-hidden';
+const notesBannerHtml='<div class="hidden md:block"><div class="flex flex-nowrap gap-2 overflow-x-auto md:flex-wrap md:gap-4 mx-2 md:mx-0"><div class="relative flex w-60 min-w-60 flex-1 items-stretch md:w-full md:min-w-0"><img alt="月額サブスクつくるなら noteメンバーシップ"><a class="absolute inset-0" aria-label="月額サブスクつくるなら noteメンバーシップ" title="月額サブスクつくるなら noteメンバーシップ" href="https://note.com/lp/membership/start?sub_rt=notelist_banner"></a></div></div></div>';
+const notesSuggestionHtml='<div class="flex flex-col gap-4"><div class="border-border-default border-b bg-background-primary md:hidden"><details><summary id="notes-mobile-heading"></summary><div><article><a href="https://note.com/monetization-guide"></a></article></div></details></div><section class="hidden rounded-lg bg-surface-normal p-6 md:block"><h2 id="notes-desktop-heading"></h2><div><article><a href="https://note.com/monetization-guide"></a></article></div></section></div>';
+const notesMarker='data-hikikomori-note-notes-promotions';
+function notesPromotionsFixture(content=notesBannerHtml+notesSuggestionHtml){
+ const f=uiFixture('<main><div id="notes-promotions" class="flex flex-col gap-4">'+content+'</div><div id="actual-posts"></div></main>');
+ for(const id of ['notes-mobile-heading','notes-desktop-heading'])if(f.doc.getElementById(id))f.doc.getElementById(id).textContent='あなたへの提案';return f;
+}
+test('おすすめ設定でnotesの運営バナーとPC/スマホ提案を対象にし、解除・OFF・他画面で復元',()=>{
+ for(const legacyMode of [false,true]){
+   const f=notesPromotionsFixture(),root=f.doc.getElementById('notes-promotions'),settings=f.core.readSettings({...groups(),legacyMode,hideArticleRecommendations:true,hidePaidArticles:false});
+   f.ui.update({...settings,hideArticleRecommendations:false},'https://note.com/notes');assert.equal(root.hasAttribute(notesMarker),false);
+   for(const url of ['https://note.com/notes','https://note.com/notes/?status=draft']){f.ui.update(settings,url);assert.equal(root.hasAttribute(notesMarker),true);}
+   assert.equal(f.doc.getElementById('actual-posts').hasAttribute(notesMarker),false);
+   for(const url of ['https://note.com/notes/purchased','https://note.com/notes/edit','https://note.com/search','https://evil.test/notes']){f.ui.update(settings,url);assert.equal(root.hasAttribute(notesMarker),false);}
+   f.ui.update(settings,'https://note.com/notes');f.ui.update({...settings,enabled:false},'https://note.com/notes');assert.equal(root.hasAttribute(notesMarker),false);
+   f.ui.update(settings,'https://note.com/notes');f.ui.stop();assert.equal(root.hasAttribute(notesMarker),false);
+ }
+ const css=source('src/content.css');assert.ok(css.includes('[data-hikikomori-note-notes-promotions] > div[class~="hidden"][class~="md:block"]'));assert.ok(css.includes('[class~="md:hidden"]'));assert.ok(css.includes('> section[class~="hidden"][class~="rounded-lg"][class~="bg-surface-normal"][class~="p-6"][class~="md:block"]'));
+});
+test('運営バナーの内容変更と提案の後挿入に親ルートで対応し、ルート撤去時は解除',()=>{
+ const f=notesPromotionsFixture(notesBannerHtml),root=f.doc.getElementById('notes-promotions'),settings=f.core.readSettings({...groups(),hideArticleRecommendations:true});
+ f.ui.update(settings,'https://note.com/notes');assert.equal(root.hasAttribute(notesMarker),true);
+ root.querySelector('img').setAttribute('alt','記事ネタ、見つかる！');root.querySelector('a').href='https://note.com/notemag/n/n123';
+ const group=documentFromHtml(notesSuggestionHtml).root.children[0];for(const h of group.querySelectorAll('summary,h2'))h.textContent='あなたへの提案';root.append(group);
+ assert.equal(root.hasAttribute(notesMarker),true);f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/notes');assert.equal(root.hasAttribute(notesMarker),true);
+ root.remove();f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/notes');assert.equal(root.hasAttribute(notesMarker),false);
+});
+test('未知のバナー・本文・通常の記事一覧は投稿一覧の運営案内として隠さない',()=>{
+ for(const kind of ['external','missing-label','unknown-layout','body']){
+   const f=notesPromotionsFixture(notesBannerHtml),root=f.doc.getElementById('notes-promotions');
+   if(kind==='external')root.querySelector('a').href='https://evil.test/promo';
+   if(kind==='missing-label')root.querySelector('a').removeAttribute('aria-label');
+   if(kind==='unknown-layout')root.children[0].className='unrelated';
+   if(kind==='body'){const article=f.doc.createElement('article');f.doc.root.append(article);article.append(root);}
+   f.ui.update(f.core.readSettings({...groups(),hideArticleRecommendations:true}),'https://note.com/notes');assert.equal(root.hasAttribute(notesMarker),false,kind);
+ }
+});
 
 test('有料記事設定は既定OFF。型検証・保存・再起動と他設定の維持',async()=>{
  const f=fixture();assert.equal((await f.controller.getState()).hidePaidArticles,false);
