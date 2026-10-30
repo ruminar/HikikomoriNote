@@ -54,3 +54,8 @@ hr { border: 0; border-top: 1px solid #d9dfd5; margin: 24px 0; }
 .tag-row select { max-width: 140px; font: inherit; padding: 6px; border-radius: 6px; }
 
 @media(max-width: 680px) { .home-layout { grid-template-columns: 1fr; gap: 20px; } .home-sidebar { position: static; } .page-links { margin-top: 12px; padding-top: 12px; } }
+
+.author-list { list-style: none; padding: 0; }
+.author-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid #d9dfd5; }
+.author-row a { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+#author-action { font: inherit; min-height: 44px; padding: 8px; border: 1px solid #728579; border-radius: 6px; }

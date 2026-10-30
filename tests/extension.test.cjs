@@ -101,7 +101,7 @@ test("DNR：ホームの文書だけ専用ページへ転送、事前取得も�
 });
 test("保存したユーザー名・OFFを再起動後も適用", async () => {
   const f = controllerFixture({ enabled: false, noteUserId: "ruminar" });
-  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0 });
+  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0, authorDisplayRules:[], authorDisplayRevision:0 });
   assert.deepEqual(f.rules, []);
   await f.controller.save({ enabled: true });
   const restart = controllerFixture(f.value); await restart.controller.getState();
@@ -116,7 +116,7 @@ test("OFFはルール解除・保存の順に完了してから成功を返す",
 test("複数タブから同時保存してもON/OFFとユーザー名を上書きし合わない", async () => {
   const f = controllerFixture();
   await Promise.all([f.controller.save({ enabled: false }), f.controller.save({ noteUserId: "ruminar" })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, ...settingsData.groups() });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, ...settingsData.groups(), authorDisplayRules: [], authorDisplayRevision: 0 });
   assert.deepEqual(f.rules, []);
 });
 test("転送更新失敗時は設定を保存せず、次の操作は再試行できる", async () => {
@@ -432,7 +432,7 @@ test("アダプターは自拡張のhome.htmlだけを設定メッセージ送�
 });
 test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホーム全体を隠さない", () => {
   const m = JSON.parse(source("manifest.json"));
-  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.2");
+  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.3");
   assert.deepEqual(m.permissions, ["storage", "declarativeNetRequestWithHostAccess"]);
   assert.deepEqual(m.host_permissions, ["https://note.com/*"]);
   assert.deepEqual(m.web_accessible_resources, [{ resources: ["home.html"], matches: ["https://note.com/*"] }]);

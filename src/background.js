@@ -29,12 +29,23 @@ port.onMessage((message, sender, respond) => {
     if (message?.type === "get-state") operation = controller.getState();
     else if (message?.type === "save-settings") operation = controller.save(message.patch);
     else if (message?.type === "import-settings") operation = controller.importSettings(message.patch);
+    else if (message?.type === "author-operation") operation = controller.author(message.patch);
     else if (message?.type === "tag-operation") operation = controller.tag(message.patch);
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (!["select-tag-group", "add-current-tag"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    if (!["select-tag-group", "add-current-tag", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
     operation = (async () => {
+      if (message.type === "current-author-operation") {
+        const page = await port.currentAuthorPage(sender, message.patch?.pageUrl);
+        const source = message.patch?.source, patch = message.patch?.operation;
+        if (!page || !["article", "profile"].includes(source) || page.type !== source ||
+            typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase()) throw Object.assign(new Error("現在の作者を確認できません。"), { code: "CONFLICT" });
+        return controller.author(patch, { fromArticle: source === "article", validateCurrent: async () => {
+          const current = await port.currentAuthorPage(sender, message.patch.pageUrl);
+          return current?.type === source && current.user.toLowerCase() === patch.userId.toLowerCase();
+        } });
+      }
       const page = await port.currentMenuPage(sender, message.patch?.pageUrl);
       if (!page || (message.type === "add-current-tag" && page.type !== "tag")) {
         throw Object.assign(new Error("表示中のページを確認できません。ページの読み込みが完了してから、もう一度お試しください。"), { code: "CONFLICT" });

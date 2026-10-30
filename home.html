@@ -20,6 +20,7 @@
         <nav id="home-menu" aria-label="専用ホーム" hidden>
           <button type="button" id="nav-tags" aria-controls="panel-tags">お気に入りタグ</button>
           <button type="button" id="nav-settings" aria-controls="panel-settings">設定</button>
+          <button type="button" id="nav-authors" aria-controls="panel-authors">ユーザーの表示管理</button>
           <button type="button" id="nav-transfer" aria-controls="panel-transfer">設定の移行</button>
         </nav>
         <div id="page-links" class="page-links" hidden>
@@ -58,7 +59,7 @@
             <label class="check-option" for="dashboard-disabled"><input id="dashboard-disabled" type="checkbox" aria-describedby="dashboard-help" disabled>ダッシュボードを無効化する</label>
             <p class="muted" id="dashboard-help">アクセス状況・提案・バッジ・売上・振込・販売履歴を含むダッシュボード全体を専用ホームへ戻し、note上のダッシュボードボタンを隠します。</p>
             <label class="check-option" for="hide-paid-articles"><input id="hide-paid-articles" type="checkbox" aria-describedby="paid-help" disabled>有料記事を非表示</label>
-            <p class="muted" id="paid-help">価格が表示される記事カードと、タイトルに鍵アイコンがあるメンバーシップ限定記事を隠します。購入済み記事一覧は対象外です。ほかの一覧では購入済み・参加済みでも価格や鍵アイコンがあれば対象になります。記事内の「チップで応援する」枠も隠します。記事への直接アクセスは制限しません。</p>
+            <p class="muted" id="paid-help">ONのとき有料記事を開くと、未設定の作者の表示方法を確認します。価格が表示される記事カードと、タイトルに鍵アイコンがあるメンバーシップ限定記事を隠します。購入済み記事一覧は対象外です。ほかの一覧では購入済み・参加済みでも価格や鍵アイコンがあれば対象になります。記事内の「チップで応援する」枠も隠します。記事への直接アクセスは制限しません。</p>
             <label class="check-option" for="hide-article-recommendations"><input id="hide-article-recommendations" type="checkbox" aria-describedby="recommendations-help" disabled>記事の「あなたへのおすすめ」を非表示にする</label>
             <p class="muted" id="recommendations-help">記事下のおすすめ欄を隠します。通常・重度の両モードで有効です。チェックを外すか、拡張をOFFにすると元の表示に戻ります。</p>
             <label class="check-option" for="note-logo-browser-back"><input id="note-logo-browser-back" type="checkbox" disabled>noteアイコンをブラウザバックに差し替える</label>
@@ -73,6 +74,25 @@
           <hr>
           <p class="muted">通常のnoteを表示すると、ホーム転送・ダッシュボード制限・おすすめ欄の非表示を解除します。保存済みの設定は保持します。</p>
           <button id="normal" class="secondary" type="button" disabled>通常のnoteを表示（拡張OFF）</button>
+        </section>
+        <section id="panel-authors" aria-labelledby="authors-heading" hidden>
+          <h2 id="authors-heading">ユーザーの表示管理</h2>
+          <p>非表示にした作者の無料記事を含む記事一覧のカードを隠します。記事や作者ページへの直接アクセスは制限しません。</p>
+          <p>「表示を許可」は作者による非表示を免除し、有料記事検出時の確認を出しません。「有料記事を非表示」の設定は引き続き適用されます。</p>
+          <p id="authors-state" class="muted" role="status"></p>
+          <form id="author-form" class="tag-form">
+            <label for="author-user">noteユーザー名 または 公開プロフィールURL</label>
+            <input id="author-user" type="text" autocomplete="off" placeholder="例：yeku" disabled>
+            <label for="author-name">表示名（任意）</label>
+            <input id="author-name" type="text" maxlength="200" autocomplete="off" disabled>
+            <label for="author-action">表示設定</label>
+            <select id="author-action" disabled><option value="hide">非表示</option><option value="allow">表示を許可</option></select>
+            <button id="author-add" type="submit" disabled>登録・変更</button>
+          </form>
+          <h3 id="authors-hidden-heading">非表示</h3>
+          <ul id="authors-hidden" class="author-list"></ul>
+          <h3 id="authors-allowed-heading">表示を許可</h3>
+          <ul id="authors-allowed" class="author-list"></ul>
         </section>
         <section id="panel-transfer" aria-labelledby="transfer-heading" hidden>
           <h2 id="transfer-heading">設定の書き出しと読み込み</h2>
@@ -90,12 +110,12 @@
             <button id="import-settings" type="button" disabled>設定の読み込み</button>
           </div>
           <p id="transfer-status" class="muted" role="status" aria-live="polite"></p>
-          <p class="muted">読み込みは、拡張のON/OFF・ユーザー名・表示設定・4グループのタグをすべて置き換えます。JSONはnoteの下書き記事などへ手動で貼り付けて保存できます。</p>
+          <p class="muted">読み込みは、拡張のON/OFF・ユーザー名・表示設定・4グループのタグ・作者の表示設定（ユーザー名と表示名を含む）をすべて置き換えます。形式2のJSONは0.2.3以降で読み込めます。JSONはnoteの下書き記事などへ手動で貼り付けて保存できます。</p>
         </section>
       </div>
     </div>
     <p class="muted">ブラウザの拡張アイコンを押すと、ONに戻してこの画面を開きます。</p>
-    <footer>非公式拡張 · 0.2.2 · note株式会社とは関係ありません。<br>この画面は拡張内にあり、noteの通常ホームを読み込みません。記事の取得・表示・操作はnote公式画面で行います。</footer>
+    <footer>非公式拡張 · 0.2.3 · note株式会社とは関係ありません。<br>この画面は拡張内にあり、noteの通常ホームを読み込みません。記事の取得・表示・操作はnote公式画面で行います。</footer>
   </main>
 </body>
 </html>

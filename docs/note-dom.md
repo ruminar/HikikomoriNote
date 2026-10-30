@@ -126,3 +126,9 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 ## 2026-10-28 記事おすすめの構造変更
 
 利用者指定の公開記事で確認。おすすめの見出しはpt-6 px-4 md:px-0のdiv内、一覧はaside.p-8[aria-busy="false"]でaria-label="記事"はない。記事親divの直下にborder-t・print:hiddenの領域があり、そのdivide-y.divide-border-default内におすすめdivがある。親からの子孫CSSセレクタでおすすめ1枠だけが一致し、記事本文とコメントsectionは対象外であることを読み取り専用のDOM検査で確認。拡張適用後の実表示確認とは区別する。
+
+## 0.2.3 作者表示のDOM境界（2026-10-31）
+
+指定の公開記事2件を未ログインで確認。article#note-article内・#note-body外のdiv#note-paywall.note-paywallは後挿入される。先頭sectionの「ここから先は」と、内側section.flex.flex-col.rounded-lg.border.border-border-strong.px-4を照合する。単品は「記事」＋円価格＋button[data-name="Button"][type="button"]「購入手続きへ」。会員限定は同じ枠の本人/membershipリンク＋「参加手続きへ」。単品価格0でも会員限定の場合があり、価格だけでは判定しない。本文・チップ・生成IDは使わない。実装した検出の全ケースの実機確認とは区別する。
+
+/yekuのプロフィールを幅390pxで確認。h1から5段程度の祖先にavatarと本人の/followingsリンクが同居し、その領域は幅343pxで表示される。プロフィール用操作欄はこの本人領域へ追加する。既存のTLメニューとは別管理とし、重度・全体OFFでも手動変更を残す。見つからない構造では挿入しない。

@@ -3,7 +3,7 @@
   const core = globalThis.HikikomoriNote;
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
-  const views = ["tags", "settings", "transfer"];
+  const views = ["tags", "settings", "authors", "transfer"];
   const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", legacyMode: "legacy-mode" };
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
@@ -59,6 +59,12 @@
     byId("edit-tags").querySelectorAll("select").forEach(select => { select.disabled = tagBlocked; });
     byId("retry").disabled = busy;
     byId("nav-transfer").disabled = !state;
+    byId("nav-authors").disabled = !state;
+    const authorBlocked = blocked || !state?.noteUserId || Boolean(state?.authorWarning);
+    for (const id of ["author-user", "author-name", "author-action", "author-add"]) byId(id).disabled = authorBlocked;
+    for (const id of ["authors-hidden", "authors-allowed"]) for (const button of byId(id).querySelectorAll("button")) {
+      button.disabled = blocked || Boolean(state?.authorWarning) || (button.dataset.remove !== "true" && (authorBlocked || button.dataset.self === "true"));
+    }
     byId("edit-tags").setAttribute("aria-busy", String(busy));
     transferControls();
   }
@@ -118,6 +124,36 @@
       editor.append(row);
     });
   }
+  function authorOperation(rule, action) {
+    return { userId: rule.userId, displayName: rule.displayName, action,
+      expectedAction: core.authorRule(state, rule.userId)?.action ?? null,
+      expectedRevision: state.authorDisplayRevision, expectedSelf: state.noteUserId };
+  }
+  function renderAuthors() {
+    byId("authors-state").textContent = state.authorWarning || (!state.noteUserId
+      ? "自分を対象外にするため、設定で自分のnoteユーザー名を登録してください。登録の解除は可能です。"
+      : `一覧への適用：${state.enabled ? "有効" : "拡張OFFのため停止"}。有料記事検出時の確認：${state.enabled && state.hidePaidArticles ? "有効" : "停止"}。手動管理はいつでも可能です。`);
+    for (const [id, action] of [["authors-hidden", "hide"], ["authors-allowed", "allow"]]) {
+      const list = byId(id); list.replaceChildren();
+      const rules = core.sortAuthors(state.authorDisplayRules.filter(rule => rule.action === action));
+      byId(`${id}-heading`).textContent = `${action === "hide" ? "非表示" : "表示を許可"}（${rules.length}件）`;
+      for (const rule of rules) {
+        const row = document.createElement("li"); row.className = "author-row";
+        const link = document.createElement("a"); link.href = core.profileUrl(rule.userId); link.textContent = core.authorLabel(rule); row.append(link);
+        const self = core.isSelf(state, rule.userId);
+        if (self) { const note = document.createElement("span"); note.textContent = "自分のため対象外"; row.append(note); }
+        for (const [label, next] of [[action === "hide" ? "表示を許可" : "非表示", action === "hide" ? "allow" : "hide"], ["登録を解除", null]]) {
+          const button = document.createElement("button"); button.type = "button"; button.className = "secondary"; button.textContent = label;
+          button.dataset.remove = String(next === null); button.dataset.self = String(self);
+          button.setAttribute("aria-label", `${core.authorLabel(rule)}：${label}`);
+          const operation = authorOperation(rule, next);
+          button.onclick = () => { void perform(() => platform.author(operation), { kind: "author" }); }; row.append(button);
+        }
+        list.append(row);
+      }
+      if (!rules.length) { const empty = document.createElement("li"); empty.textContent = "登録はありません。"; list.append(empty); }
+    }
+  }
   function show(value) {
     const firstLoad = !state;
     const previous = state?.selectedTagGroupId;
@@ -126,6 +162,7 @@
     // 背景処理が正常項目と一緒に返した診断を、再正規化で消さない。
     if (typeof value?.tagWarning === "string" && value.tagWarning) state.tagWarning = value.tagWarning;
     if (value?.groupSelectionInvalid) state.groupSelectionInvalid = true;
+    if (value?.authorWarning) state.authorWarning = value.authorWarning;
     const group = core.selectedGroup(state), currentDraft = draft(group.id);
     if (previous !== group.id) { byId("tag-input").value = currentDraft.tag; dragTag = null; }
     byId("group-name").value = currentDraft.nameDirty ? currentDraft.name : group.name;
@@ -154,7 +191,7 @@
     const warning = state.tagWarning || (state.groupSelectionInvalid ? "保存済みの選択に異常があります。グループを選び直してください。" : "");
     byId("tag-warning").hidden = !warning; byId("tag-warning").textContent = warning;
     selectView(selected, hiddenFocus);
-    renderTags(); controls();
+    renderTags(); renderAuthors(); controls();
   }
   async function refresh() {
     if (busy) return;
@@ -186,6 +223,7 @@
       if (options.kind === "settings" || options.kind === "import") dirty.clear();
       if (options.kind === "import") {
         drafts.clear(); dragTag = null; byId("tag-input").value = "";
+        byId("author-user").value = ""; byId("author-name").value = "";
       }
       if (options.addInput !== undefined) {
         const savedDraft = draft(options.groupId);
@@ -204,7 +242,7 @@
       byId("status").textContent = `処理できませんでした。${error.message}`;
       if (options.kind === "import") byId("transfer-status").textContent = `読み込みを完了できませんでした。${error.message}`;
       if (uncertain) selectView("settings", true);
-      if (["CONFLICT", "LEGACY_MODE", "INVALID_TAGS"].includes(error.code)) {
+      if (["CONFLICT", "LEGACY_MODE", "INVALID_TAGS", "INVALID_AUTHORS"].includes(error.code)) {
         try { show(await platform.getState()); } catch { uncertain = true; }
       }
     } finally { busy = false; pendingState = false; controls(); }
@@ -245,7 +283,7 @@
   };
   for (const name of views) byId(`nav-${name}`).onclick = () => selectView(name);
   byId("home-menu").onkeydown = event => {
-    const visible = !state ? ["settings"] : state.legacyMode ? ["settings", "transfer"] : views;
+    const visible = !state ? ["settings"] : state.legacyMode ? ["settings", "authors", "transfer"] : views;
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     let index = visible.indexOf(selected);
@@ -263,6 +301,16 @@
   };
   byId("normal").onclick = () => { void perform(() => platform.save({ enabled: false }), { off: true }); };
   byId("retry").onclick = () => { void refresh(); };
+  byId("author-form").onsubmit = event => {
+    event.preventDefault();
+    if (byId("author-add").disabled) return;
+    try {
+      const userId = core.authorId(byId("author-user").value), displayName = core.authorName(byId("author-name").value);
+      if (core.isSelf(state, userId)) throw new Error("自分は登録できません。");
+      const operation = authorOperation({ userId, displayName }, byId("author-action").value);
+      void perform(() => platform.author(operation), { kind: "author" });
+    } catch (error) { byId("status").textContent = error.message; }
+  };
   byId("settings-json").oninput = () => { byId("transfer-status").textContent = ""; transferControls(); };
   byId("clear-settings-json").onclick = () => {
     if (byId("clear-settings-json").disabled) return;
@@ -299,7 +347,8 @@
     transferControls();
     if (byId("import-settings").disabled) return;
     const json = byId("settings-json").value, expectedToken = core.settingsToken(state);
-    if (!confirm("現在の設定とお気に入りタグをすべて置き換えます。未保存の入力も破棄します。読み込みますか？")) return;
+    const oldFormat = JSON.parse(json).schemaVersion === 1 ? " このJSONには作者の表示設定がなく、現在の作者設定も解除されます。" : "";
+    if (!confirm(`現在の設定とお気に入りタグ・作者の表示設定をすべて置き換えます。未保存の入力も破棄します。${oldFormat}読み込みますか？`)) return;
     void perform(() => platform.importSettings({ json, expectedToken }), { kind: "import" });
   };
   platform.subscribe(value => { revision++; show(value); });

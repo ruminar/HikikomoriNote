@@ -7,7 +7,7 @@
     return { enabled: true, noteUserId: "", dashboardDisabled: false, legacyMode: false,
       hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, tagSchemaVersion: 2,
       tagGroups: groupIds.map(id => ({ id, name: "", tags: [] })), selectedTagGroupId: "group1",
-      groupSelectionRevision: 0, tagGroupsRevision: 0 };
+      groupSelectionRevision: 0, tagGroupsRevision: 0, authorDisplayRules: [], authorDisplayRevision: 0 };
   }
   function groupName(group) { return group.name || `グループ${groupIds.indexOf(group.id) + 1}`; }
   function normalizeGroupName(value) {
@@ -79,7 +79,7 @@
     const groups = inspectGroups(value);
     return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
       legacyMode: value?.legacyMode === true, hideArticleRecommendations: value?.hideArticleRecommendations === true, hidePaidArticles: value?.hidePaidArticles === true,
-      noteLogoBrowserBack: value?.noteLogoBrowserBack === true, ...groups };
+      noteLogoBrowserBack: value?.noteLogoBrowserBack === true, ...groups, ...inspectAuthors(value) };
   }
   function normalizeTag(value) {
     if (typeof value !== "string") throw new Error("タグ名は文字列で入力してください。");
@@ -144,13 +144,45 @@
     const normalized = normalizeUserId(id);
     return normalized ? `https://note.com/${encodeURIComponent(normalized)}` : null;
   }
+  function authorId(value) {
+    const id = normalizeUserId(value);
+    if (!id || pageKind(profileUrl(id.toLowerCase()))?.type !== "profile" || /^(?:preview|user_verification)$/i.test(id)) throw new Error("noteの公開プロフィールを指定してください。");
+    return id;
+  }
+  function authorName(value) {
+    if (typeof value !== "string" || [...value].length > 200 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(value)) throw new Error("表示名は改行なしの200文字以内で入力してください。");
+    return value.trim();
+  }
+  function isSelf(settings, id) { return Boolean(settings.noteUserId && settings.noteUserId.toLowerCase() === id.toLowerCase()); }
+  function authorRule(settings, id) { return settings.authorDisplayRules.find(rule => rule.userId.toLowerCase() === id.toLowerCase()); }
+  function authorLabel(rule) { return rule.displayName ? `${rule.displayName}（${rule.userId}）` : rule.userId; }
+  function sortAuthors(rules) {
+    const collator = new Intl.Collator("ja");
+    return [...rules].sort((a, b) => collator.compare(a.displayName || a.userId, b.displayName || b.userId) || (a.userId.toLowerCase() < b.userId.toLowerCase() ? -1 : a.userId.toLowerCase() > b.userId.toLowerCase() ? 1 : 0));
+  }
+  function validateAuthors(value) {
+    if (!Array.isArray(value)) throw new Error("作者の表示設定が正しくありません。");
+    const seen = new Set();
+    return value.map(rule => {
+      if (!exactKeys(rule, ["userId", "displayName", "action"]) || authorId(rule.userId) !== rule.userId || authorName(rule.displayName) !== rule.displayName || !["hide", "allow"].includes(rule.action) || seen.has(rule.userId.toLowerCase())) throw new Error("作者の表示設定に不正な値または重複があります。");
+      seen.add(rule.userId.toLowerCase());
+      return { userId: rule.userId, displayName: rule.displayName, action: rule.action };
+    });
+  }
+  function inspectAuthors(value) {
+    if (value?.authorDisplayRules === undefined && value?.authorDisplayRevision === undefined) return { authorDisplayRules: [], authorDisplayRevision: 0 };
+    try {
+      if (!Number.isSafeInteger(value?.authorDisplayRevision) || value.authorDisplayRevision < 0) throw new Error();
+      return { authorDisplayRules: validateAuthors(value.authorDisplayRules), authorDisplayRevision: value.authorDisplayRevision };
+    } catch { return { authorDisplayRules: [], authorDisplayRevision: 0, authorWarning: "作者の保存データに異常があります。作者の表示制御を停止しました。元データを保持して修復してください。" }; }
+  }
   const transferFlags = ["enabled", "dashboardDisabled", "legacyMode", "hideArticleRecommendations", "hidePaidArticles", "noteLogoBrowserBack"];
   function exactKeys(value, keys) {
     return value && typeof value === "object" && !Array.isArray(value) &&
       Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
   }
-  function validateTransferSettings(value) {
-    if (!exactKeys(value, [...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId"])) throw new Error("設定の項目に不足または未対応の項目があります。");
+  function validateTransferSettings(value, version = 2) {
+    if (!exactKeys(value, [...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId", ...(version === 2 ? ["authorDisplayRules"] : [])])) throw new Error("設定の項目に不足または未対応の項目があります。");
     for (const key of transferFlags) if (typeof value[key] !== "boolean") throw new Error(`${key}はtrueまたはfalseを指定してください。`);
     if (typeof value.noteUserId !== "string" || normalizeUserId(value.noteUserId) !== value.noteUserId) throw new Error("ユーザー名の保存値が正しくありません。");
     if (!Array.isArray(value.tagGroups) || value.tagGroups.length !== 4 || !groupIds.includes(value.selectedTagGroupId)) throw new Error("4グループと選択グループを確認してください。");
@@ -162,28 +194,30 @@
       return { id: group.id, name: group.name, tags: [...group.tags] };
     });
     return { ...Object.fromEntries(transferFlags.map(key => [key, value[key]])), noteUserId: value.noteUserId,
-      tagGroups: groups, selectedTagGroupId: value.selectedTagGroupId };
+      tagGroups: groups, selectedTagGroupId: value.selectedTagGroupId, authorDisplayRules: version === 2 ? validateAuthors(value.authorDisplayRules) : [] };
   }
   function transferSettings(settings) {
-    if (settings.tagWarning || settings.groupSelectionInvalid) throw new Error("保存データに異常があります。状態を再確認してください。");
-    return validateTransferSettings(Object.fromEntries([...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId"].map(key => [key, settings[key]])));
+    if (settings.tagWarning || settings.groupSelectionInvalid || settings.authorWarning) throw new Error("保存データに異常があります。状態を再確認してください。");
+    return validateTransferSettings(Object.fromEntries([...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]])));
   }
   function exportSettings(settings) {
-    return JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 1, settings: transferSettings(settings) }, null, 2);
+    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 2, settings: transferSettings(settings) }, null, 2);
+    if (json.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
+    return json;
   }
   function parseSettingsExport(text) {
     if (typeof text !== "string" || text.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     let document;
     try { document = JSON.parse(text); } catch { throw new Error("JSONの書式が正しくありません。"); }
-    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || document.schemaVersion !== 1) {
-      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1）を入力してください。");
+    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || ![1, 2].includes(document.schemaVersion)) {
+      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1または2）を入力してください。");
     }
-    return validateTransferSettings(document.settings);
+    return validateTransferSettings(document.settings, document.schemaVersion);
   }
   function settingsToken(settings) {
-    return JSON.stringify([transferSettings(settings), settings.groupSelectionRevision, settings.tagGroupsRevision]);
+    return JSON.stringify([transferSettings(settings), settings.groupSelectionRevision, settings.tagGroupsRevision, settings.authorDisplayRevision ?? 0]);
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
-    exportSettings, parseSettingsExport, settingsToken,
+    exportSettings, parseSettingsExport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
     normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

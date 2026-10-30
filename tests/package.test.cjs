@@ -91,7 +91,7 @@ test("両ブラウザの配布フォルダはmanifest直下・必要ファイル
   for (const browser of ["chromium", "firefox"]) {
     const output = await buildPackage(browser, temp);
     const manifest = JSON.parse(await fs.readFile(path.join(output, "manifest.json"), "utf8"));
-    assert.equal(manifest.version, "0.2.2");
+    assert.equal(manifest.version, "0.2.3");
     for (const file of [...runtimeFiles, "INSTALL.md"]) assert.ok((await fs.stat(path.join(output, file))).isFile());
     for (const file of manifest.background.scripts ?? [manifest.background.service_worker]) assert.ok((await fs.stat(path.join(output, file))).isFile());
     for (const forbidden of [".git", "tests", "scripts", "README.md"]) await assert.rejects(fs.stat(path.join(output, forbidden)), { code: "ENOENT" });

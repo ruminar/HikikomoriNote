@@ -31,9 +31,9 @@
     }
     function failure(message, code) { return Object.assign(new Error(message), { code }); }
     function storedValue(raw, settings) {
-      const { tagWarning, groupSelectionInvalid, ...clean } = settings;
+      const { tagWarning, groupSelectionInvalid, authorWarning, ...clean } = settings;
       // タグ関連の保存値は通常設定保存では一切正規化・上書きしない。
-      for (const key of ["tagSchemaVersion", "tagGroups", "selectedTagGroupId", "groupSelectionRevision", "tagGroupsRevision"]) delete clean[key];
+      for (const key of ["tagSchemaVersion", "tagGroups", "selectedTagGroupId", "groupSelectionRevision", "tagGroupsRevision", "authorDisplayRules", "authorDisplayRevision"]) delete clean[key];
       return { ...(raw === undefined ? core.defaultSettings() : raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}), ...clean };
     }
     function increment(value) {
@@ -80,7 +80,7 @@
         const previous = core.readSettings(await port.load());
         if (core.settingsToken(previous) !== patch.expectedToken) throw failure("別の画面で設定が変更されました。状態を再確認し、もう一度読み込んでください。", "CONFLICT");
         const next = { ...imported, tagSchemaVersion: 2,
-          groupSelectionRevision: increment(previous.groupSelectionRevision), tagGroupsRevision: increment(previous.tagGroupsRevision) };
+          groupSelectionRevision: increment(previous.groupSelectionRevision), tagGroupsRevision: increment(previous.tagGroupsRevision), authorDisplayRevision: increment(previous.authorDisplayRevision) };
         await port.setRules(rules(next.enabled, next.dashboardDisabled));
         try { await port.store(next); }
         catch (error) {
@@ -88,6 +88,26 @@
           catch { throw failure("保存と転送設定の復旧に失敗しました。状態を再確認してください。", "UNCONFIRMED"); }
           throw error;
         }
+        return core.readSettings(next);
+      }),
+      author: (operation, options = {}) => run(async () => {
+        if (!operation || typeof operation !== "object" || Object.keys(operation).length !== 6 ||
+            !["userId", "displayName", "action", "expectedAction", "expectedRevision", "expectedSelf"].every(key => Object.hasOwn(operation, key)) ||
+            ![null, "hide", "allow"].includes(operation.action) || ![null, "hide", "allow"].includes(operation.expectedAction)) throw new Error("作者の変更要求が正しくありません。");
+        const userId = core.authorId(operation.userId), displayName = core.authorName(operation.displayName);
+        const loaded = await port.load(), raw = loaded === undefined ? core.defaultSettings() : loaded, settings = core.readSettings(raw);
+        if (options.validateCurrent && !await options.validateCurrent()) throw failure("現在の作者が変わりました。ページを再確認してください。", "CONFLICT");
+        if (settings.authorWarning) throw failure(settings.authorWarning, "INVALID_AUTHORS");
+        if (operation.expectedRevision !== settings.authorDisplayRevision || operation.expectedSelf !== settings.noteUserId ||
+            operation.expectedAction !== (core.authorRule(settings, userId)?.action ?? null)) throw failure("別の画面で作者の表示設定が変更されました。状態を再確認してください。", "CONFLICT");
+        if (operation.action !== null && (!settings.noteUserId || core.isSelf(settings, userId))) throw new Error("自分のnoteユーザー名を確認してください。自分は登録できません。");
+        if (options.fromArticle && (!settings.enabled || !settings.hidePaidArticles || core.isSelf(settings, userId) || core.authorRule(settings, userId))) throw failure("有料記事の確認条件が変わりました。状態を再確認してください。", "CONFLICT");
+        const previous = core.authorRule(settings, userId);
+        const rules = settings.authorDisplayRules.filter(rule => rule.userId.toLowerCase() !== userId.toLowerCase());
+        if (operation.action !== null) rules.push({ userId, displayName: displayName || previous?.displayName || "", action: operation.action });
+        const next = { ...raw, authorDisplayRules: rules, authorDisplayRevision: increment(settings.authorDisplayRevision) };
+        if (JSON.stringify(next).length > 1048576) throw new Error("設定データが大きすぎます。登録を整理してください。");
+        await port.store(next);
         return core.readSettings(next);
       }),
       tag: (operation, options = {}) => run(async () => {

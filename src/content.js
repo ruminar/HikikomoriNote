@@ -7,10 +7,16 @@
     const state = core.readSettings(value);
     if (value?.tagWarning) state.tagWarning = value.tagWarning;
     if (value?.groupSelectionInvalid) state.groupSelectionInvalid = true;
+    if (value?.authorWarning) state.authorWarning = value.authorWarning;
     return state;
   }
   const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
     settingsUrl: () => platform.homeUrl(),
+    async setAuthor(operation, source) {
+      const before = revision;
+      const value = await platform.currentAuthor(operation, source);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
+    },
     async addCurrentTag(groupId, selectionRevision) {
       const before = revision;
       const value = await platform.addCurrentTag(groupId, selectionRevision);
@@ -138,7 +144,7 @@
       window.navigation?.addEventListener("navigate", onNavigate);
       window.navigation?.addEventListener("currententrychange", checkHome);
       observer = new MutationObserver(scheduleSync);
-      observer.observe(document, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["href"] });
+      observer.observe(document, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["href", "class", "hidden", "style"] });
       noteUi?.prepareSidebar?.(location.href);
       unsubscribe = platform.subscribe(value => {
         if (stopped) return;

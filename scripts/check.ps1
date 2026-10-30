@@ -8,7 +8,7 @@ try {
     & node --check scripts/package.mjs
     if ($LASTEXITCODE -ne 0) { throw '配布生成スクリプトの構文検証失敗' }
     # dist内のソース提出検証用コピーまで再帰探索しない。
-    & node --test tests/extension.test.cjs tests/package.test.cjs tests/v0.2.test.cjs
+    & node --test tests/extension.test.cjs tests/package.test.cjs tests/v0.2.test.cjs tests/author-display.test.cjs
     if ($LASTEXITCODE -ne 0) { throw 'テスト失敗' }
 } finally {
     Pop-Location

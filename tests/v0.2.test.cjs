@@ -1083,12 +1083,12 @@ test('ラベルなしの新しいおすすめasideも隠し、本文・コメン
 
 test('設定JSONは全設定と4グループを往復し、内部番号・診断・未対応項目を持ち込まない',()=>{
  const f=fixture({...groups(['AI','ComfyUI']),noteUserId:'ruminar',enabled:false,legacyMode:true,hidePaidArticles:true,hideArticleRecommendations:true,noteLogoBrowserBack:true,dashboardDisabled:true,selectedTagGroupId:'group3',groupSelectionRevision:12,tagGroupsRevision:20});
- const json=f.core.exportSettings(f.stored),document=JSON.parse(json);assert.equal(document.format,'hikikomori-note-settings');assert.equal(document.schemaVersion,1);
+ const json=f.core.exportSettings(f.stored),document=JSON.parse(json);assert.equal(document.format,'hikikomori-note-settings');assert.equal(document.schemaVersion,2);
  assert.equal(Object.hasOwn(document.settings,'tagGroupsRevision'),false);assert.equal(Object.hasOwn(document.settings,'tagSchemaVersion'),false);
  const parsed=f.core.parseSettingsExport(json);assert.equal(parsed.enabled,false);assert.equal(parsed.legacyMode,true);assert.equal(parsed.selectedTagGroupId,'group3');assert.deepEqual(plain(parsed.tagGroups[0].tags),['AI','ComfyUI']);
  assert.equal(f.core.exportSettings({...f.stored,groupSelectionRevision:99}),json);assert.throws(()=>f.core.exportSettings({...f.stored,tagWarning:'invalid'}));
  const mutate=fn=>{const doc=JSON.parse(json);fn(doc);return JSON.stringify(doc);};
- for(const text of ['{}','[]','null','broken',mutate(d=>d.schemaVersion=2),mutate(d=>d.format='other'),mutate(d=>delete d.settings.enabled),mutate(d=>d.settings.enabled='true'),mutate(d=>d.settings.extra=true),mutate(d=>d.settings.noteUserId='https://note.com/ruminar'),mutate(d=>d.settings.tagGroups.pop()),mutate(d=>d.settings.tagGroups.reverse()),mutate(d=>d.settings.tagGroups[0].tags=['AI','AI']),mutate(d=>d.settings.tagGroups[0].tags=[' #AI ']),mutate(d=>d.settings.tagGroups[0].name=' X '),mutate(d=>d.settings.selectedTagGroupId='group5')])assert.throws(()=>f.core.parseSettingsExport(text));
+ for(const text of ['{}','[]','null','broken',mutate(d=>d.schemaVersion=99),mutate(d=>d.format='other'),mutate(d=>delete d.settings.enabled),mutate(d=>d.settings.enabled='true'),mutate(d=>d.settings.extra=true),mutate(d=>d.settings.noteUserId='https://note.com/ruminar'),mutate(d=>d.settings.tagGroups.pop()),mutate(d=>d.settings.tagGroups.reverse()),mutate(d=>d.settings.tagGroups[0].tags=['AI','AI']),mutate(d=>d.settings.tagGroups[0].tags=[' #AI ']),mutate(d=>d.settings.tagGroups[0].name=' X '),mutate(d=>d.settings.selectedTagGroupId='group5')])assert.throws(()=>f.core.parseSettingsExport(text));
  const doc=JSON.parse(json);doc.settings.tagGroups[1].tags=['AI'];assert.doesNotThrow(()=>f.core.parseSettingsExport(JSON.stringify(doc)));
  assert.throws(()=>f.core.parseSettingsExport(' '.repeat(1048577)));
 });

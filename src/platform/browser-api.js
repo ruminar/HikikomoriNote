@@ -38,6 +38,8 @@
     getState: () => request("get-state"),
     save: patch => request("save-settings", patch),
     importSettings: patch => request("import-settings", patch),
+    author: operation => request("author-operation", operation),
+    currentAuthor: (operation, source) => request("current-author-operation", { operation, source, pageUrl: globalThis.location.href }),
     tag: operation => request("tag-operation", operation),
     addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision, pageUrl: globalThis.location.href }),
     selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),
@@ -62,6 +64,18 @@
       url: api.runtime.getURL("home.html") + (activationFailed ? "#activation-failed" : "")
     }),
     isNoteSender,
+    async currentAuthorPage(sender, pageUrl) {
+      if (!isNoteSender(sender)) return null;
+      try {
+        const tab = await api.tabs.get(sender.tab.id), current = new URL(tab.url);
+        if (current.origin !== "https://note.com" || new URL(pageUrl).href !== current.href ||
+            (tab.pendingUrl && new URL(tab.pendingUrl).href !== current.href)) return null;
+        const core = globalThis.HikikomoriNote;
+        if (core.isArticle(current.href)) return { type: "article", user: core.authorId(current.pathname.split("/")[1]) };
+        const page = core.pageKind(current.href);
+        return page?.type === "profile" ? { type: "profile", user: core.authorId(page.user) } : null;
+      } catch { return null; }
+    },
     async currentMenuPage(sender, pageUrl) {
       if (!isNoteSender(sender)) return null;
       try {

@@ -28,7 +28,22 @@
     const query = params.get("q");
     return query?.startsWith("#") ? query.slice(1) : null;
   }
+  function articleCardContainer(card) {
+    // カード内だけでなく、一覧で1件分の場所を占める既知のラッパーも隠す。
+    let container = card;
+    for (let depth = 0; depth < 3; depth++) {
+      const parent = container.parentElement;
+      if (!parent || parent.tagName !== "DIV" || parent.children.length !== 1) break;
+      const classes = parent.className.trim();
+      const wrapper = !classes || classes === "contents" ||
+        ["mb-0", "w-full", "min-w-0", "border-b-0", "pb-0"].every(name => parent.classList.contains(name));
+      if (!wrapper) break;
+      container = parent;
+    }
+    return container;
+  }
   function create(doc, win, actions = {}) {
+    const authorControls = createAuthorControls(doc, win, actions);
     let host, menu, signature;
     let articleFollowing;
     let articleAuthor, authorSignature;
@@ -225,20 +240,7 @@
         ([...link.parentElement.querySelectorAll("span[class]")].some(isPaidPrice) ||
           [...link.parentElement.querySelectorAll("path[d]")].some(isMembershipLock)));
     }
-    function paidCardContainer(card) {
-      // カード内だけでなく、一覧で1件分の場所を占める既知のラッパーも隠す。
-      let container = card;
-      for (let depth = 0; depth < 3; depth++) {
-        const parent = container.parentElement;
-        if (!parent || parent.tagName !== "DIV" || parent.children.length !== 1) break;
-        const classes = parent.className.trim();
-        const wrapper = !classes || classes === "contents" ||
-          ["mb-0", "w-full", "min-w-0", "border-b-0", "pb-0"].every(name => parent.classList.contains(name));
-        if (!wrapper) break;
-        container = parent;
-      }
-      return container;
-    }
+    function paidCardContainer(card) { return articleCardContainer(card); }
     function syncPaidCards(settings, url) {
       let active = false;
       try {
@@ -527,6 +529,7 @@
       prepareSidebar(url, settings);
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
       currentSettings = settings; currentUrl = url;
+      authorControls.update(settings, url);
       syncSearchClear(settings.enabled);
       syncHeaderSettings(settings.enabled && settings.noteLogoBrowserBack);
       syncLogoCursor(settings.enabled && settings.noteLogoBrowserBack);
@@ -622,12 +625,14 @@
     return Object.freeze({
       update, prepareSidebar,
       invalidatePaidCards() {
+        authorControls.invalidate();
         paidDirty = true;
         tipsDirty = true;
       },
       stop() {
         for (const root of sidebarRoots) root.classList.remove(rootClass);
         sidebarRoots.clear();
+        authorControls.stop();
         disposed = true;
         removeMobile();
         syncHeaderSettings(false);
@@ -646,6 +651,235 @@
         paidCards.clear();
       }
     });
+  }
+  // 作者設定は通常のナビゲーションと独立。重度・拡張OFFでも手動管理を残す。
+  function createAuthorControls(doc, win, actions) {
+    const marker = "data-hikikomori-note-author-hidden", hiddenCards = new Map();
+    let settings, url, dirty = true, cardSignature, disposed = false;
+    let dialog, dialogContext, previousFocus, askedArticle, profileBlock, profileContext, profileSelect;
+    let busy = false, uncertain = false, recoveryNeeded = false, currentArticle, lastSettings;
+    function visible(element) {
+      if (!element?.isConnected) return false;
+      for (let node = element; node; node = node.parentElement) {
+        const style = win.getComputedStyle(node);
+        if (node.hidden || node.hasAttribute("hidden") || style.display === "none" || style.visibility === "hidden") return false;
+      }
+      return true;
+    }
+    function idFromLink(link) {
+      try { return core.authorId(link.href); } catch { return null; }
+    }
+    function displayName(element) {
+      try { return core.authorName(element?.textContent?.trim() || ""); } catch { return ""; }
+    }
+    function headerAuthor(article, userId) {
+      for (const time of article.querySelectorAll("time")) {
+        if (time.closest('[id="note-body"]') || time.closest('[id="note-paywall"]')) continue;
+        let root = time.parentElement;
+        for (let depth = 0; root && root !== article && depth < 4; depth++, root = root.parentElement) {
+          const links = [...root.querySelectorAll("a[href]")].filter(a => idFromLink(a)?.toLowerCase() === userId.toLowerCase());
+          const name = links.map(displayName).find(Boolean);
+          if (name) return { userId, displayName: name };
+        }
+      }
+      return null;
+    }
+    function cardAuthor(card, link) {
+      try {
+        const userId = core.authorId(new URL(link.href).pathname.split("/")[1]);
+        const profile = [...card.querySelectorAll('a[data-name="avatar"]')].find(a => idFromLink(a)?.toLowerCase() === userId.toLowerCase());
+        return profile ? { userId } : null;
+      } catch { return null; }
+    }
+    function containerFor(card) { return articleCardContainer(card); }
+    function syncCards() {
+      const signature = JSON.stringify([url, settings.enabled, settings.noteUserId, settings.authorDisplayRules, settings.authorWarning]);
+      if (!dirty && signature === cardSignature) return;
+      dirty = false; cardSignature = signature;
+      for (const container of hiddenCards.values()) container.removeAttribute(marker);
+      hiddenCards.clear();
+      let active = false;
+      try { const page = new URL(url); active = page.origin === "https://note.com" && !/^\/notes\/purchased(?:\/|$)/.test(page.pathname) && core.pageKind(url)?.type !== "profile"; } catch { /* 表示を維持 */ }
+      if (!active || !settings.enabled || !settings.noteUserId || settings.authorWarning || !settings.authorDisplayRules.some(rule => rule.action === "hide")) return;
+      for (const link of doc.querySelectorAll("a[href]")) {
+        if (!core.isArticle(link.href) || !link.classList.contains("absolute") || !link.classList.contains("inset-0") || !link.getAttribute("title") || !link.getAttribute("aria-label")) continue;
+        const card = link.parentElement?.parentElement;
+        if (!card?.classList.contains("grid-rows-subgrid") || !link.parentElement.querySelector("h3") || card.closest("article") || card.closest('[id="note-body"]')) continue;
+        const author = cardAuthor(card, link);
+        if (!author || core.isSelf(settings, author.userId) || core.authorRule(settings, author.userId)?.action !== "hide") continue;
+        const container = containerFor(card); container.setAttribute(marker, ""); hiddenCards.set(card, container);
+      }
+    }
+    function paidArticle() {
+      if (!settings.enabled || !settings.hidePaidArticles || !settings.noteUserId || settings.authorWarning || !core.isArticle(url)) return null;
+      const userId = new URL(url).pathname.split("/")[1];
+      if (core.isSelf(settings, userId) || core.authorRule(settings, userId)) return null;
+      const article = doc.querySelector('article[id="note-article"]');
+      const paywall = article?.querySelector('div[id="note-paywall"]');
+      if (!paywall || paywall.closest('[id="note-body"]') || !visible(paywall) || !paywall.classList.contains("note-paywall")) return null;
+      const root = [...paywall.children].find(n => n.tagName === "SECTION");
+      if (!root || ![...root.querySelectorAll("h2")].some(h => h.textContent.trim() === "ここから先は")) return null;
+      const author = headerAuthor(article, userId);
+      if (!author) return null;
+      for (const block of root.querySelectorAll("section")) {
+        if (!["flex", "flex-col", "rounded-lg", "border", "border-border-strong", "px-4"].every(c => block.classList.contains(c)) || !visible(block)) continue;
+        const buttons = [...block.querySelectorAll('button[data-name="Button"]')].filter(b => b.getAttribute("type") === "button" && visible(b));
+        const purchase = buttons.some(b => b.textContent.trim() === "購入手続きへ");
+        const join = buttons.some(b => b.textContent.trim() === "参加手続きへ");
+        const spans = [...block.querySelectorAll("span")];
+        const price = spans.some(n => /^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(n.textContent.trim()));
+        const membership = [...block.querySelectorAll("a[href]")].some(a => {
+          try { const p = new URL(a.href); return p.origin === "https://note.com" && p.pathname === `/${userId}/membership`; } catch { return false; }
+        });
+        if ((purchase && price && spans.some(n => n.textContent.trim() === "記事")) || (join && membership)) return author;
+      }
+      return null;
+    }
+    function closeDialog() {
+      const focus = previousFocus, modal = dialog;
+      dialog = undefined; dialogContext = undefined; previousFocus = undefined;
+      if (modal) { if (modal.open && typeof modal.close === "function") modal.close(); modal.remove(); }
+      if (focus?.isConnected) focus.focus();
+    }
+    function snapshot(author) {
+      // プロフィール探索結果のhost等、DOM参照をメッセージへ含めない。
+      return { userId: author.userId, displayName: author.displayName, expectedAction: core.authorRule(settings, author.userId)?.action ?? null,
+        expectedRevision: settings.authorDisplayRevision, expectedSelf: settings.noteUserId };
+    }
+    async function save(author, action, source, status, context) {
+      if (busy || uncertain || disposed) return false;
+      busy = true;
+      const operation = { ...context, action };
+      status.textContent = "保存しています…";
+      try {
+        if (!actions.setAuthor) throw new Error("保存処理を利用できません。");
+        await actions.setAuthor(operation, source);
+        recoveryNeeded = false;
+        status.textContent = "保存しました。";
+        return true;
+      } catch (error) {
+        uncertain = error.code === "UNCONFIRMED";
+        recoveryNeeded = true;
+        status.textContent = `保存できませんでした。${error.message} 「状態を再確認」で確認してください。`;
+        return false;
+      } finally { busy = false; refreshDisabled(); }
+    }
+    function refreshDisabled() {
+      for (const block of [dialog, profileBlock]) if (block) {
+        for (const button of block.querySelectorAll("button")) button.disabled = busy || (uncertain && !button.hasAttribute("data-author-refresh"));
+        const refresh = block.querySelector('button[data-author-refresh]');
+        if (refresh) refresh.hidden = !recoveryNeeded;
+      }
+      if (profileSelect) profileSelect.disabled = busy || uncertain || !settings?.noteUserId || Boolean(settings.authorWarning);
+      const saveButton = profileBlock?.querySelector('button[data-author-save]');
+      if (saveButton && (!settings?.noteUserId || settings.authorWarning)) saveButton.disabled = true;
+    }
+    function refreshButton(block, status) {
+      const button = doc.createElement("button"); button.type = "button"; button.textContent = "状態を再確認"; button.setAttribute("data-author-refresh", "");
+      button.hidden = !recoveryNeeded;
+      button.onclick = async () => {
+        if (busy) return;
+        const wasDialog = Boolean(dialog); let refreshed = false;
+        busy = true; refreshDisabled();
+        try { await actions.refresh(); uncertain = false; recoveryNeeded = false; refreshed = true; status.textContent = "保存済みの状態を確認しました。もう一度操作してください。"; }
+        catch { recoveryNeeded = true; status.textContent = "状態を確認できませんでした。"; }
+        finally {
+          busy = false;
+          if (refreshed) {
+            closeDialog(); if (wasDialog) askedArticle = undefined;
+            profileContext = undefined; dirty = true; if (!disposed && settings) update(settings, url);
+          } else refreshDisabled();
+        }
+      };
+      block.append(button);
+    }
+    function showDialog(author) {
+      const modal = doc.createElement("dialog");
+      if (typeof modal.showModal !== "function") return;
+      modal.setAttribute(owned, ""); modal.className = "hikikomori-note-author-dialog";
+      const heading = doc.createElement("h2"); heading.id = "hikikomori-note-author-dialog-title"; heading.setAttribute("id", heading.id); heading.textContent = "有料記事を検出しました　この作者の記事を今後どう表示しますか？";
+      modal.setAttribute("aria-labelledby", heading.id);
+      const creator = doc.createElement("p"); creator.textContent = `作者：${core.authorLabel(author)}。`;
+      const description = doc.createElement("p"); description.textContent = "「非表示」にすると無料記事も一覧から非表示になります。記事や作者ページへの直接アクセスは制限しません。「表示を許可」でも「有料記事を非表示」の設定は適用されます。";
+      const status = doc.createElement("p"); status.setAttribute("role", "status");
+      modal.append(heading, creator, description, status);
+      const context = snapshot(author); let dismiss;
+      for (const [text, action] of [["この作者を非表示にする", "hide"], ["この作者の表示を許可する", "allow"], ["今回は何もしない", null]]) {
+        const button = doc.createElement("button"); button.type = "button"; button.textContent = text;
+        button.onclick = async () => {
+          if (action === null) { if (!busy) closeDialog(); return; }
+          if (dialog !== modal || !core.isArticle(url) || currentArticle !== dialogContext) return;
+          const result = save(author, action, "article", status, context); refreshDisabled();
+          if (await result) closeDialog();
+        };
+        modal.append(button); if (action === null) dismiss = button;
+      }
+      refreshButton(modal, status);
+      modal.addEventListener("cancel", event => { event.preventDefault(); if (!busy) closeDialog(); });
+      modal.addEventListener("close", () => { if (dialog === modal) { modal.remove(); dialog = undefined; dialogContext = undefined; if (previousFocus?.isConnected) previousFocus.focus(); } });
+      (doc.body || doc.documentElement || doc.root).append(modal);
+      previousFocus = doc.activeElement; dialog = modal; dialogContext = currentArticle;
+      try { modal.showModal(); dismiss.focus(); } catch { closeDialog(); }
+    }
+    function profileOwner() {
+      const page = core.pageKind(url);
+      if (page?.type !== "profile" || core.isSelf(settings, page.user)) return null;
+      for (const heading of doc.querySelectorAll("h1")) {
+        if (heading.closest("article") || heading.closest(`[${owned}]`)) continue;
+        let root = heading.parentElement;
+        for (let depth = 0; root && depth < 6; depth++, root = root.parentElement) {
+          if (![...root.querySelectorAll("a[href]")].some(a => {
+            try { const u = new URL(a.href); return u.origin === "https://note.com" && u.pathname === `/${page.user}/followings`; } catch { return false; }
+          }) || !root.querySelector('[data-name="avatar"]')) continue;
+          if (visible(root)) return { host: root, userId: core.authorId(page.user), displayName: displayName(heading) };
+        }
+      }
+      return null;
+    }
+    function syncProfile() {
+      const owner = profileOwner();
+      if (!owner) { profileBlock?.remove(); profileBlock = undefined; profileContext = undefined; return; }
+      const context = JSON.stringify([owner.userId, owner.displayName, settings.noteUserId, settings.authorWarning, core.authorRule(settings, owner.userId)]);
+      if (profileBlock?.isConnected && context === profileContext && profileBlock.parentElement === owner.host) { refreshDisabled(); return; }
+      profileBlock?.remove(); profileContext = context;
+      profileBlock = doc.createElement("div"); profileBlock.setAttribute(owned, ""); profileBlock.className = "hikikomori-note-author-profile";
+      const label = doc.createElement("label"), select = doc.createElement("select");
+      label.textContent = "この作者の表示"; label.append(select); profileSelect = select;
+      for (const [text, value] of [["未設定", ""], ["非表示", "hide"], ["表示を許可", "allow"]]) {
+        const option = doc.createElement("option"); option.textContent = text; option.value = value; select.append(option);
+      }
+      select.value = core.authorRule(settings, owner.userId)?.action || "";
+      const saveButton = doc.createElement("button"); saveButton.type = "button"; saveButton.textContent = "変更を保存"; saveButton.setAttribute("data-author-save", "");
+      const help = doc.createElement("p"); help.textContent = settings.authorWarning || (!settings.noteUserId ? "自分を対象外にするため、専用ホームでnoteユーザー名を設定してください。" : "非表示にすると無料記事も一覧から隠します。記事や作者ページは直接開けます。表示許可でも有料記事の非表示設定は適用されます。");
+      const status = doc.createElement("p"); status.setAttribute("role", "status");
+      saveButton.onclick = () => { const result = save(owner, select.value || null, "profile", status, snapshot(owner)); refreshDisabled(); void result; };
+      profileBlock.append(label, saveButton, help, status); refreshButton(profileBlock, status); owner.host.prepend(profileBlock); refreshDisabled();
+    }
+    function update(value, pageUrl) {
+      if (disposed) return;
+      const urlChanged = url !== pageUrl;
+      settings = value; url = pageUrl;
+      const articleKey = core.isArticle(url) ? new URL(url).origin + new URL(url).pathname.replace(/\/$/, "") : null;
+      if (currentArticle !== articleKey) { currentArticle = articleKey; askedArticle = undefined; closeDialog(); }
+      const identity = JSON.stringify([settings.noteUserId, settings.enabled, settings.hidePaidArticles, settings.authorDisplayRevision, settings.authorWarning]);
+      const scan = dirty || urlChanged || lastSettings !== identity;
+      if (dialog && lastSettings !== identity) closeDialog();
+      lastSettings = identity;
+      if (dialog && scan && !paidArticle()) closeDialog();
+      syncCards(); if (scan) syncProfile(); else refreshDisabled();
+      if (doc.visibilityState === "hidden") return;
+      if (scan && !dialog && currentArticle && askedArticle !== currentArticle && !busy && !uncertain) {
+        const author = paidArticle();
+        if (author) { askedArticle = currentArticle; showDialog(author); }
+      }
+    }
+    function onVisibility() { dirty = true; if (!disposed && settings) update(settings, url); }
+    doc.addEventListener?.("visibilitychange", onVisibility);
+    return { update, invalidate() { dirty = true; }, stop() {
+      disposed = true; closeDialog(); profileBlock?.remove();
+      for (const container of hiddenCards.values()) container.removeAttribute(marker);
+      hiddenCards.clear(); doc.removeEventListener?.("visibilitychange", onVisibility);
+    } };
   }
   globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
 })();
