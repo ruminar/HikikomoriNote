@@ -182,8 +182,15 @@
       Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
   }
   function validateTransferSettings(value, version = 2) {
-    if (!exactKeys(value, [...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId", ...(version === 2 ? ["authorDisplayRules"] : [])])) throw new Error("設定の項目に不足または未対応の項目があります。");
-    for (const key of transferFlags) if (typeof value[key] !== "boolean") throw new Error(`${key}はtrueまたはfalseを指定してください。`);
+    const flags = version === 3 ? transferFlags.filter(key => key !== "legacyMode") : transferFlags;
+    if (!exactKeys(value, [...flags, "noteUserId", "tagGroups", "selectedTagGroupId", ...(version >= 2 ? ["authorDisplayRules"] : []), ...(version === 3 ? ["mode"] : [])])) throw new Error("設定の項目に不足または未対応の項目があります。");
+    for (const key of flags) if (typeof value[key] !== "boolean") throw new Error(`${key}はtrueまたはfalseを指定してください。`);
+    let legacyMode = value.legacyMode;
+    if (version === 3) {
+      if (!["normal", "severe", "social"].includes(value.mode)) throw new Error("modeはnormal・severe・socialのいずれかを指定してください。");
+      if (value.mode === "social") throw new Error("社会復帰モードはこのバージョンでは未対応です。対応版へ更新してから読み込んでください。設定は変更していません。");
+      legacyMode = value.mode === "severe";
+    }
     if (typeof value.noteUserId !== "string" || normalizeUserId(value.noteUserId) !== value.noteUserId) throw new Error("ユーザー名の保存値が正しくありません。");
     if (!Array.isArray(value.tagGroups) || value.tagGroups.length !== 4 || !groupIds.includes(value.selectedTagGroupId)) throw new Error("4グループと選択グループを確認してください。");
     const groups = value.tagGroups.map((group, index) => {
@@ -193,15 +200,17 @@
       }
       return { id: group.id, name: group.name, tags: [...group.tags] };
     });
-    return { ...Object.fromEntries(transferFlags.map(key => [key, value[key]])), noteUserId: value.noteUserId,
-      tagGroups: groups, selectedTagGroupId: value.selectedTagGroupId, authorDisplayRules: version === 2 ? validateAuthors(value.authorDisplayRules) : [] };
+    return { ...Object.fromEntries(transferFlags.map(key => [key, key === "legacyMode" ? legacyMode : value[key]])), noteUserId: value.noteUserId,
+      tagGroups: groups, selectedTagGroupId: value.selectedTagGroupId, authorDisplayRules: version >= 2 ? validateAuthors(value.authorDisplayRules) : [] };
   }
   function transferSettings(settings) {
     if (settings.tagWarning || settings.groupSelectionInvalid || settings.authorWarning) throw new Error("保存データに異常があります。状態を再確認してください。");
     return validateTransferSettings(Object.fromEntries([...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]])));
   }
   function exportSettings(settings) {
-    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 2, settings: transferSettings(settings) }, null, 2);
+    // 外部JSONだけを将来の3モード形式にする。現行の保存値・動作はlegacyModeのまま。
+    const { legacyMode, ...value } = transferSettings(settings);
+    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 3, settings: { ...value, mode: legacyMode ? "severe" : "normal" } }, null, 2);
     if (json.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     return json;
   }
@@ -209,8 +218,8 @@
     if (typeof text !== "string" || text.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     let document;
     try { document = JSON.parse(text); } catch { throw new Error("JSONの書式が正しくありません。"); }
-    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || ![1, 2].includes(document.schemaVersion)) {
-      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1または2）を入力してください。");
+    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || ![1, 2, 3].includes(document.schemaVersion)) {
+      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1・2・3）を入力してください。");
     }
     return validateTransferSettings(document.settings, document.schemaVersion);
   }

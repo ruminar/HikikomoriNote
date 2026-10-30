@@ -64,13 +64,44 @@ test('記事からの保存だけは拡張ON・有料非表示ON・未登録が�
  for(const patch of [{enabled:false,hidePaidArticles:true},{hidePaidArticles:false}]){const f=backend(patch);await assert.rejects(f.controller.author(operation(f),{fromArticle:true}),{code:'CONFLICT'});}
  const f=backend({hidePaidArticles:true});await f.controller.author(operation(f),{fromArticle:true});await assert.rejects(f.controller.author(operation(f,'yeku','allow'),{fromArticle:true}),{code:'CONFLICT'});
 });
-test('設定形式2は作者名・状態を往復し、形式1は確認用の空リストとして取り込む',async()=>{
- const f=backend();await f.controller.author(operation(f));const json=f.core.exportSettings(f.core.readSettings(f.state));assert.equal(JSON.parse(json).schemaVersion,2);
+test('設定形式3は作者名・状態を往復し、形式1は確認用の空リストとして取り込む',async()=>{
+ const f=backend();await f.controller.author(operation(f));const json=f.core.exportSettings(f.core.readSettings(f.state));assert.equal(JSON.parse(json).schemaVersion,3);
  assert.deepEqual(plain(f.core.parseSettingsExport(json).authorDisplayRules),f.state.authorDisplayRules);
- const old=JSON.parse(json);old.schemaVersion=1;delete old.settings.authorDisplayRules;
+ const old=JSON.parse(json);old.schemaVersion=1;old.settings.legacyMode=old.settings.mode==='severe';delete old.settings.mode;delete old.settings.authorDisplayRules;
  assert.deepEqual(plain(f.core.parseSettingsExport(JSON.stringify(old)).authorDisplayRules),[]);
  const token=f.core.settingsToken(f.core.readSettings(f.state));await f.controller.importSettings({json:JSON.stringify(old),expectedToken:token});assert.deepEqual(f.state.authorDisplayRules,[]);assert.equal(f.state.authorDisplayRevision,2);
  const bad=JSON.parse(json);bad.settings.authorDisplayRules[0].displayName='x\ny';assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(bad)));
+});
+test('形式3はlegacyModeを出さずmodeで通常・重度を往復し、内部保存と転送動作を変えない',async()=>{
+ for(const legacyMode of [false,true]){
+   const f=backend({legacyMode,enabled:false,hidePaidArticles:true,authorDisplayRules:[{userId:'yeku',displayName:'作者名',action:'allow'}]});
+   const json=f.core.exportSettings(f.core.readSettings(f.state)),doc=JSON.parse(json);
+   assert.equal(doc.schemaVersion,3);assert.equal(doc.settings.mode,legacyMode?'severe':'normal');assert.equal(Object.hasOwn(doc.settings,'legacyMode'),false);
+   const parsed=f.core.parseSettingsExport(json);assert.equal(parsed.legacyMode,legacyMode);assert.equal(Object.hasOwn(parsed,'mode'),false);
+   const expectedToken=f.core.settingsToken(f.core.readSettings(f.state));await f.controller.importSettings({json,expectedToken});
+   assert.equal(f.state.legacyMode,legacyMode);assert.equal(Object.hasOwn(f.state,'mode'),false);assert.equal(f.state.authorDisplayRules[0].displayName,'作者名');assert.equal(f.state.enabled,false);
+ }
+});
+test('未実装のsocial・未知mode・旧フラグ混在は読み込み前に拒否し、保存済み設定を変更しない',async()=>{
+ const f=backend(),base=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state))),before=plain(f.state),expectedToken=f.core.settingsToken(f.core.readSettings(f.state));
+ for(const mode of ['social','unknown','NORMAL',false,null,{},undefined]){
+   const doc=plain(base);doc.settings.mode=mode;const json=JSON.stringify(doc);
+   if(mode==='social')assert.throws(()=>f.core.parseSettingsExport(json),/社会復帰モード.*未対応/);else assert.throws(()=>f.core.parseSettingsExport(json));
+   await assert.rejects(f.controller.importSettings({json,expectedToken}));assert.deepEqual(f.state,before);assert.equal(f.writes,0);
+ }
+ const mixed=plain(base);mixed.settings.legacyMode=false;assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(mixed)));
+});
+test('既存の形式2はlegacyModeと作者リストを維持して読み込み、次の書き出しは形式3になる',async()=>{
+ const f=backend(),doc=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));doc.schemaVersion=2;doc.settings.legacyMode=true;delete doc.settings.mode;
+ doc.settings.authorDisplayRules=[{userId:'yeku',displayName:'YeKu',action:'hide'}];
+ const json=JSON.stringify(doc);assert.equal(f.core.parseSettingsExport(json).legacyMode,true);
+ await f.controller.importSettings({json,expectedToken:f.core.settingsToken(f.core.readSettings(f.state))});
+ const out=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));assert.equal(out.schemaVersion,3);assert.equal(out.settings.mode,'severe');assert.deepEqual(out.settings.authorDisplayRules,doc.settings.authorDisplayRules);
+});
+test('移行画面は未実装の社会復帰モードを明示し、読込ボタンを無効にしてJSONを保持する',async()=>{
+ const f=homeFixture();await flush();const core=f.c.HikikomoriNote,doc=JSON.parse(core.exportSettings(core.readSettings(f.state)));doc.settings.mode='social';
+ const json=JSON.stringify(doc);f.nodes.get('settings-json').value=json;f.nodes.get('settings-json').oninput();
+ assert.equal(f.nodes.get('import-settings').disabled,true);assert.match(f.nodes.get('transfer-validation').textContent,/社会復帰モード.*未対応/);assert.equal(f.nodes.get('settings-json').value,json);assert.equal(f.state.legacyMode,false);
 });
 test('作者の無料カードも非表示にし、有料フィルターとは独立して解除・購入済み例外・停止復元',()=>{
  const rule={userId:'yeku',displayName:'名前',action:'hide'},f=ui('<main>'+card+'</main>',{authorDisplayRules:[rule]});
@@ -173,7 +204,7 @@ test('専用ホームは辞書順の既存ユーザーの状態変更・解除�
  assert.equal(n.get('panel-authors').hidden,false);assert.equal(n.get('author-form'),undefined);assert.equal(n.get('author-user'),undefined);assert.match(n.get('authors-hidden').children[0].textContent,/あ（b）/);
  n.get('authors-hidden').children[0].querySelector('button').onclick();await flush();assert.equal(f.state.authorDisplayRules.find(x=>x.userId==='b').action,'allow');assert.equal(f.state.enabled,false);
  n.get('authors-allowed').children[0].querySelectorAll('button')[1].onclick();await flush();assert.equal(f.state.authorDisplayRules.some(x=>x.userId==='b'),false);
- const doc=JSON.parse(f.c.HikikomoriNote.exportSettings(f.c.HikikomoriNote.readSettings(f.state)));doc.schemaVersion=1;delete doc.settings.authorDisplayRules;n.get('settings-json').value=JSON.stringify(doc);n.get('settings-json').oninput();n.get('import-settings').onclick();await flush();assert.match(f.confirmations.at(-1),/作者設定も解除/);assert.deepEqual(f.state.authorDisplayRules,[]);
+ const doc=JSON.parse(f.c.HikikomoriNote.exportSettings(f.c.HikikomoriNote.readSettings(f.state)));doc.schemaVersion=1;doc.settings.legacyMode=doc.settings.mode==='severe';delete doc.settings.mode;delete doc.settings.authorDisplayRules;n.get('settings-json').value=JSON.stringify(doc);n.get('settings-json').oninput();n.get('import-settings').onclick();await flush();assert.match(f.confirmations.at(-1),/作者設定も解除/);assert.deepEqual(f.state.authorDisplayRules,[]);
 });
 test('作者操作の送信元検証はトップフレーム・現URL・本人・pendingUrlを確認する',async()=>{
  let tab={url:articleUrl};const api={runtime:{id:'self'},tabs:{async get(){return tab;}}};
