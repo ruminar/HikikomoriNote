@@ -280,6 +280,19 @@
       return Boolean(userId && !core.isSelf(settings, userId) && core.authorRule(settings, userId)?.action === "allow");
     }
     function paidCardContainer(card) { return articleCardContainer(card); }
+    const homePaidHidden = "data-hikikomori-note-home-paid-hidden";
+    let homePaidRoot;
+    function syncHomePaidRecommendations(settings, url) {
+      const root = doc.documentElement || doc.root;
+      const active = settings.enabled && settings.hidePaidArticles && core.modeOf(settings) === "social" && core.isHome(url);
+      if (homePaidRoot && (!active || root !== homePaidRoot)) {
+        homePaidRoot.removeAttribute(homePaidHidden); homePaidRoot = undefined;
+      }
+      if (active && root) {
+        if (!root.hasAttribute(homePaidHidden)) root.setAttribute(homePaidHidden, "");
+        homePaidRoot = root;
+      }
+    }
     function syncPaidCards(settings, url) {
       let active = false;
       try {
@@ -729,6 +742,7 @@
       syncNotesPromotions(settings, url);
       syncTips(settings, url);
       syncPaidCards(settings, url);
+      syncHomePaidRecommendations(settings, url);
       syncProfilePromotions(settings, url);
       if (!settings.enabled || !page || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
@@ -846,6 +860,7 @@
         tips.clear();
         for (const container of paidCards.values()) container.removeAttribute(paidHidden);
         paidCards.clear();
+        homePaidRoot?.removeAttribute(homePaidHidden); homePaidRoot = undefined;
         for (const target of profilePromotions) target.removeAttribute(profilePromotionHidden);
         profilePromotions.clear();
       }

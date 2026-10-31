@@ -13,6 +13,11 @@ a[data-hikikomori-note-dashboard-hidden] {
 [data-hikikomori-note-menu-hidden] { display: none !important; }
 [data-hikikomori-note-product-hidden] { display: none !important; }
 [data-hikikomori-note-profile-promotion-hidden] { display: none !important; }
+/* 公式ホームのおすすめメンバーシップ。後挿入にも親の印から適用する。 */
+[data-hikikomori-note-home-paid-hidden] [data-testid="recommended-memberships"],
+[data-hikikomori-note-home-paid-hidden] div.mb-5:has(> div.px-4[class~="lg:px-0"] > [data-testid="recommended-memberships"]) {
+  display: none !important;
+}
 [data-hikikomori-note-recommendations-hidden] { display: none !important; }
 .hikikomori-note-recommendations-root > div[class~="border-t"][class~="print:hidden"] > div.divide-y.divide-border-default > div.pt-6 {
   display: none !important;

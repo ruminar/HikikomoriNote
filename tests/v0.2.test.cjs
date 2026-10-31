@@ -1425,3 +1425,19 @@ test('ストアを作者ページとして認識し、独自TL導線だけ追加
  }
  const f=fixture();for(const url of ['https://note.com/creator/store/item','https://other.test/creator/store'])assert.equal(f.core.pageKind(url),null);
 });
+
+test('社会復帰の有料非表示ONだけホームのおすすめメンバーシップをCSSで先行非表示にする',()=>{
+ const f=uiFixture('<html><body><main id="main-content"></main></body></html>'),root=f.doc.querySelector('html');f.doc.documentElement=root;
+ const settings=f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true}),marker='data-hikikomori-note-home-paid-hidden';
+ assert.equal(f.doc.querySelector('[data-testid="recommended-memberships"]'),null);f.ui.update(settings,'https://note.com/?x=1#top');assert.equal(root.hasAttribute(marker),true);
+ const line=f.doc.createElement('div');line.className='mb-5';const padding=f.doc.createElement('div');padding.className='px-4 lg:px-0';const recommendations=f.doc.createElement('div');recommendations.setAttribute('data-testid','recommended-memberships');padding.append(recommendations);line.append(padding);f.doc.querySelector('main').append(line);f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/?x=1#top');assert.equal(root.hasAttribute(marker),true);assert.equal(line.isConnected,true);
+ for(const patch of [{enabled:false},{hidePaidArticles:false},{mode:'normal'},{mode:'severe'}]){f.ui.update({...settings,...patch},'https://note.com/');assert.equal(root.hasAttribute(marker),false);f.ui.update(settings,'https://note.com/');}
+ for(const url of ['https://note.com/following','https://note.com/search','https://note.com/nontsu','https://note.com/notes/purchased','https://other.test/']){f.ui.update(settings,url);assert.equal(root.hasAttribute(marker),false);f.ui.update(settings,'https://note.com/');}
+ f.ui.stop();assert.equal(root.hasAttribute(marker),false);
+});
+test('ホームのおすすめメンバーシップは作者許可・自己設定・記事おすすめ設定から独立して行単位で隠す',()=>{
+ const f=uiFixture('<html><body></body></html>');f.doc.documentElement=f.doc.querySelector('html');
+ const settings=f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true,hideArticleRecommendations:false,noteUserId:'me',authorDisplayRevision:0,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]});
+ f.ui.update(settings,'https://note.com/');assert.equal(f.doc.documentElement.hasAttribute('data-hikikomori-note-home-paid-hidden'),true);
+ const replacement=f.doc.createElement('html');f.doc.root.append(replacement);const old=f.doc.documentElement;f.doc.documentElement=replacement;f.ui.update(settings,'https://note.com/');assert.equal(old.hasAttribute('data-hikikomori-note-home-paid-hidden'),false);assert.equal(replacement.hasAttribute('data-hikikomori-note-home-paid-hidden'),true);
+});
