@@ -216,3 +216,20 @@ note.com/yekuの固定記事「あのクソゲーはこうして生まれた～�
 grid-rows-subgridの既存カードはその制限から除外し、通常の価格・鍵・許可作者判定を適用する。表示許可は引き続き優先。固定記事の価格・鍵・無料化・後挿入を回帰テストで確認。修正前に2件のテスト失敗を再現し、修正後は全227件成功。固定済み0.2.5のタグと提出ZIPは変更しない。
 
 0.2.5固定後の追加：参加プランの適用URLに/作者ID/archivesも追加。/allと同じ作者識別・プランのDOM条件・許可作者の例外を使用する。TLと作者表示管理、Amazon・ストア枠は既存のプロフィール共通判定を維持。実DOMが未知の場合は推測で隠さない。
+
+
+## ヘッダのスクロール非表示と常時表示（2026-11-01・開発中）
+
+公式記事 /yeku/n/n3d8afae640a0 を読み取り確認。header[data-header-state="navbar"] は with-navbar-layout_navbarContainer__ で始まるクラスを持ち、記事ではsticky／top:0／z-index:21。下スクロールでcreatorRowOnly系クラスが付き、PCではtransformによって-65px、幅390pxでは-49px移動する。子の検索・ロゴ行は残り、狭幅では公式作者行がabsoluteで出る。ホームのヘッダは同じ名前部分を持つがposition:relative。
+
+keepNoteHeaderVisibleがONなら、公式ロゴも確認したヘッダだけに専用属性を付け、screen CSSでsticky／top:0／transform:noneを適用する。公式の高さ・重なり順・作者行の処理は維持する。既存のDOM監視を共用し、解除時は属性だけ除去する。未知のヘッダ・本文内は対象外。実拡張の表示は利用者確認待ち。
+
+追加調査：/ruminar/n/na68901f3be0bでは下スクロールでdata-header-stateがnavbarからcreator-row-onlyへ変化する。最初の実装はJSとCSS両方でnavbarだけに限定していたため、隠れる瞬間に対象外になっていた。常時表示だけは状態属性を参照せず、安定したヘッダクラスの名前部分・公式ロゴ・本文外の条件で印を維持し、CSSも専用属性だけを参照する。232件の自動テスト成功。
+
+同日の狭幅追加調査：幅390pxのcreator-row-onlyでは、通常ロゴ行はdisplay:flexのまま上へ移動し、直属div.with-navbar-layout_creatorRow__…がtop:48px／position:absolute／display:blockで代わりに見える。親のtransformを止めるだけではこの作者行が通常ヘッダの下へ余分に出る。そのため常時表示中のみ、この確認済みの直属作者行をCSSで非表示にする。歯車・ロゴ・検索クリア・☰は共通の安定したヘッダ識別へ統合し、状態変更で再生成しない。全235件成功。
+
+作者ページ追加調査：/ruminarのヘッダは記事と異なり元のz-indexがauto。スクロールでdiv.visible.fixed.top-0.left-0.z-[11].w-fullが上端へ現れ、作者名とコンテンツナビを表示するため、sticky化だけではヘッダを覆う。常時表示のヘッダを記事と同じz-index:21にし、確認済みの作者バーだけをヘッダ実測高さ分下へ配置する。grid/min-h-[49px]/border-b/bg-background-primary、avatar、nav、現在作者のホーム向けNavigationItemも確認する。専用属性と拡張所有styleだけを追加し、公式inline styleは変更しない。リサイズは既存updateを共用し、解除・OFF・離脱・停止で戻す。237件成功。利用者がFirefoxの記事動作を確認済み、作者ページの再確認は待ち。
+
+仕様変更（2026-11-01）：利用者の指定により、常時表示ON中の作者固定バーは下へずらす方式を廃止し、非表示へ変更。確認済みDOMの識別は維持し、専用属性と既存content.cssだけで制御する。高さの実測・動的style生成は削除。通常のタブは保持し、設定解除・拡張OFF・離脱・停止で属性を外して公式表示へ戻す。
+
+followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/top-3/max-h-screen/w-[11.375rem]/overflow-y-autoで、top:12px、max-height:100vh。PCのヘッダ高65pxの下へ来るよう、常時表示ONでは固定位置をヘッダ実測高さ＋12px（確認時77px）へ変更し、最大高さも画面高からその分を引く。公式・独自メニュー共通のasideへ専用属性を付け、拡張所有styleで高さのCSS変数を設定する。リサイズ・後生成は既存update経路で処理し、変更がない場合はstyleを再生成しない。解除・OFF・離脱・ヘッダ不在・停止で属性とstyleを除去。239件成功、実拡張での再確認待ち。

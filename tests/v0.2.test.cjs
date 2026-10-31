@@ -1144,7 +1144,7 @@ test('ラベルなしの新しいおすすめasideも隠し、本文・コメン
 
 test('設定JSONは全設定と4グループを往復し、内部番号・診断・未対応項目を持ち込まない',()=>{
  const f=fixture({...groups(['AI','ComfyUI']),noteUserId:'ruminar',enabled:false,mode:'severe',hidePaidArticles:true,hideArticleRecommendations:true,noteLogoBrowserBack:true,dashboardDisabled:true,selectedTagGroupId:'group3',groupSelectionRevision:12,tagGroupsRevision:20});
- const json=f.core.exportSettings(f.stored),document=JSON.parse(json);assert.equal(document.format,'hikikomori-note-settings');assert.equal(document.schemaVersion,3);
+ const json=f.core.exportSettings(f.stored),document=JSON.parse(json);assert.equal(document.format,'hikikomori-note-settings');assert.equal(document.schemaVersion,4);
  assert.equal(Object.hasOwn(document.settings,'tagGroupsRevision'),false);assert.equal(Object.hasOwn(document.settings,'tagSchemaVersion'),false);
  const parsed=f.core.parseSettingsExport(json);assert.equal(parsed.enabled,false);assert.equal(parsed.mode,'severe');assert.equal(parsed.selectedTagGroupId,'group3');assert.deepEqual(plain(parsed.tagGroups[0].tags),['AI','ComfyUI']);
  assert.equal(f.core.exportSettings({...f.stored,groupSelectionRevision:99}),json);assert.throws(()=>f.core.exportSettings({...f.stored,tagWarning:'invalid'}));
@@ -1494,6 +1494,130 @@ function pinnedPaidFixture(){
  card.className='relative w-full grid grid-rows-subgrid gap-y-1 [grid-row:span_2] border-b py-2';slot.className='contents';
  const pin=f.doc.createElement('div');pin.textContent='固定された記事';card.prepend(pin);return {...f,card,slot,pin};
 }
+
+const pinnableHeaderHtml=logoHeaderHtml.replace('data-header-state="navbar"','data-header-state="navbar" class="relative with-navbar-layout_navbarContainer__test with-navbar-layout_creatorRowOnly__test" style="transform: translateY(-65px)"');
+const headerPinnedMarker='data-hikikomori-note-header-pinned';
+test('ヘッダ常時表示は初期OFF。全モードで公式ヘッダだけ印を付け、解除・OFF・停止で公式状態を残す',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=uiFixture(pinnableHeaderHtml+'<article>'+pinnableHeaderHtml+'</article>'),header=f.doc.querySelector('header'),original=header.getAttribute('style'),settings=f.core.readSettings({...groups(),mode}),url='https://note.com/creator/n/n123';
+  f.ui.update(settings,url);assert.equal(header.hasAttribute(headerPinnedMarker),false);
+  const active={...settings,keepNoteHeaderVisible:true};f.ui.update(active,url);assert.equal(header.hasAttribute(headerPinnedMarker),true);
+  assert.equal(f.doc.querySelector('article').querySelector('header').hasAttribute(headerPinnedMarker),false);
+  for(const patch of [{enabled:false},{keepNoteHeaderVisible:false}]){f.ui.update({...active,...patch},url);assert.equal(header.hasAttribute(headerPinnedMarker),false);f.ui.update(active,url);}
+  assert.equal(header.getAttribute('style'),original);assert.match(header.className,/creatorRowOnly/);
+  f.ui.stop();assert.equal(header.hasAttribute(headerPinnedMarker),false);assert.equal(header.getAttribute('style'),original);
+ }
+ const css=source('src/content.css');assert.match(css,/@media screen\s*\{\s*header\[data-hikikomori-note-header-pinned\]\s*\{\s*position: sticky !important;\s*top: 0 !important;\s*transform: none !important;/);
+});
+test('スクロールのnavbar→creator-row-only→navbarでもヘッダ常時表示を外さず、隠れた状態からONにできる',()=>{
+ for(const initial of ['navbar','creator-row-only']){
+  const f=uiFixture(pinnableHeaderHtml.replace('data-header-state="navbar"',`data-header-state="${initial}"`)),header=f.doc.querySelector('header'),settings=f.core.readSettings({...groups(),keepNoteHeaderVisible:true}),url='https://note.com/ruminar/n/na68901f3be0b';
+  for(const state of [initial,'creator-row-only','navbar']){
+   header.setAttribute('data-header-state',state);f.ui.update(settings,url);assert.equal(header.hasAttribute(headerPinnedMarker),true,state);
+  }
+  header.setAttribute('data-header-state','creator-row-only');f.ui.update({...settings,enabled:false},url);assert.equal(header.hasAttribute(headerPinnedMarker),false);
+ }
+});
+test('ヘッダ後生成・差し替え・公式クラス変更・SPA移動に対応し、未知の構造と外部では解除',()=>{
+ const f=uiFixture(pinnableHeaderHtml),settings=f.core.readSettings({...groups(),keepNoteHeaderVisible:true}),header=f.doc.querySelector('header'),parent=header.parentElement;
+ header.remove();f.ui.update(settings,'https://note.com/following');parent.append(header);f.ui.update(settings,'https://note.com/following');assert.equal(header.hasAttribute(headerPinnedMarker),true);
+ header.className='with-navbar-layout_navbarContainer__new with-navbar-layout_creatorRowOnly__new';
+ for(const url of ['https://note.com/search','https://note.com/tag/AI','https://note.com/creator','https://note.com/','https://note.com/preview/n123']){f.win.wide=false;f.ui.update(settings,url);assert.equal(header.hasAttribute(headerPinnedMarker),true);}
+ f.ui.update(settings,'https://other.test/');assert.equal(header.hasAttribute(headerPinnedMarker),false);
+ f.ui.update(settings,'https://note.com/search');const replacement=f.doc.createElement('header');replacement.className=header.className;replacement.setAttribute('data-header-state','navbar');while(header.children.length)replacement.append(header.children[0]);header.remove();parent.append(replacement);f.ui.update(settings,'https://note.com/search');assert.equal(header.hasAttribute(headerPinnedMarker),false);assert.equal(replacement.hasAttribute(headerPinnedMarker),true);
+ replacement.className='unknown';f.ui.update(settings,'https://note.com/search');assert.equal(replacement.hasAttribute(headerPinnedMarker),false);
+});
+test('スクロール状態が変わっても全モードで歯車とロゴ識別を維持する',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=uiFixture(pinnableHeaderHtml),header=f.doc.querySelector('header'),logo=f.doc.querySelector('a'),settings=f.core.readSettings({...groups(),mode,noteLogoBrowserBack:true,keepNoteHeaderVisible:true}),url='https://note.com/ruminar/n/na68901f3be0b';
+  f.ui.update(settings,url);const gear=f.doc.querySelector('[class="hikikomori-note-header-settings"]');assert.ok(gear);
+  for(const state of ['creator-row-only','navbar','creator-row-only']){
+   header.setAttribute('data-header-state',state);f.ui.update(settings,url);assert.equal(f.isLogo(logo,url),true);assert.equal(gear.isConnected,true);assert.equal(f.doc.querySelector('[class="hikikomori-note-header-settings"]'),gear);
+  }
+  f.ui.update({...settings,keepNoteHeaderVisible:false},url);assert.equal(gear.isConnected,true);assert.equal(header.hasAttribute(headerPinnedMarker),false);
+  f.ui.update({...settings,enabled:false},url);assert.equal(gear.isConnected,false);
+ }
+ const css=source('src/content.css');assert.match(css,/header\[data-hikikomori-note-header-pinned\] > div\[class\*="with-navbar-layout_creatorRow__"\]\s*\{\s*display: none !important;/);
+});
+test('狭幅スクロールで☰・開いたメニュー・補完検索の入力を再生成せず、広幅復帰とOFFで撤去',()=>{
+ const f=uiFixture(pinnableHeaderHtml+sidebarHtml),header=f.doc.querySelector('header'),settings=f.core.readSettings({...groups(['AI']),keepNoteHeaderVisible:true,noteLogoBrowserBack:true}),url='https://note.com/following';f.doc.querySelector('aside').width=0;f.win.wide=false;
+ f.ui.update(settings,url);const button=f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]'),panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]'),input=panel.querySelector('input[name="q"]');button.onclick();input.value='入力中';
+ for(const state of ['creator-row-only','navbar','creator-row-only']){
+  header.setAttribute('data-header-state',state);f.ui.update(settings,url);assert.equal(f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]'),button);assert.equal(button.getAttribute('aria-expanded'),'true');assert.equal(panel.hidden,false);assert.equal(input.isConnected,true);assert.equal(input.value,'入力中');
+ }
+ f.doc.querySelector('aside').width=182;f.win.wide=true;f.ui.update(settings,url);assert.equal(button.isConnected,false);assert.equal(panel.isConnected,false);
+ f.doc.querySelector('aside').width=0;f.win.wide=false;f.ui.update(settings,url);assert.ok(f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]'));f.ui.update({...settings,enabled:false},url);assert.equal(f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]'),null);
+});
+test('ヘッダ状態が変わっても公式検索欄のクリアボタンを維持する',()=>{
+ const html=searchHeaderHtml.replace('data-header-state="navbar"','data-header-state="navbar" class="with-navbar-layout_navbarContainer__test"'),f=uiFixture(html),header=f.doc.querySelector('header'),settings=f.core.readSettings({...groups(),keepNoteHeaderVisible:true}),url='https://note.com/search?q=AI';
+ f.ui.update(settings,url);const button=f.doc.querySelector('[class="hikikomori-note-search-clear"]');assert.ok(button);
+ header.setAttribute('data-header-state','creator-row-only');f.ui.update(settings,url);assert.equal(button.isConnected,true);assert.equal(f.doc.querySelector('[class="hikikomori-note-search-clear"]'),button);
+});
+test('ヘッダ設定の保存・再起動・失敗・他タブ同期で既存のタグや未保存入力を保持する',async()=>{
+ const f=fixture({...groups(['keep'])});assert.equal((await f.controller.getState()).keepNoteHeaderVisible,false);
+ await assert.rejects(f.controller.save({keepNoteHeaderVisible:'true'}));assert.equal(f.writes,0);
+ await f.controller.save({keepNoteHeaderVisible:true});assert.equal((await f.restart().getState()).keepNoteHeaderVisible,true);assert.deepEqual(f.stored.tagGroups[0].tags,['keep']);
+ f.options.fail=true;await assert.rejects(f.controller.save({keepNoteHeaderVisible:false}));assert.equal(f.stored.keepNoteHeaderVisible,true);
+ const h=homeFixture();await flush();const checkbox=h.nodes.get('keep-note-header-visible');assert.equal(checkbox.checked,false);
+ checkbox.checked=true;checkbox.fire('change');h.changed({keepNoteHeaderVisible:false,noteUserId:'remote'});assert.equal(checkbox.checked,true);
+ h.nodes.get('settings').fire('submit');await flush();assert.equal(h.state.keepNoteHeaderVisible,true);assert.equal(h.state.noteUserId,'remote');
+ h.changed({keepNoteHeaderVisible:false});assert.equal(checkbox.checked,false);
+});
+const profileFixedBarHtml='<div id="profile-fixed-bar" class="visible fixed top-0 left-0 z-[11] w-full transition-transform" style="transform: translateY(0)"><div class="grid min-h-[49px] border-b bg-background-primary"><button data-name="avatar"></button><nav><h2>作者のコンテンツナビゲーション</h2><a data-id="NavigationItem" href="https://note.com/creator">ホーム</a><a data-id="NavigationItem" href="https://note.com/creator/all">記事</a></nav></div></div>';
+const profileFixedBarMarker='data-hikikomori-note-profile-fixed-bar-hidden';
+test('ヘッダ常時表示中は作者固定バーだけ隠し、通常のタブと公式styleを保持。解除・OFF・離脱・停止で戻す',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=uiFixture(pinnableHeaderHtml+profileFixedBarHtml+'<nav id="original-tabs"><a href="https://note.com/creator/all">記事</a></nav>'),bar=f.doc.getElementById('profile-fixed-bar'),settings=f.core.readSettings({...groups(),mode,keepNoteHeaderVisible:true}),url='https://note.com/creator';
+  f.ui.update({...settings,keepNoteHeaderVisible:false},url);assert.equal(bar.hasAttribute(profileFixedBarMarker),false);
+  f.ui.update(settings,url);assert.equal(bar.hasAttribute(profileFixedBarMarker),true);assert.equal(f.doc.getElementById('original-tabs').hasAttribute(profileFixedBarMarker),false);assert.equal(f.doc.querySelector('style'),null);
+  f.win.wide=false;f.ui.update(settings,url);assert.equal(bar.hasAttribute(profileFixedBarMarker),true);assert.equal(bar.getAttribute('style'),'transform: translateY(0)');
+  for(const target of ['https://note.com/creator/all','https://note.com/creator/archives','https://note.com/creator/store']){f.ui.update(settings,target);assert.equal(bar.hasAttribute(profileFixedBarMarker),true);}
+  for(const patch of [{enabled:false},{keepNoteHeaderVisible:false}]){f.ui.update({...settings,...patch},url);assert.equal(bar.hasAttribute(profileFixedBarMarker),false);f.ui.update(settings,url);}
+  f.ui.update(settings,'https://note.com/creator/n/n123');assert.equal(bar.hasAttribute(profileFixedBarMarker),false);f.ui.update(settings,url);f.ui.stop();assert.equal(bar.hasAttribute(profileFixedBarMarker),false);assert.equal(bar.getAttribute('style'),'transform: translateY(0)');
+ }
+ const css=source('src/content.css');assert.match(css,/header\[data-hikikomori-note-header-pinned\]\s*\{[^}]*z-index: 21 !important;/);assert.match(css,/div\[data-hikikomori-note-profile-fixed-bar-hidden\]\s*\{\s*display: none !important;/);
+});
+test('作者固定バーの後生成・作者移動・未知構造・ヘッダ消失では非表示を安全に再評価する',()=>{
+ const f=uiFixture(pinnableHeaderHtml+profileFixedBarHtml),header=f.doc.querySelector('header'),bar=f.doc.getElementById('profile-fixed-bar'),parent=bar.parentElement,settings=f.core.readSettings({...groups(),keepNoteHeaderVisible:true}),url='https://note.com/creator';bar.remove();f.ui.update(settings,url);assert.equal(bar.hasAttribute(profileFixedBarMarker),false);
+ parent.append(bar);f.ui.update(settings,url);assert.equal(bar.hasAttribute(profileFixedBarMarker),true);
+ f.ui.update(settings,'https://note.com/other');assert.equal(bar.hasAttribute(profileFixedBarMarker),false);f.ui.update(settings,url);assert.equal(bar.hasAttribute(profileFixedBarMarker),true);
+ const nav=bar.querySelector('nav'),grid=nav.parentElement;nav.remove();f.ui.update(settings,url);assert.equal(bar.hasAttribute(profileFixedBarMarker),false);
+ grid.append(nav);f.ui.update(settings,url);assert.equal(bar.hasAttribute(profileFixedBarMarker),true);header.remove();f.ui.update(settings,url);assert.equal(bar.hasAttribute(profileFixedBarMarker),false);assert.equal(bar.getAttribute('style'),'transform: translateY(0)');
+});
+
+const headerSidebarHtml=sidebarHtml.replace('sticky w-[11.375rem]','sticky top-3 hidden h-full max-h-screen w-[11.375rem] overflow-y-auto pr-4 lg:block');
+test('通常と社会復帰で左メニューを実測ヘッダ高+12pxへ固定し、リサイズ・解除・OFF・停止に追従する',()=>{
+ for(const mode of ['normal','social']){
+  const f=uiFixture(pinnableHeaderHtml+headerSidebarHtml),header=f.doc.querySelector('header'),aside=f.doc.querySelector('aside'),settings=f.core.readSettings({...groups(),mode,keepNoteHeaderVisible:true}),url='https://note.com/following';let height=65;header.getBoundingClientRect=()=>({height,width:1280});
+  const marker='data-hikikomori-note-header-sidebar',original=aside.className;
+  f.ui.update(settings,url);assert.equal(aside.hasAttribute(marker),true);const style=f.doc.querySelector('style');assert.match(style.textContent,/--hikikomori-note-sidebar-top: 77px/);
+  assert.equal(Boolean(aside.querySelector('[class="hikikomori-note-navigation"]')),mode==='normal');
+  height=49;f.win.wide=false;aside.width=0;f.ui.update(settings,url);assert.equal(f.doc.querySelector('style'),style);assert.match(style.textContent,/--hikikomori-note-sidebar-top: 61px/);
+  for(const patch of [{enabled:false},{keepNoteHeaderVisible:false}]){f.ui.update({...settings,...patch},url);assert.equal(aside.hasAttribute(marker),false);assert.equal(f.doc.querySelector('style'),null);f.ui.update(settings,url);}
+  for(const target of ['https://note.com/search?q=AI','https://note.com/tag/AI','https://note.com/topic/ai','https://note.com/']){f.ui.update(settings,target);assert.equal(aside.hasAttribute(marker),true);}
+  f.ui.update(settings,'https://note.com/creator');assert.equal(aside.hasAttribute(marker),false);f.ui.update(settings,url);f.ui.stop();assert.equal(aside.hasAttribute(marker),false);assert.equal(f.doc.querySelector('style'),null);assert.equal(aside.className,original);
+ }
+ const css=source('src/content.css');assert.match(css,/aside\[data-hikikomori-note-header-sidebar\]\s*\{\s*top: var\(--hikikomori-note-sidebar-top\) !important;\s*max-height: calc\(100vh - var\(--hikikomori-note-sidebar-top\)\) !important;/);
+});
+test('左メニューの後生成・未知構造・ヘッダ消失では位置調整を安全に解除する',()=>{
+ const f=uiFixture(pinnableHeaderHtml+headerSidebarHtml),header=f.doc.querySelector('header'),aside=f.doc.querySelector('aside'),parent=aside.parentElement,settings=f.core.readSettings({...groups(),keepNoteHeaderVisible:true}),url='https://note.com/following',marker='data-hikikomori-note-header-sidebar',original=aside.className;
+ aside.remove();f.ui.update(settings,url);assert.equal(f.doc.querySelector('style'),null);parent.append(aside);f.ui.update(settings,url);assert.equal(aside.hasAttribute(marker),true);
+ aside.className='sticky w-[11.375rem] unknown';f.ui.update(settings,url);assert.equal(aside.hasAttribute(marker),false);assert.equal(f.doc.querySelector('style'),null);
+ aside.className=original;f.ui.update(settings,url);assert.equal(aside.hasAttribute(marker),true);header.remove();f.ui.update(settings,url);assert.equal(aside.hasAttribute(marker),false);assert.equal(f.doc.querySelector('style'),null);
+});
+test('設定形式4はヘッダ設定を往復し、旧形式1～3はOFF。不正な型や欠落は保存しない',async()=>{
+ const f=fixture({...groups(['keep']),keepNoteHeaderVisible:true}),json=f.core.exportSettings(f.stored),doc=JSON.parse(json);assert.equal(doc.schemaVersion,4);assert.equal(f.core.parseSettingsExport(json).keepNoteHeaderVisible,true);
+ for(const version of [1,2,3]){
+  const old=JSON.parse(json);old.schemaVersion=version;delete old.settings.keepNoteHeaderVisible;
+  if(version<3){old.settings.legacyMode=false;delete old.settings.mode;}if(version===1)delete old.settings.authorDisplayRules;
+  const parsed=f.core.parseSettingsExport(JSON.stringify(old));assert.equal(parsed.keepNoteHeaderVisible,false);assert.deepEqual(plain(parsed.tagGroups[0].tags),['keep']);
+ }
+ for(const value of [undefined,'true',1,null]){
+  const bad=JSON.parse(json);if(value===undefined)delete bad.settings.keepNoteHeaderVisible;else bad.settings.keepNoteHeaderVisible=value;
+  await assert.rejects(f.controller.importSettings({json:JSON.stringify(bad),expectedToken:f.core.settingsToken(f.stored)}));assert.equal(f.writes,0);assert.equal(f.stored.keepNoteHeaderVisible,true);
+ }
+ const target=fixture();await target.controller.importSettings({json,expectedToken:target.core.settingsToken(target.stored)});assert.equal(target.stored.keepNoteHeaderVisible,true);
+});
 test('固定有料記事は作者ページでも非表示。ホームと共通の内側構造で既存判定を除外しない',()=>{
  for(const mode of ['normal','social','severe'])for(const url of ['https://note.com/creator','https://note.com/creator/all']){
   const f=pinnedPaidFixture(),settings=f.core.readSettings({...groups(),mode,hidePaidArticles:true});f.ui.update(settings,url);

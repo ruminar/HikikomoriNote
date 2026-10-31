@@ -170,3 +170,23 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-author-profile select { max-width: 100%; }
 .hikikomori-note-author-dialog :focus-visible, .hikikomori-note-author-profile :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 @media print { .hikikomori-note-author-profile, .hikikomori-note-author-dialog { display: none !important; } }
+/* 公式のスクロール状態は保持し、確認済みヘッダの移動だけを抑える。 */
+@media screen {
+  header[data-hikikomori-note-header-pinned] {
+    position: sticky !important;
+    top: 0 !important;
+    transform: none !important;
+    z-index: 21 !important;
+  }
+  /* 狭幅の記事では通常ヘッダの代わりに出る作者行。常時表示中は重複させない。 */
+  header[data-hikikomori-note-header-pinned] > div[class*="with-navbar-layout_creatorRow__"] {
+    display: none !important;
+  }
+  div[data-hikikomori-note-profile-fixed-bar-hidden] {
+    display: none !important;
+  }
+  aside[data-hikikomori-note-header-sidebar] {
+    top: var(--hikikomori-note-sidebar-top) !important;
+    max-height: calc(100vh - var(--hikikomori-note-sidebar-top)) !important;
+  }
+}

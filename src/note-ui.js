@@ -18,8 +18,14 @@
   function isOfficialHeaderLogo(anchor, url) {
     return anchor.isConnected && core.isHome(anchor.href) &&
       !anchor.closest("article") && !anchor.closest('[id="note-body"]') && !anchor.closest(`[${owned}]`) &&
-      Boolean(anchor.closest('header[data-header-state="navbar"]') || (isManagementPage(url) && anchor.closest("header"))) &&
+      Boolean(isOfficialNavbar(anchor.closest("header")) || (isManagementPage(url) && anchor.closest("header"))) &&
       [...anchor.querySelectorAll('svg[aria-label="note"]')].some(svg => svg.getAttribute("role") === "img");
+  }
+  function isNavbarContainer(header) {
+    return header?.tagName === "HEADER" && header.className.split(/\s+/).some(name => name.startsWith("with-navbar-layout_navbarContainer__"));
+  }
+  function isOfficialNavbar(header) {
+    return header?.tagName === "HEADER" && (header.getAttribute("data-header-state") === "navbar" || isNavbarContainer(header));
   }
   function selectedTag(page, url) {
     if (page?.type === "tag") return page.tag;
@@ -56,6 +62,74 @@
     let articleFollowing;
     let articleAuthor, authorSignature;
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
+    const pinnedHeaders = new Set();
+    const headerPinned = "data-hikikomori-note-header-pinned";
+    const headerSidebars = new Set();
+    const headerSidebar = "data-hikikomori-note-header-sidebar";
+    let headerSidebarStyle;
+    function syncHeaderSidebars(headers, url) {
+      const targets = new Set(), page = core.pageKind(url);
+      const height = Math.max(0, ...[...headers].map(header => header.getBoundingClientRect().height));
+      if (headers.size && Number.isFinite(height) && height > 0 &&
+          (core.isHome(url) || ["following", "tag", "search", "topic"].includes(page?.type))) {
+        for (const aside of doc.querySelectorAll('aside[class~="w-[11.375rem]"]')) {
+          if (hasClasses(aside, ["sticky", "top-3", "max-h-screen", "overflow-y-auto"]) &&
+              !aside.closest("article") && !aside.closest(`[${owned}]`)) targets.add(aside);
+        }
+      }
+      for (const aside of headerSidebars) if (!targets.has(aside)) aside.removeAttribute(headerSidebar);
+      headerSidebars.clear();
+      for (const aside of targets) {
+        if (!aside.hasAttribute(headerSidebar)) aside.setAttribute(headerSidebar, "");
+        headerSidebars.add(aside);
+      }
+      if (!targets.size) { headerSidebarStyle?.remove(); headerSidebarStyle = undefined; return; }
+      if (!headerSidebarStyle?.isConnected) {
+        headerSidebarStyle = doc.createElement("style"); headerSidebarStyle.setAttribute(owned, "");
+        (doc.head || doc.documentElement || doc.root).append(headerSidebarStyle);
+      }
+      const css = `aside[${headerSidebar}] { --hikikomori-note-sidebar-top: ${Math.ceil(height) + 12}px; }`;
+      if (headerSidebarStyle.textContent !== css) headerSidebarStyle.textContent = css;
+    }
+    const profileFixedBars = new Set();
+    const profileFixedBarHidden = "data-hikikomori-note-profile-fixed-bar-hidden";
+    function syncProfileFixedBars(headers, url) {
+      const targets = new Set(), page = core.pageKind(url);
+      if (page?.type === "profile" && headers.size) {
+        for (const bar of doc.querySelectorAll('div[class~="z-[11]"]')) {
+          if (!hasClasses(bar, ["fixed", "top-0", "left-0", "w-full"]) || bar.closest("article") || bar.closest(`[${owned}]`)) continue;
+          const grid = [...bar.children].find(child => hasClasses(child, ["grid", "min-h-[49px]", "border-b", "bg-background-primary"]));
+          if (!grid?.querySelector('[data-name="avatar"]') || !grid.querySelector("nav")) continue;
+          if ([...grid.querySelectorAll('a[data-id="NavigationItem"]')].some(link => {
+            try { const u = new URL(link.href); return u.origin === "https://note.com" && u.pathname.replace(/\/$/, "") === `/${page.user}`; } catch { return false; }
+          })) targets.add(bar);
+        }
+      }
+      for (const bar of profileFixedBars) if (!targets.has(bar)) bar.removeAttribute(profileFixedBarHidden);
+      profileFixedBars.clear();
+      for (const bar of targets) {
+        if (!bar.hasAttribute(profileFixedBarHidden)) bar.setAttribute(profileFixedBarHidden, "");
+        profileFixedBars.add(bar);
+      }
+    }
+    function syncPinnedHeader(settings, url) {
+      const targets = new Set();
+      let active = false;
+      try { active = settings.enabled && settings.keepNoteHeaderVisible === true && new URL(url).origin === "https://note.com"; } catch { /* 不明なURLでは解除 */ }
+      if (active) for (const header of doc.querySelectorAll("header")) {
+        // data-header-stateはスクロールでcreator-row-only等へ変わる。固定の構造とロゴで識別する。
+        if (isNavbarContainer(header) && [...header.querySelectorAll("a[href]")].some(anchor =>
+          anchor.closest("header") === header && isOfficialHeaderLogo(anchor, url))) targets.add(header);
+      }
+      for (const header of pinnedHeaders) if (!targets.has(header)) header.removeAttribute(headerPinned);
+      pinnedHeaders.clear();
+      for (const header of targets) {
+        if (!header.hasAttribute(headerPinned)) header.setAttribute(headerPinned, "");
+        pinnedHeaders.add(header);
+      }
+      syncProfileFixedBars(targets, url);
+      syncHeaderSidebars(targets, url);
+    }
     function repaint() { if (!disposed && currentSettings) update(currentSettings, currentUrl); }
     async function addTag(tag) {
       if (adding || uncertain || !currentSettings?.enabled || !core.usesTags(currentSettings) ||
@@ -169,7 +243,7 @@
     function searchForm(input) {
       const form = input.closest("form"), field = input.closest('[data-name="Field"]');
       if (!input.isConnected || input.disabled || input.readOnly ||
-          !input.closest('header[data-header-state="navbar"]') ||
+          !isOfficialNavbar(input.closest("header")) ||
           input.getAttribute("type") !== "search" || input.getAttribute("name") !== "q" ||
           input.getAttribute("aria-label") !== "キーワードやクリエイターで検索" ||
           input.parentElement?.getAttribute("data-name") !== "TextFieldBase" ||
@@ -633,11 +707,11 @@
       if (mobile && (!active || !mobile.panel.isConnected || logoContainer(mobile.logo) !== mobile.parent)) removeMobile();
       if (!active) return null;
       if (!mobile) {
-        const logo = [...doc.querySelectorAll('header[data-header-state="navbar"]')]
+        const logo = [...doc.querySelectorAll("header")].filter(isOfficialNavbar)
           .flatMap(header => [...header.querySelectorAll('a[href]')])
           .find(a => isOfficialHeaderLogo(a, currentUrl) && visible(a) && logoContainer(a));
         if (!logo) return null;
-        const header = logo.closest('header[data-header-state="navbar"]'), parent = logo.parentElement;
+        const header = logo.closest("header"), parent = logo.parentElement;
         const panel = doc.createElement("div"); panel.setAttribute(owned, ""); panel.className = "hikikomori-note-mobile-panel";
         panel.setAttribute("id", "hikikomori-note-mobile-navigation"); panel.hidden = true;
         const button = doc.createElement("button"); button.type = "button"; button.setAttribute(owned, "");
@@ -656,7 +730,7 @@
         const input = mobile.form?.querySelector('input[name="q"]');
         if (input) input.value = core.pageKind(url)?.type === "search" ? new URL(url).searchParams.get("q") || "" : "";
       }
-      const header = mobile.logo.closest('header[data-header-state="navbar"]');
+      const header = mobile.logo.closest("header");
       const officialSearch = [...header.querySelectorAll('input[name="q"]')].some(input => !input.closest(`[${owned}]`) && visible(input));
       const needsSearch = ["following", "tag"].includes(core.pageKind(url)?.type) && !officialSearch;
       if (!needsSearch && mobile.form) { mobile.form.remove(); mobile.form = undefined; }
@@ -776,6 +850,7 @@
       prepareSidebar(url, settings);
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
       currentSettings = settings; currentUrl = url;
+      syncPinnedHeader(settings, url);
       authorControls.update(settings, url);
       syncSearchClear(settings.enabled);
       syncHeaderSettings(settings.enabled && (core.modeOf(settings) === "social" || settings.noteLogoBrowserBack));
@@ -889,6 +964,7 @@
         sidebarRoots.clear();
         authorControls.stop();
         disposed = true;
+        syncPinnedHeader({ enabled: false }, currentUrl);
         removeMobile();
         syncHeaderSettings(false);
         syncLogoCursor(false);

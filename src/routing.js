@@ -50,7 +50,7 @@
       }),
       save: patch => run(async () => {
         if (!patch || typeof patch !== "object" || Array.isArray(patch) ||
-            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "mode", "hideArticleRecommendations", "hidePaidArticles", "noteLogoBrowserBack"].includes(key))) {
+            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "mode", "hideArticleRecommendations", "hidePaidArticles", "noteLogoBrowserBack", "keepNoteHeaderVisible"].includes(key))) {
           throw new Error("設定の形式が正しくありません。");
         }
         if (Object.hasOwn(patch, "enabled") && typeof patch.enabled !== "boolean") {
@@ -65,6 +65,7 @@
         if (Object.hasOwn(patch, "hidePaidArticles") && typeof patch.hidePaidArticles !== "boolean") throw new Error("有料記事表示設定の値が正しくありません。");
         if (Object.hasOwn(patch, "hideArticleRecommendations") && typeof patch.hideArticleRecommendations !== "boolean") throw new Error("おすすめ表示設定の値が正しくありません。");
         if (Object.hasOwn(patch, "noteLogoBrowserBack") && typeof patch.noteLogoBrowserBack !== "boolean") throw new Error("ロゴのブラウザバック設定の値が正しくありません。");
+        if (Object.hasOwn(patch, "keepNoteHeaderVisible") && typeof patch.keepNoteHeaderVisible !== "boolean") throw new Error("ヘッダ表示設定の値が正しくありません。");
         const next = { ...previous, ...patch };
         next.noteUserId = core.normalizeUserId(next.noteUserId);
         await port.setRules(rules(next.enabled, next.dashboardDisabled, core.modeOf(next)));
