@@ -270,7 +270,8 @@
     }
     function isPaidCard(card, settings) {
       if (!card.isConnected || card.closest('article') || card.closest('[id="note-body"]')) return false;
-      if (isHomeArticleCard(card) && !core.isHome(currentUrl)) return false;
+      // 固定記事にも同じ内側構造がある。既知の既存カードはホーム以外でも扱う。
+      if (!card.classList.contains("grid-rows-subgrid") && isHomeArticleCard(card) && !core.isHome(currentUrl)) return false;
       if (isPaidMagazineCard(card, settings)) return true;
       return [...card.querySelectorAll('a[href]')].some(link =>
         link.parentElement?.parentElement === card && link.classList.contains("absolute") &&

@@ -1488,3 +1488,24 @@ test('本文や未知の画像・外部リンク・未知構造は運営バナ�
  }
  const f=uiFixture(homeBannerHtml);f.ui.update(f.core.readSettings({...groups(),mode:'social',hideArticleRecommendations:false,hidePaidArticles:true}),'https://note.com/');assert.equal(f.doc.getElementById('banner-row').hasAttribute(homeBannerMarker),false);
 });
+
+function pinnedPaidFixture(){
+ const f=homeArticleFixture(),card=f.doc.getElementById('home-paid-card'),slot=f.doc.getElementById('paid-slot');
+ card.className='relative w-full grid grid-rows-subgrid gap-y-1 [grid-row:span_2] border-b py-2';slot.className='contents';
+ const pin=f.doc.createElement('div');pin.textContent='固定された記事';card.prepend(pin);return {...f,card,slot,pin};
+}
+test('固定有料記事は作者ページでも非表示。ホームと共通の内側構造で既存判定を除外しない',()=>{
+ for(const mode of ['normal','social','severe'])for(const url of ['https://note.com/creator','https://note.com/creator/all']){
+  const f=pinnedPaidFixture(),settings=f.core.readSettings({...groups(),mode,hidePaidArticles:true});f.ui.update(settings,url);
+  assert.equal(f.slot.hasAttribute(paidMarker),true);assert.equal(f.doc.getElementById('free-slot').hasAttribute(paidMarker),false);assert.equal(f.doc.getElementById('home-list').hasAttribute(paidMarker),false);
+  f.ui.update({...settings,hidePaidArticles:false},url);assert.equal(f.slot.hasAttribute(paidMarker),false);f.ui.update(settings,url);f.ui.stop();assert.equal(f.slot.hasAttribute(paidMarker),false);
+ }
+});
+test('固定有料記事も許可作者は表示し、無料化・鍵・後挿入と許可解除を再評価',()=>{
+ const f=pinnedPaidFixture(),settings=f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true,noteUserId:'me',authorDisplayRevision:0,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]}),url='https://note.com/creator';
+ f.ui.update(settings,url);assert.equal(f.slot.hasAttribute(paidMarker),false);const hidden={...settings,authorDisplayRules:[]};f.ui.update(hidden,url);assert.equal(f.slot.hasAttribute(paidMarker),true);
+ f.doc.getElementById('home-price').remove();f.ui.invalidatePaidCards();f.ui.update(hidden,url);assert.equal(f.slot.hasAttribute(paidMarker),false);
+ const svg=f.doc.createElement('svg'),path=f.doc.createElement('path');path.setAttribute('d',membershipLockPath);svg.append(path);f.card.querySelector('h3').append(svg);f.ui.invalidatePaidCards();f.ui.update(hidden,url);assert.equal(f.slot.hasAttribute(paidMarker),true);
+ const parent=f.slot.parentElement;f.slot.remove();f.ui.invalidatePaidCards();f.ui.update(hidden,url);parent.prepend(f.slot);f.ui.invalidatePaidCards();f.ui.update(hidden,url);assert.equal(f.slot.hasAttribute(paidMarker),true);
+ f.ui.update(settings,url);assert.equal(f.slot.hasAttribute(paidMarker),false);
+});
