@@ -245,6 +245,11 @@
     function isMagazineCard(card) {
       return card.tagName === "DIV" && ["relative", "mb-[6px]", "mr-[6px]", "flex", "w-[calc(100%-6px)]"].every(name => card.classList.contains(name));
     }
+    function isHomeArticleCard(card) {
+      return card.tagName === "DIV" && hasClasses(card, ["relative", "w-full"]) &&
+        [...card.children].some(child => child.tagName === "DIV" &&
+          hasClasses(child, ["flex", "w-full", "bg-surface-normal", "[grid-row:2]", "min-w-0"]));
+    }
     function isPaidMagazineCard(card, settings) {
       if (!isMagazineCard(card)) return false;
       const cover = [...card.children].find(child => child.tagName === "DIV" &&
@@ -265,6 +270,7 @@
     }
     function isPaidCard(card, settings) {
       if (!card.isConnected || card.closest('article') || card.closest('[id="note-body"]')) return false;
+      if (isHomeArticleCard(card) && !core.isHome(currentUrl)) return false;
       if (isPaidMagazineCard(card, settings)) return true;
       return [...card.querySelectorAll('a[href]')].some(link =>
         link.parentElement?.parentElement === card && link.classList.contains("absolute") &&
@@ -279,7 +285,14 @@
       const userId = cardCreatorId(card, link);
       return Boolean(userId && !core.isSelf(settings, userId) && core.authorRule(settings, userId)?.action === "allow");
     }
-    function paidCardContainer(card) { return articleCardContainer(card); }
+    function paidCardContainer(card) {
+      // ホームの横並びでは幅を確保する1件分の枠も隠す。
+      const slot = card.parentElement, list = slot?.parentElement;
+      if (core.isHome(currentUrl) && isHomeArticleCard(card) && slot?.tagName === "DIV" && slot.children.length === 1 &&
+          hasClasses(slot, ["h-auto", "shrink-0", "w-36", "sm:w-48"]) &&
+          hasClasses(list, ["flex", "overflow-x-auto", "overflow-y-hidden"])) return slot;
+      return articleCardContainer(card);
+    }
     const homePaidHidden = "data-hikikomori-note-home-paid-hidden";
     let homePaidRoot;
     function syncHomePaidRecommendations(settings, url) {
@@ -314,7 +327,8 @@
       for (const indicator of [...prices, ...locks]) {
         let card = indicator.parentElement;
         for (let depth = 0; card && depth < 10; depth++, card = card.parentElement) {
-          if (!card.classList.contains("grid-rows-subgrid") && !isMagazineCard(card)) continue;
+          if (!card.classList.contains("grid-rows-subgrid") && !isMagazineCard(card) &&
+              !(core.isHome(url) && isHomeArticleCard(card))) continue;
           if (isPaidCard(card, settings)) {
             const container = paidCardContainer(card);
             container.setAttribute(paidHidden, ""); paidCards.set(card, container);

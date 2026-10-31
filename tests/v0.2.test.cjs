@@ -1441,3 +1441,29 @@ test('ホームのおすすめメンバーシップは作者許可・自己設�
  f.ui.update(settings,'https://note.com/');assert.equal(f.doc.documentElement.hasAttribute('data-hikikomori-note-home-paid-hidden'),true);
  const replacement=f.doc.createElement('html');f.doc.root.append(replacement);const old=f.doc.documentElement;f.doc.documentElement=replacement;f.ui.update(settings,'https://note.com/');assert.equal(old.hasAttribute('data-hikikomori-note-home-paid-hidden'),false);assert.equal(replacement.hasAttribute('data-hikikomori-note-home-paid-hidden'),true);
 });
+
+const homeArticleHtml='<main><div id="home-list" class="relative flex overflow-x-auto overflow-y-hidden gap-2"><div id="paid-slot" class="h-auto shrink-0 w-36 sm:w-48"><div id="home-paid-card" class="relative w-full border-b-0 py-0"><div class="flex w-full rounded md:rounded-lg bg-surface-normal [grid-row:2] min-w-0 flex-col"><a class="absolute inset-0" title="記事" aria-label="記事" href="https://note.com/creator/n/n123"></a><div><h3></h3><div><div><span class="text-text-success text-sm" id="home-price"><span></span><span></span></span></div></div><a data-name="avatar" href="https://note.com/creator"></a></div></div></div></div><div id="free-slot" class="h-auto shrink-0 w-36 sm:w-48"><div class="relative w-full"><div class="flex w-full bg-surface-normal [grid-row:2] min-w-0"><a class="absolute inset-0" title="無料" aria-label="無料" href="https://note.com/free/n/n234"></a><h3></h3><a data-name="avatar" href="https://note.com/free"></a></div></div></div></div></main>';
+function homeArticleFixture(){const f=uiFixture(homeArticleHtml),price=f.doc.getElementById('home-price');price.children[0].textContent='¥';price.children[1].textContent='300';return f;}
+test('公式ホームの価格付き記事は横並びの1件分ごと隠し、無料と周辺一覧を残す',()=>{
+ const f=homeArticleFixture(),settings=f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true}),slot=f.doc.getElementById('paid-slot'),card=f.doc.getElementById('home-paid-card'),url='https://note.com/?test=1#top';
+ f.ui.update(settings,url);assert.equal(slot.hasAttribute(paidMarker),true);for(const id of ['home-list','free-slot'])assert.equal(f.doc.getElementById(id).hasAttribute(paidMarker),false);assert.equal(card.hasAttribute(paidMarker),false);
+ for(const patch of [{hidePaidArticles:false},{enabled:false}]){f.ui.update({...settings,...patch},url);assert.equal(slot.hasAttribute(paidMarker),false);f.ui.update(settings,url);}
+ f.ui.update(settings,'https://note.com/search');assert.equal(slot.hasAttribute(paidMarker),false);f.ui.update(settings,url);f.ui.stop();assert.equal(slot.hasAttribute(paidMarker),false);
+});
+test('ホームの有料記事も許可作者は表示。許可解除・価格変更・後挿入を再評価',()=>{
+ const f=homeArticleFixture(),settings=f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true,noteUserId:'me',authorDisplayRevision:0,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]}),slot=f.doc.getElementById('paid-slot'),url='https://note.com/';
+ f.ui.update(settings,url);assert.equal(slot.hasAttribute(paidMarker),false);const hidden={...settings,authorDisplayRules:[]};f.ui.update(hidden,url);assert.equal(slot.hasAttribute(paidMarker),true);
+ f.doc.getElementById('home-price').textContent='¥0';f.ui.invalidatePaidCards();f.ui.update(hidden,url);assert.equal(slot.hasAttribute(paidMarker),false);
+ f.doc.getElementById('home-price').textContent='¥1,200〜';const parent=slot.parentElement;slot.remove();f.ui.invalidatePaidCards();f.ui.update(hidden,url);parent.append(slot);f.ui.invalidatePaidCards();f.ui.update(hidden,url);assert.equal(slot.hasAttribute(paidMarker),true);
+});
+test('ホームの通常グリッドも同じ価格判定を使い、鍵のみの会員限定カードも隠す',()=>{
+ const f=homeArticleFixture(),slot=f.doc.getElementById('paid-slot'),card=f.doc.getElementById('home-paid-card'),settings=f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true});slot.className='grid-cell';
+ f.ui.update(settings,'https://note.com/');assert.equal(card.hasAttribute(paidMarker),true);assert.equal(slot.hasAttribute(paidMarker),false);
+ f.doc.getElementById('home-price').remove();const svg=f.doc.createElement('svg'),path=f.doc.createElement('path');path.setAttribute('d',membershipLockPath);svg.append(path);card.querySelector('h3').append(svg);f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/');assert.equal(card.hasAttribute(paidMarker),true);
+});
+test('ホームの新カードも本文内・別origin・未知構造・購入済みでは隠さない',()=>{
+ for(const change of [f=>{f.doc.getElementById('home-paid-card').querySelector('a').href='https://other.test/creator/n/n123';},f=>{f.doc.getElementById('home-paid-card').children[0].className='unknown';},f=>{const article=f.doc.createElement('article');const slot=f.doc.getElementById('paid-slot');slot.parentElement.append(article);article.append(slot);}]){
+  const f=homeArticleFixture();change(f);f.ui.update(f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true}),'https://note.com/');assert.equal(f.doc.getElementById('paid-slot').hasAttribute(paidMarker),false);
+ }
+ const f=homeArticleFixture();f.ui.update(f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true}),'https://note.com/notes/purchased');assert.equal(f.doc.getElementById('paid-slot').hasAttribute(paidMarker),false);
+});

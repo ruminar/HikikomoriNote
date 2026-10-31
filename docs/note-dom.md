@@ -193,3 +193,10 @@ Amazonはamazon.co.jpまたはwww.amazon.co.jpのHTTPS商品dpリンク、確認
 社会復帰＋有料記事非表示ONの公式ホームでdocumentElementにdata-hikikomori-note-home-paid-hiddenを付ける。CSSは対象本体と:hasによる既知の外側1行を隠し、遅延挿入にも適用。公式カードを個別に取得・再実装しない。許可作者も含め行全体を隠す。未知外枠は隠さず対象本体だけ縮退。OFF・設定解除・モード変更・SPA離脱・停止で属性を除去。
 
 構文と自動テスト218件成功。ローカルブラウザから検証用HTTPサーバーへの接続がタイムアウトしたため、実ブラウザでのCSS表示確認は未完了。実拡張のホーム画面での確認は利用者に依頼する。
+
+
+## 公式ホームの記事カード（2026-10-31・0.2.5）
+
+未ログインの確認用ブラウザで、note.com/の公式記事オーバーレイリンク60件をread-only調査。リンク親はflex w-full rounded md:rounded-lg bg-surface-normal [grid-row:2] min-w-0等、その親はrelative w-full border-b-0 py-0 sm:border-b-0 sm:py-0。2件の価格付きカード（¥300、¥580）を確認。grid-rows-subgridはない。
+
+この外側カードをホームだけで追加の候補とし、従来のタイトル・h3・価格・鍵・許可作者判定を再利用。横並びの1件分はh-auto shrink-0 w-36 sm:w-48、その親のflex overflow-x-auto overflow-y-hiddenを確認して外枠も隠す。未知の外枠は一括非表示にしない。ホーム以外にSPA遷移したら新構造の印を解除。新規の全体走査や監視を追加せず、既存の価格・鍵走査内で扱う。自動テスト222件成功、実拡張でのホーム表示は未確認。
