@@ -1467,3 +1467,24 @@ test('ホームの新カードも本文内・別origin・未知構造・購入�
  }
  const f=homeArticleFixture();f.ui.update(f.core.readSettings({...groups(),mode:'social',hidePaidArticles:true}),'https://note.com/notes/purchased');assert.equal(f.doc.getElementById('paid-slot').hasAttribute(paidMarker),false);
 });
+
+const homeBannerHtml='<main><div id="banner-row" class="mb-5"><div class="px-4 lg:px-0"><div id="home-banner" class="relative mx-auto max-w-[960px]"><img alt="運営のお知らせ" width="960" height="158" src="https://assets.st-note.com/poc-image/manual/production/campaign.png"><div class="absolute inset-0"></div><a class="absolute inset-0" aria-label="運営のお知らせ" title="運営のお知らせ" href="https://note.com/topic/campaign" target="_blank"></a></div></div></div><div id="home-posts"></div></main>';
+const homeBannerMarker='data-hikikomori-note-home-banner-hidden';
+test('公式ホームの運営バナーはおすすめ非表示だけで行と余白を隠し、設定解除・OFF・離脱・停止で復元',()=>{
+ const f=uiFixture(homeBannerHtml),settings=f.core.readSettings({...groups(),mode:'social',hideArticleRecommendations:true,hidePaidArticles:false}),row=f.doc.getElementById('banner-row'),url='https://note.com/?x=1#top';
+ f.ui.update(settings,url);assert.equal(row.hasAttribute(homeBannerMarker),true);assert.equal(f.doc.getElementById('home-posts').hasAttribute(homeBannerMarker),false);
+ for(const patch of [{hideArticleRecommendations:false},{enabled:false}]){f.ui.update({...settings,...patch},url);assert.equal(row.hasAttribute(homeBannerMarker),false);f.ui.update(settings,url);}
+ for(const target of ['https://note.com/search','https://note.com/nontsu','https://note.com/notes','https://other.test/']){f.ui.update(settings,target);assert.equal(row.hasAttribute(homeBannerMarker),false);f.ui.update(settings,url);}
+ f.ui.stop();assert.equal(row.hasAttribute(homeBannerMarker),false);
+});
+test('運営バナーの後挿入・画像と文言の変更に追従し、未知の混在内容は丸ごと隠さない',()=>{
+ const f=uiFixture(homeBannerHtml),settings=f.core.readSettings({...groups(),mode:'social',hideArticleRecommendations:true}),row=f.doc.getElementById('banner-row'),parent=row.parentElement,banner=f.doc.getElementById('home-banner'),url='https://note.com/';row.remove();f.ui.update(settings,url);parent.prepend(row);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(row.hasAttribute(homeBannerMarker),true);
+ const img=banner.querySelector('img');img.setAttribute('alt','次のキャンペーン');img.setAttribute('src','https://assets.st-note.com/poc-image/manual/production/next.png');banner.querySelector('a').setAttribute('title','次のキャンペーン');f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(row.hasAttribute(homeBannerMarker),true);
+ const unknown=f.doc.createElement('p');row.append(unknown);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(row.hasAttribute(homeBannerMarker),false);assert.equal(banner.hasAttribute(homeBannerMarker),true);assert.equal(unknown.hasAttribute(homeBannerMarker),false);
+});
+test('本文や未知の画像・外部リンク・未知構造は運営バナーと判定しない',()=>{
+ for(const change of [f=>{f.doc.querySelector('img').setAttribute('src','https://assets.st-note.com/production/uploads/images/user.png');},f=>{f.doc.querySelector('img').setAttribute('src','https://assets.st-note.com.evil.test/poc-image/manual/production/x.png');},f=>{f.doc.querySelector('a').href='https://note.com.evil.test/topic/campaign';},f=>{f.doc.getElementById('home-banner').className='unknown';},f=>{const article=f.doc.createElement('article'),row=f.doc.getElementById('banner-row');row.parentElement.append(article);article.append(row);}]){
+  const f=uiFixture(homeBannerHtml);change(f);f.ui.update(f.core.readSettings({...groups(),mode:'social',hideArticleRecommendations:true,hidePaidArticles:true}),'https://note.com/');assert.equal(f.doc.getElementById('banner-row').hasAttribute(homeBannerMarker),false);assert.equal(f.doc.getElementById('home-banner').hasAttribute(homeBannerMarker),false);
+ }
+ const f=uiFixture(homeBannerHtml);f.ui.update(f.core.readSettings({...groups(),mode:'social',hideArticleRecommendations:false,hidePaidArticles:true}),'https://note.com/');assert.equal(f.doc.getElementById('banner-row').hasAttribute(homeBannerMarker),false);
+});

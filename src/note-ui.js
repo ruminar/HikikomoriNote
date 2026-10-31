@@ -455,6 +455,37 @@
     const recommendationRoots = new Set();
     const recommendationRoot = "hikikomori-note-recommendations-root";
     const notesPromotionRoots = new Set();
+    const homeBanners = new Set();
+    const homeBannerHidden = "data-hikikomori-note-home-banner-hidden";
+    let homeBannersDirty = true, homeBannersSignature;
+    function syncHomeBanners(settings, url) {
+      const active = settings.enabled && settings.hideArticleRecommendations && core.isHome(url);
+      const signature = JSON.stringify([Boolean(active), url]);
+      if (!homeBannersDirty && signature === homeBannersSignature) return;
+      homeBannersDirty = false; homeBannersSignature = signature;
+      const targets = new Set();
+      if (active) {
+        for (const image of doc.querySelectorAll('img[width="960"]')) {
+          if (!image.getAttribute("alt") || image.closest("article") || image.closest('[id="note-body"]') || image.closest(`[${owned}]`)) continue;
+          let source;
+          try { source = new URL(image.getAttribute("src")); } catch { continue; }
+          if (source.origin !== "https://assets.st-note.com" || !source.pathname.startsWith("/poc-image/manual/production/")) continue;
+          const banner = image.parentElement;
+          if (banner?.tagName !== "DIV" || !hasClasses(banner, ["relative", "mx-auto", "max-w-[960px]"])) continue;
+          if (![...banner.children].some(link => {
+            if (link.tagName !== "A" || !hasClasses(link, ["absolute", "inset-0"]) || !link.getAttribute("title") || !link.getAttribute("aria-label")) return false;
+            try { return new URL(link.href).origin === "https://note.com"; } catch { return false; }
+          })) continue;
+          const padding = banner.parentElement, row = padding?.parentElement;
+          const wholeRow = padding?.tagName === "DIV" && hasClasses(padding, ["px-4", "lg:px-0"]) && padding.children.length === 1 &&
+            row?.tagName === "DIV" && row.classList.contains("mb-5") && row.children.length === 1;
+          targets.add(wholeRow ? row : banner);
+        }
+      }
+      for (const target of homeBanners) if (!targets.has(target)) target.removeAttribute(homeBannerHidden);
+      homeBanners.clear();
+      for (const target of targets) { if (!target.hasAttribute(homeBannerHidden)) target.setAttribute(homeBannerHidden, ""); homeBanners.add(target); }
+    }
     const notesPromotionRoot = "data-hikikomori-note-notes-promotions";
     let notesPromotionsDirty = true, notesPromotionsSignature;
     function hasClasses(element, names) { return Boolean(element && names.every(name => element.classList.contains(name))); }
@@ -754,6 +785,7 @@
       syncProducts(settings.enabled && core.usesFollowing(settings) && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncNotesPromotions(settings, url);
+      syncHomeBanners(settings, url);
       syncTips(settings, url);
       syncPaidCards(settings, url);
       syncHomePaidRecommendations(settings, url);
@@ -846,6 +878,7 @@
       invalidatePaidCards() {
         authorControls.invalidate();
         notesPromotionsDirty = true;
+        homeBannersDirty = true;
         paidDirty = true;
         tipsDirty = true;
         profilePromotionsDirty = true;
@@ -870,6 +903,8 @@
         syncRecommendations(false);
         for (const root of notesPromotionRoots) root.removeAttribute(notesPromotionRoot);
         notesPromotionRoots.clear();
+        for (const target of homeBanners) target.removeAttribute(homeBannerHidden);
+        homeBanners.clear();
         for (const container of tips.values()) container.removeAttribute(tipHidden);
         tips.clear();
         for (const container of paidCards.values()) container.removeAttribute(paidHidden);

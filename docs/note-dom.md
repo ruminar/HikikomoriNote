@@ -200,3 +200,10 @@ Amazonはamazon.co.jpまたはwww.amazon.co.jpのHTTPS商品dpリンク、確認
 未ログインの確認用ブラウザで、note.com/の公式記事オーバーレイリンク60件をread-only調査。リンク親はflex w-full rounded md:rounded-lg bg-surface-normal [grid-row:2] min-w-0等、その親はrelative w-full border-b-0 py-0 sm:border-b-0 sm:py-0。2件の価格付きカード（¥300、¥580）を確認。grid-rows-subgridはない。
 
 この外側カードをホームだけで追加の候補とし、従来のタイトル・h3・価格・鍵・許可作者判定を再利用。横並びの1件分はh-auto shrink-0 w-36 sm:w-48、その親のflex overflow-x-auto overflow-y-hiddenを確認して外枠も隠す。未知の外枠は一括非表示にしない。ホーム以外にSPA遷移したら新構造の印を解除。新規の全体走査や監視を追加せず、既存の価格・鍵走査内で扱う。自動テスト222件成功、実拡張でのホーム表示は未確認。
+
+
+## 公式ホーム中央の運営バナー（2026-10-31・0.2.5）
+
+利用者提示DOM：div.mb-5 > div.px-4.lg:px-0 > div.relative.mx-auto.max-w-[960px]内に、alt付き幅960画像とnote.comへのオーバーレイリンク。画像srcはassets.st-note.com/poc-image/manual/production/配下。タイトル・画像名はキャンペーンごとに変わるため固定しない。
+
+おすすめ非表示ONのホームだけで、既知の画像・リンク・枠を確認して専用属性を付ける。単一の既知親なら行全体、混在する親ならバナー本体だけを隠す。既存DOM通知とdirtyフラグで後挿入へ追従。本文・一般の投稿画像・外部リンクは対象外。設定解除・OFF・ホーム離脱・停止で復元。提示DOMに基づく自動テスト225件成功、実拡張表示は未確認。
