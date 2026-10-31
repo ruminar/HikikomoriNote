@@ -88,6 +88,7 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-article-following:hover, .hikikomori-note-article-author:hover { background: rgba(128,128,128,.12); }
 .hikikomori-note-article-following:focus-visible, .hikikomori-note-article-author:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .hikikomori-note-article-author { top: 120px; display: flex; align-items: center; gap: 8px; text-align: left; }
+.hikikomori-note-article-author-only { top: 72px; }
 .hikikomori-note-article-author img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .hikikomori-note-article-author span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 [data-hikikomori-note-side-profile-offset="author"] {

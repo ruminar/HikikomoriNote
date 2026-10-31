@@ -4,7 +4,11 @@
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
   const views = ["tags", "settings", "authors", "transfer"];
-  const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", legacyMode: "legacy-mode" };
+  const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", mode: "operation-mode" };
+  const modeNames = { normal: "通常モード（ひとみしりモード）", severe: "重度ひきこもりモード", social: "社会復帰モード" };
+  function updateModeHelp() {
+    byId("operation-mode-help").textContent = { normal: "専用ホームとお気に入りタグから、見たい記事を選んで閲覧します。", severe: "公式ホームを開かず、タグやTLの独自メニューも停止します。作者ページへの導線は残します。", social: "note公式ホームと左メニューを使用し、記事の非表示設定や追加導線は使います。" }[byId("operation-mode").value] || "";
+  }
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();
@@ -34,26 +38,26 @@
   let state, selected = location.hash === "#authors" ? "authors" : location.hash === "#settings" ? "settings" : "tags", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectView(name, focus = false) {
     if (!state && name !== "settings") return;
-    selected = state?.legacyMode && name === "tags" ? "intro" : name;
+    selected = state && !core.usesTags(state) && name === "tags" ? (core.modeOf(state) === "severe" ? "intro" : "settings") : name;
     for (const view of views) {
       const button = byId(`nav-${view}`);
       if (view === selected) button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
       byId(`panel-${view}`).hidden = view !== selected;
     }
-    byId("panel-intro").hidden = !state?.legacyMode;
+    byId("panel-intro").hidden = (core.modeOf(state) !== "severe");
     if (focus) byId(`nav-${selected === "intro" ? "settings" : selected}`).focus();
   }
   function controls() {
     const blocked = !state || busy || uncertain;
-    const tagBlocked = blocked || state?.legacyMode || Boolean(state?.tagWarning) || Boolean(state?.groupSelectionInvalid);
+    const tagBlocked = blocked || (state && !core.usesTags(state)) || Boolean(state?.tagWarning) || Boolean(state?.groupSelectionInvalid);
     for (const id of ["normal", "save"]) byId(id).disabled = blocked;
     for (const id of Object.values(fields)) byId(id).disabled = !state || uncertain || (busy && ["settings", "import"].includes(pendingState));
-    byId("tag-input").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning) || (busy && pendingState === "import");
+    byId("tag-input").disabled = !state || uncertain || !core.usesTags(state) || Boolean(state.tagWarning) || (busy && pendingState === "import");
     byId("add-tag").disabled = tagBlocked;
-    byId("group-name").disabled = !state || uncertain || state.legacyMode || Boolean(state.tagWarning) || (busy && pendingState === "import");
+    byId("group-name").disabled = !state || uncertain || !core.usesTags(state) || Boolean(state.tagWarning) || (busy && pendingState === "import");
     byId("save-group-name").disabled = tagBlocked;
-    for (const id of ["edit-groups"]) byId(id).querySelectorAll("button").forEach(button => { button.disabled = blocked || state?.legacyMode || Boolean(state?.tagWarning); });
+    for (const id of ["edit-groups"]) byId(id).querySelectorAll("button").forEach(button => { button.disabled = blocked || (state && !core.usesTags(state)) || Boolean(state?.tagWarning); });
     byId("edit-tags").querySelectorAll("button").forEach(button => { button.disabled = tagBlocked || button.dataset.edge === "true"; });
     for (const row of byId("edit-tags").children) row.draggable = !tagBlocked;
     byId("edit-tags").querySelectorAll("select").forEach(select => { select.disabled = tagBlocked; });
@@ -70,7 +74,7 @@
   function renderTags() {
     const editor = byId("edit-tags");
     editor.replaceChildren();
-    if (state.legacyMode) { byId("edit-groups").replaceChildren(); return; }
+    if (!core.usesTags(state)) { byId("edit-groups").replaceChildren(); return; }
     const group = core.selectedGroup(state), tags = group.tags;
     for (const id of ["edit-groups"]) {
       const container = byId(id), focused = container.contains(document.activeElement) ? document.activeElement?.getAttribute("data-group-id") : null;
@@ -106,7 +110,7 @@
       transfer.setAttribute("aria-label", `${tag}を別グループへ移動`);
       transfer.onclick = () => { void mutateTag({ type: "TRANSFER_TAG", groupId: group.id, targetGroupId: destination.value, tag }); }; row.append(transfer);
       row.ondragstart = event => {
-        if (busy || uncertain || state.legacyMode || state.tagWarning) { event.preventDefault(); return; }
+        if (busy || uncertain || !core.usesTags(state) || state.tagWarning) { event.preventDefault(); return; }
         dragTag = { tag, groupId: group.id }; event.dataTransfer.setData("text/plain", tag); event.dataTransfer.effectAllowed = "move";
       };
       row.ondragover = event => { if (dragTag && !busy && !uncertain) event.preventDefault(); };
@@ -166,27 +170,32 @@
     const group = core.selectedGroup(state), currentDraft = draft(group.id);
     if (previous !== group.id) { byId("tag-input").value = currentDraft.tag; dragTag = null; }
     byId("group-name").value = currentDraft.nameDirty ? currentDraft.name : group.name;
-    byId("group-name-form").hidden = state.legacyMode;
+    byId("group-name-form").hidden = !core.usesTags(state);
     const active = document.activeElement;
-    const hiddenFocus = state.legacyMode &&
-      (byId("panel-tags").contains(active) || active === byId("nav-tags") || active === byId("following"));
-    if (state.legacyMode && ((firstLoad && !["#settings", "#authors"].includes(location.hash)) || selected === "tags")) selected = "intro";
-    if (!state.legacyMode && selected === "intro") selected = "tags";
+    const hiddenFocus = (!core.usesTags(state) &&
+      (byId("panel-tags").contains(active) || active === byId("nav-tags"))) ||
+      (!core.usesFollowing(state) && active === byId("following")) ||
+      (core.modeOf(state) !== "social" && active === byId("official-home"));
+    if (!core.usesTags(state) && ((firstLoad && !["#settings", "#authors"].includes(location.hash)) || selected === "tags")) selected = core.modeOf(state) === "severe" ? "intro" : "settings";
+    if (core.modeOf(state) === "social" && selected === "intro") selected = "settings";
+    if (core.usesTags(state) && selected === "intro") selected = "tags";
     for (const [field, id] of Object.entries(fields)) {
       if (dirty.has(field)) continue;
-      if (field === "noteUserId") byId(id).value = state[field];
+      if (["noteUserId", "mode"].includes(field)) byId(id).value = state[field];
       else byId(id).checked = state[field];
     }
     byId("home-menu").hidden = false;
-    byId("nav-tags").hidden = state.legacyMode;
+    byId("nav-tags").hidden = !core.usesTags(state);
     byId("page-links").hidden = false;
-    byId("following").hidden = state.legacyMode;
+    byId("following").hidden = !core.usesFollowing(state);
+    byId("official-home").hidden = core.modeOf(state) !== "social";
+    updateModeHelp();
     const profile = core.profileUrl(state.noteUserId);
     byId("profile").textContent = profile ? `${state.noteUserId}のページ` : "自分のページ（未設定）";
     if (profile) { byId("profile").href = profile; byId("profile").removeAttribute("aria-disabled"); }
     else { byId("profile").setAttribute("href", "#settings"); byId("profile").removeAttribute("aria-disabled"); }
     byId("mode").textContent = state.enabled
-      ? `拡張ON：通常ホームを専用ホームへ転送します。 ${state.legacyMode ? "重度ひきこもりモード" : "通常モード（ひとみしりモード）"}`
+      ? `拡張ON：${core.modeOf(state) === "social" ? "note公式ホームを表示します。" : "通常ホームを専用ホームへ転送します。"} ${modeNames[core.modeOf(state)]}`
       : "拡張OFF：通常のnoteを利用できます。拡張アイコンからONへ戻せます。";
     const warning = state.tagWarning || (state.groupSelectionInvalid ? "保存済みの選択に異常があります。グループを選び直してください。" : "");
     byId("tag-warning").hidden = !warning; byId("tag-warning").textContent = warning;
@@ -234,26 +243,26 @@
       byId("status").textContent = "保存しました。";
       if (options.kind === "import") byId("transfer-status").textContent = "設定を読み込みました。各画面へ反映しました。";
       if (options.off) location.assign("https://note.com/");
-      if (options.focusTagInput && !state.legacyMode) byId("tag-input").focus();
+      if (options.focusTagInput && core.usesTags(state)) byId("tag-input").focus();
       if (options.focusGroup) byId(options.focusGroup[0]).querySelector(`[data-group-id="${options.focusGroup[1]}"]`)?.focus();
     } catch (error) {
       uncertain = error.code === "UNCONFIRMED";
       byId("status").textContent = `処理できませんでした。${error.message}`;
       if (options.kind === "import") byId("transfer-status").textContent = `読み込みを完了できませんでした。${error.message}`;
       if (uncertain) selectView("settings", true);
-      if (["CONFLICT", "LEGACY_MODE", "INVALID_TAGS", "INVALID_AUTHORS"].includes(error.code)) {
+      if (["CONFLICT", "MODE_RESTRICTED", "INVALID_TAGS", "INVALID_AUTHORS"].includes(error.code)) {
         try { show(await platform.getState()); } catch { uncertain = true; }
       }
     } finally { busy = false; pendingState = false; controls(); }
   }
   function mutateTag(operation, options) { return perform(() => platform.tag(operation), options); }
   for (const [field, id] of Object.entries(fields)) {
-    byId(id).addEventListener(field === "noteUserId" ? "input" : "change", () => dirty.add(field));
+    byId(id).addEventListener(field === "noteUserId" ? "input" : "change", () => { dirty.add(field); if (field === "mode") updateModeHelp(); });
   }
   byId("settings").onsubmit = event => {
     event.preventDefault();
     const patch = {};
-    for (const field of dirty) patch[field] = field === "noteUserId" ? byId(fields[field]).value : byId(fields[field]).checked;
+    for (const field of dirty) patch[field] = ["noteUserId", "mode"].includes(field) ? byId(fields[field]).value : byId(fields[field]).checked;
     try { if (Object.hasOwn(patch, "noteUserId")) patch.noteUserId = core.normalizeUserId(patch.noteUserId); }
     catch (error) { byId("status").textContent = error.message; byId("note-user").focus(); return; }
     void perform(() => platform.save(patch), { kind: "settings" });
@@ -282,7 +291,7 @@
   };
   for (const name of views) byId(`nav-${name}`).onclick = () => selectView(name);
   byId("home-menu").onkeydown = event => {
-    const visible = !state ? ["settings"] : state.legacyMode ? ["settings", "authors", "transfer"] : views;
+    const visible = !state ? ["settings"] : !core.usesTags(state) ? ["settings", "authors", "transfer"] : views;
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     let index = visible.indexOf(selected);

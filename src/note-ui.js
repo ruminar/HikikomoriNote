@@ -58,7 +58,7 @@
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
     function repaint() { if (!disposed && currentSettings) update(currentSettings, currentUrl); }
     async function addTag(tag) {
-      if (adding || uncertain || !currentSettings?.enabled || currentSettings.legacyMode ||
+      if (adding || uncertain || !currentSettings?.enabled || !core.usesTags(currentSettings) ||
           currentSettings.tagWarning || core.pageKind(currentUrl)?.tag !== tag) return;
       adding = true; actionMessage = "保存中…"; repaint();
       const groupId = currentSettings.selectedTagGroupId, selectionRevision = currentSettings.groupSelectionRevision;
@@ -94,7 +94,7 @@
     const isSidebarGrid = root => gridClasses.some(name => root.classList.contains(name));
     function prepareSidebar(url, settings) {
       if (disposed) return;
-      const active = (!settings || (settings.enabled && !settings.legacyMode)) &&
+      const active = (settings?.enabled && core.usesTags(settings)) &&
         ["following", "tag", "search", "topic"].includes(core.pageKind(url)?.type);
       for (const root of sidebarRoots) {
         if (!active || !root.isConnected || !isSidebarGrid(root)) {
@@ -316,7 +316,7 @@
           const container = profile.parentElement;
           if (profile.closest("article") || profile.closest('[id="note-body"]') ||
               container?.tagName !== "DIV" || !["fixed", "top-24", "left-8"].every(name => container.classList.contains(name))) continue;
-          const offset = articleAuthor?.isConnected ? "author" : "following";
+          const offset = articleAuthor?.isConnected && articleFollowing?.isConnected ? "author" : "following";
           if (container.getAttribute(sideProfileOffset) !== offset) container.setAttribute(sideProfileOffset, offset);
           current.add(container);
         }
@@ -373,11 +373,12 @@
     }
     function syncArticleFollowing(settings, url) {
       const article = doc.querySelector('article[id="note-article"]');
-      const show = settings.enabled && !settings.legacyMode && (core.isArticle(url) || core.isPreviewArticle(url)) &&
+      const show = settings.enabled && (core.isArticle(url) || core.isPreviewArticle(url)) &&
         win.matchMedia("(min-width: 1100px)").matches && article && visible(article) &&
         article.getBoundingClientRect().left >= 228 && doc.body;
       if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); syncSideProfiles(false); return; }
-      if (!articleFollowing?.isConnected) {
+      if (!core.usesFollowing(settings)) { articleFollowing?.remove(); articleFollowing = undefined; }
+      else if (!articleFollowing?.isConnected) {
         articleFollowing = doc.createElement("a");
         articleFollowing.setAttribute(owned, "");
         articleFollowing.className = "hikikomori-note-article-following";
@@ -386,7 +387,11 @@
         doc.body.append(articleFollowing);
       }
       syncArticleAuthor(article, url);
-      syncSideProfiles(true);
+      if (articleAuthor) {
+        if (articleFollowing?.isConnected) articleAuthor.classList.remove("hikikomori-note-article-author-only");
+        else articleAuthor.classList.add("hikikomori-note-article-author-only");
+      }
+      syncSideProfiles(Boolean(articleFollowing?.isConnected || articleAuthor?.isConnected));
     }
     function isRecommendations(element) {
       if (element.tagName !== "DIV" || !element.classList.contains("pt-6") ||
@@ -610,17 +615,17 @@
       currentSettings = settings; currentUrl = url;
       authorControls.update(settings, url);
       syncSearchClear(settings.enabled);
-      syncHeaderSettings(settings.enabled && settings.noteLogoBrowserBack);
-      syncLogoCursor(settings.enabled && settings.noteLogoBrowserBack);
+      syncHeaderSettings(settings.enabled && (core.modeOf(settings) === "social" || settings.noteLogoBrowserBack));
+      syncLogoCursor(core.usesLogoBack(settings));
       const page = core.pageKind(url);
       syncArticleFollowing(settings, url);
       syncSideProfileFollow(settings, url);
-      syncProducts(settings.enabled && !settings.legacyMode && page?.type === "tag");
+      syncProducts(settings.enabled && core.usesFollowing(settings) && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncNotesPromotions(settings, url);
       syncTips(settings, url);
       syncPaidCards(settings, url);
-      if (!settings.enabled || settings.legacyMode || !page) { removeMobile(); restore(); return; }
+      if (!settings.enabled || !page || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
       const officialAside = common && [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky"));
       const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);

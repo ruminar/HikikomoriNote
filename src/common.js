@@ -4,7 +4,7 @@
   const settingsKey = "hikikomoriNote.settings.v2";
   const groupIds = ["group1", "group2", "group3", "group4"];
   function defaultSettings() {
-    return { enabled: true, noteUserId: "", dashboardDisabled: false, legacyMode: false,
+    return { enabled: true, noteUserId: "", dashboardDisabled: false, mode: "normal",
       hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, tagSchemaVersion: 2,
       tagGroups: groupIds.map(id => ({ id, name: "", tags: [] })), selectedTagGroupId: "group1",
       groupSelectionRevision: 0, tagGroupsRevision: 0, authorDisplayRules: [], authorDisplayRevision: 0 };
@@ -71,14 +71,18 @@
   }
   function shouldRedirect(url, settings) {
     return settings?.enabled === true &&
-      (isHome(url) || (settings.dashboardDisabled === true && isDashboard(url)));
+      ((modeOf(settings) !== "social" && isHome(url)) || (settings.dashboardDisabled === true && isDashboard(url)));
   }
+  function modeOf(settings) { return ["normal", "severe", "social"].includes(settings?.mode) ? settings.mode : "normal"; }
+  function usesTags(settings) { return modeOf(settings) === "normal"; }
+  function usesFollowing(settings) { return modeOf(settings) !== "severe"; }
+  function usesLogoBack(settings) { return settings?.enabled === true && modeOf(settings) !== "social" && settings.noteLogoBrowserBack === true; }
   function readSettings(value = defaultSettings()) {
     let noteUserId = "";
     try { noteUserId = normalizeUserId(value?.noteUserId); } catch { /* 破損値は空欄へ */ }
     const groups = inspectGroups(value);
     return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
-      legacyMode: value?.legacyMode === true, hideArticleRecommendations: value?.hideArticleRecommendations === true, hidePaidArticles: value?.hidePaidArticles === true,
+      mode: modeOf(value), hideArticleRecommendations: value?.hideArticleRecommendations === true, hidePaidArticles: value?.hidePaidArticles === true,
       noteLogoBrowserBack: value?.noteLogoBrowserBack === true, ...groups, ...inspectAuthors(value) };
   }
   function normalizeTag(value) {
@@ -185,11 +189,10 @@
     const flags = version === 3 ? transferFlags.filter(key => key !== "legacyMode") : transferFlags;
     if (!exactKeys(value, [...flags, "noteUserId", "tagGroups", "selectedTagGroupId", ...(version >= 2 ? ["authorDisplayRules"] : []), ...(version === 3 ? ["mode"] : [])])) throw new Error("設定の項目に不足または未対応の項目があります。");
     for (const key of flags) if (typeof value[key] !== "boolean") throw new Error(`${key}はtrueまたはfalseを指定してください。`);
-    let legacyMode = value.legacyMode;
+    let mode = value.legacyMode === true ? "severe" : "normal";
     if (version === 3) {
       if (!["normal", "severe", "social"].includes(value.mode)) throw new Error("modeはnormal・severe・socialのいずれかを指定してください。");
-      if (value.mode === "social") throw new Error("社会復帰モードはこのバージョンでは未対応です。対応版へ更新してから読み込んでください。設定は変更していません。");
-      legacyMode = value.mode === "severe";
+      mode = value.mode;
     }
     if (typeof value.noteUserId !== "string" || normalizeUserId(value.noteUserId) !== value.noteUserId) throw new Error("ユーザー名の保存値が正しくありません。");
     if (!Array.isArray(value.tagGroups) || value.tagGroups.length !== 4 || !groupIds.includes(value.selectedTagGroupId)) throw new Error("4グループと選択グループを確認してください。");
@@ -200,17 +203,15 @@
       }
       return { id: group.id, name: group.name, tags: [...group.tags] };
     });
-    return { ...Object.fromEntries(transferFlags.map(key => [key, key === "legacyMode" ? legacyMode : value[key]])), noteUserId: value.noteUserId,
+    return { ...Object.fromEntries(transferFlags.filter(key => key !== "legacyMode").map(key => [key, value[key]])), mode, noteUserId: value.noteUserId,
       tagGroups: groups, selectedTagGroupId: value.selectedTagGroupId, authorDisplayRules: version >= 2 ? validateAuthors(value.authorDisplayRules) : [] };
   }
   function transferSettings(settings) {
     if (settings.tagWarning || settings.groupSelectionInvalid || settings.authorWarning) throw new Error("保存データに異常があります。状態を再確認してください。");
-    return validateTransferSettings(Object.fromEntries([...transferFlags, "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]])));
+    return validateTransferSettings(Object.fromEntries([...transferFlags.filter(key => key !== "legacyMode"), "mode", "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "mode" ? modeOf(settings) : key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]])), 3);
   }
   function exportSettings(settings) {
-    // 外部JSONだけを将来の3モード形式にする。現行の保存値・動作はlegacyModeのまま。
-    const { legacyMode, ...value } = transferSettings(settings);
-    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 3, settings: { ...value, mode: legacyMode ? "severe" : "normal" } }, null, 2);
+    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 3, settings: transferSettings(settings) }, null, 2);
     if (json.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     return json;
   }
@@ -227,6 +228,7 @@
     return JSON.stringify([transferSettings(settings), settings.groupSelectionRevision, settings.tagGroupsRevision, settings.authorDisplayRevision ?? 0]);
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
+    modeOf, usesTags, usesFollowing, usesLogoBack,
     exportSettings, parseSettingsExport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
     normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

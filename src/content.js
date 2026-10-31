@@ -94,7 +94,7 @@
     return settings?.enabled === true;
   }
   function homeDestination() {
-    return platform.homeUrl() + (core.pageKind(location.href)?.type === "profile" ? "#authors" : "");
+    return platform.homeUrl() + (core.pageKind(location.href)?.type === "profile" ? "#authors" : core.modeOf(settings) === "social" ? "#settings" : "");
   }
   function checkHome() {
     if (enabled() && core.shouldRedirect(location.href, settings)) location.replace(platform.homeUrl());
@@ -116,14 +116,14 @@
         event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const anchor = event.composedPath().find(node => node?.tagName === "A");
     if (!anchor || anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) return;
-    if (settings.noteLogoBrowserBack && event.isTrusted === true && event.cancelable === true && core.isHome(anchor.href) &&
+    if (core.usesLogoBack(settings) && event.isTrusted === true && event.cancelable === true && core.isHome(anchor.href) &&
         globalThis.HikikomoriNoteUi?.isOfficialHeaderLogo(anchor, location.href)) {
       event.preventDefault(); event.stopImmediatePropagation();
       void logoBack();
       return;
     }
     // クリック時の委譲処理なので、SPAで後から追加された公式タブにも対応する。
-    const articleTabUrl = !settings.legacyMode && anchor.getAttribute?.("data-id") === "NavigationItem" &&
+    const articleTabUrl = core.usesFollowing(settings) && anchor.getAttribute?.("data-id") === "NavigationItem" &&
       anchor.textContent?.trim() === "記事" ? core.articleSearchTabUrl(location.href, anchor.href) : null;
     if (articleTabUrl) {
       event.preventDefault(); event.stopImmediatePropagation(); location.assign(articleTabUrl); return;

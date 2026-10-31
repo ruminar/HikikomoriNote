@@ -2,10 +2,10 @@
 (() => {
   "use strict";
   const core = globalThis.HikikomoriNote;
-  function rules(enabled, dashboardDisabled = false) {
+  function rules(enabled, dashboardDisabled = false, mode = "normal") {
     if (!enabled) return [];
     const regexFilter = "^https://note\\.com/([?#].*)?$";
-    const result = [
+    const result = mode === "social" ? [] : [
       { id: 1, priority: 1, action: { type: "redirect", redirect: { extensionPath: "/home.html" } },
         condition: { regexFilter, resourceTypes: ["main_frame"] } },
       { id: 2, priority: 1, action: { type: "block" },
@@ -34,7 +34,9 @@
       const { tagWarning, groupSelectionInvalid, authorWarning, ...clean } = settings;
       // タグ関連の保存値は通常設定保存では一切正規化・上書きしない。
       for (const key of ["tagSchemaVersion", "tagGroups", "selectedTagGroupId", "groupSelectionRevision", "tagGroupsRevision", "authorDisplayRules", "authorDisplayRevision"]) delete clean[key];
-      return { ...(raw === undefined ? core.defaultSettings() : raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}), ...clean };
+      const result = { ...(raw === undefined ? core.defaultSettings() : raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}), ...clean };
+      delete result.legacyMode;
+      return result;
     }
     function increment(value) {
       if (!Number.isSafeInteger(value) || value >= Number.MAX_SAFE_INTEGER) throw failure("更新番号が不正か上限です。編集を停止しました。", "INVALID_TAGS");
@@ -43,12 +45,12 @@
     return Object.freeze({
       getState: () => run(async () => {
         const settings = core.readSettings(await port.load());
-        await port.setRules(rules(settings.enabled, settings.dashboardDisabled));
+        await port.setRules(rules(settings.enabled, settings.dashboardDisabled, core.modeOf(settings)));
         return settings;
       }),
       save: patch => run(async () => {
         if (!patch || typeof patch !== "object" || Array.isArray(patch) ||
-            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "legacyMode", "hideArticleRecommendations", "hidePaidArticles", "noteLogoBrowserBack"].includes(key))) {
+            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "mode", "hideArticleRecommendations", "hidePaidArticles", "noteLogoBrowserBack"].includes(key))) {
           throw new Error("設定の形式が正しくありません。");
         }
         if (Object.hasOwn(patch, "enabled") && typeof patch.enabled !== "boolean") {
@@ -59,16 +61,16 @@
         if (Object.hasOwn(patch, "dashboardDisabled") && typeof patch.dashboardDisabled !== "boolean") {
           throw new Error("ダッシュボード設定の値が正しくありません。");
         }
-        if (Object.hasOwn(patch, "legacyMode") && typeof patch.legacyMode !== "boolean") throw new Error("モード設定の値が正しくありません。");
+        if (Object.hasOwn(patch, "mode") && !["normal", "severe", "social"].includes(patch.mode)) throw new Error("モード設定の値が正しくありません。");
         if (Object.hasOwn(patch, "hidePaidArticles") && typeof patch.hidePaidArticles !== "boolean") throw new Error("有料記事表示設定の値が正しくありません。");
         if (Object.hasOwn(patch, "hideArticleRecommendations") && typeof patch.hideArticleRecommendations !== "boolean") throw new Error("おすすめ表示設定の値が正しくありません。");
         if (Object.hasOwn(patch, "noteLogoBrowserBack") && typeof patch.noteLogoBrowserBack !== "boolean") throw new Error("ロゴのブラウザバック設定の値が正しくありません。");
         const next = { ...previous, ...patch };
         next.noteUserId = core.normalizeUserId(next.noteUserId);
-        await port.setRules(rules(next.enabled, next.dashboardDisabled));
+        await port.setRules(rules(next.enabled, next.dashboardDisabled, core.modeOf(next)));
         try { await port.store(storedValue(raw, next)); }
         catch (error) {
-          try { await port.setRules(rules(previous.enabled, previous.dashboardDisabled)); }
+          try { await port.setRules(rules(previous.enabled, previous.dashboardDisabled, core.modeOf(previous))); }
           catch { throw new Error("保存と転送設定の復旧に失敗しました。拡張を無効化して再読み込みしてください。"); }
           throw error;
         }
@@ -81,10 +83,10 @@
         if (core.settingsToken(previous) !== patch.expectedToken) throw failure("別の画面で設定が変更されました。状態を再確認し、もう一度読み込んでください。", "CONFLICT");
         const next = { ...imported, tagSchemaVersion: 2,
           groupSelectionRevision: increment(previous.groupSelectionRevision), tagGroupsRevision: increment(previous.tagGroupsRevision), authorDisplayRevision: increment(previous.authorDisplayRevision) };
-        await port.setRules(rules(next.enabled, next.dashboardDisabled));
+        await port.setRules(rules(next.enabled, next.dashboardDisabled, core.modeOf(next)));
         try { await port.store(next); }
         catch (error) {
-          try { await port.setRules(rules(previous.enabled, previous.dashboardDisabled)); }
+          try { await port.setRules(rules(previous.enabled, previous.dashboardDisabled, core.modeOf(previous))); }
           catch { throw failure("保存と転送設定の復旧に失敗しました。状態を再確認してください。", "UNCONFIRMED"); }
           throw error;
         }
@@ -107,7 +109,7 @@
         const rules = settings.authorDisplayRules.filter(rule => rule.userId.toLowerCase() !== userId.toLowerCase());
         if (operation.action !== null) rules.push({ userId: options.requireExisting ? previous.userId : userId,
           displayName: options.requireExisting ? previous.displayName : displayName || previous?.displayName || "", action: operation.action });
-        const next = { ...raw, authorDisplayRules: rules, authorDisplayRevision: increment(settings.authorDisplayRevision) };
+        const next = { ...storedValue(raw, settings), authorDisplayRules: rules, authorDisplayRevision: increment(settings.authorDisplayRevision) };
         if (JSON.stringify(next).length > 1048576) throw new Error("設定データが大きすぎます。登録を整理してください。");
         await port.store(next);
         return core.readSettings(next);
@@ -121,14 +123,14 @@
         const loaded = await port.load(), raw = loaded === undefined ? core.defaultSettings() : loaded;
         const settings = core.readSettings(raw);
         if (options.requireEnabled && !settings.enabled) throw failure("拡張OFFではタグを追加できません。", "DISABLED");
-        if (settings.legacyMode) throw failure("重度ひきこもりモードではタグを編集できません。状態を再確認してください。", "LEGACY_MODE");
+        if (!core.usesTags(settings)) throw failure("現在のモードではタグを編集できません。状態を再確認してください。", "MODE_RESTRICTED");
         if (settings.tagWarning) throw failure(settings.tagWarning, "INVALID_TAGS");
         if (settings.groupSelectionInvalid && operation.type !== "SELECT_TAG_GROUP") throw failure("グループを選び直してください。", "CONFLICT");
         if (options.selectionRevision !== undefined && (settings.groupSelectionRevision !== options.selectionRevision || settings.selectedTagGroupId !== operation.groupId)) throw failure("選択グループが変わりました。状態を再確認してください。", "CONFLICT");
         const groups = settings.tagGroups.map(group => ({ ...group, tags: [...group.tags] }));
         const group = groups.find(item => item.id === operation.groupId);
         async function storeGroups(patch = {}) {
-          const next = { ...raw, tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision), ...patch };
+          const next = { ...storedValue(raw, settings), tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision), ...patch };
           await port.store(next); return core.readSettings(next);
         }
         if (operation.type === "SELECT_TAG_GROUP") {

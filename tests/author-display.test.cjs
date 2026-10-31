@@ -42,7 +42,7 @@ test('作者データは表示名を保持し、日本語表示名順・IDの補
  const old={...f.state};delete old.authorDisplayRules;delete old.authorDisplayRevision;assert.deepEqual(plain(f.core.readSettings(old).authorDisplayRules),[]);
 });
 test('作者の追加・許可への変更・解除は1回ずつ保存し、無料設定・OFF・重度でも管理できる',async()=>{
- const f=backend({enabled:false,legacyMode:true,hidePaidArticles:false});await f.controller.author(operation(f));
+ const f=backend({enabled:false,mode:'severe',hidePaidArticles:false});await f.controller.author(operation(f));
  assert.equal(f.writes,1);assert.equal(f.state.authorDisplayRules[0].displayName,'YeKu@「知る」を優しさに。');
  await f.controller.author(operation(f,'yeku','allow','新しい名前'));assert.equal(f.state.authorDisplayRules[0].action,'allow');assert.equal(f.state.authorDisplayRules[0].displayName,'新しい名前');
  await f.controller.author(operation(f,'yeku',null));assert.deepEqual(f.state.authorDisplayRules,[]);assert.equal(f.state.enabled,false);assert.equal(f.state.authorDisplayRevision,3);
@@ -72,37 +72,37 @@ test('設定形式3は作者名・状態を往復し、形式1は確認用の空
  const token=f.core.settingsToken(f.core.readSettings(f.state));await f.controller.importSettings({json:JSON.stringify(old),expectedToken:token});assert.deepEqual(f.state.authorDisplayRules,[]);assert.equal(f.state.authorDisplayRevision,2);
  const bad=JSON.parse(json);bad.settings.authorDisplayRules[0].displayName='x\ny';assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(bad)));
 });
-test('形式3はlegacyModeを出さずmodeで通常・重度を往復し、内部保存と転送動作を変えない',async()=>{
- for(const legacyMode of [false,true]){
-   const f=backend({legacyMode,enabled:false,hidePaidArticles:true,authorDisplayRules:[{userId:'yeku',displayName:'作者名',action:'allow'}]});
+test('形式3は3モードを内部保存・書き出しで往復し作者名を保持',async()=>{
+ for(const mode of ['normal','severe','social']){
+   const f=backend({mode,enabled:false,authorDisplayRules:[{userId:'yeku',displayName:'作者名',action:'allow'}]});
    const json=f.core.exportSettings(f.core.readSettings(f.state)),doc=JSON.parse(json);
-   assert.equal(doc.schemaVersion,3);assert.equal(doc.settings.mode,legacyMode?'severe':'normal');assert.equal(Object.hasOwn(doc.settings,'legacyMode'),false);
-   const parsed=f.core.parseSettingsExport(json);assert.equal(parsed.legacyMode,legacyMode);assert.equal(Object.hasOwn(parsed,'mode'),false);
-   const expectedToken=f.core.settingsToken(f.core.readSettings(f.state));await f.controller.importSettings({json,expectedToken});
-   assert.equal(f.state.legacyMode,legacyMode);assert.equal(Object.hasOwn(f.state,'mode'),false);assert.equal(f.state.authorDisplayRules[0].displayName,'作者名');assert.equal(f.state.enabled,false);
+   assert.equal(doc.schemaVersion,3);assert.equal(doc.settings.mode,mode);assert.equal(Object.hasOwn(doc.settings,'legacyMode'),false);
+   assert.equal(f.core.parseSettingsExport(json).mode,mode);
+   await f.controller.importSettings({json,expectedToken:f.core.settingsToken(f.core.readSettings(f.state))});
+   assert.equal(f.state.mode,mode);assert.equal(Object.hasOwn(f.state,'legacyMode'),false);assert.equal(f.state.authorDisplayRules[0].displayName,'作者名');assert.equal(f.state.enabled,false);
  }
 });
-test('未実装のsocial・未知mode・旧フラグ混在は読み込み前に拒否し、保存済み設定を変更しない',async()=>{
+test('未知mode・旧フラグ混在は読み込み前に拒否し、保存済み設定を変更しない',async()=>{
  const f=backend(),base=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state))),before=plain(f.state),expectedToken=f.core.settingsToken(f.core.readSettings(f.state));
- for(const mode of ['social','unknown','NORMAL',false,null,{},undefined]){
+ for(const mode of ['unknown','NORMAL',false,null,{},undefined]){
    const doc=plain(base);doc.settings.mode=mode;const json=JSON.stringify(doc);
-   if(mode==='social')assert.throws(()=>f.core.parseSettingsExport(json),/社会復帰モード.*未対応/);else assert.throws(()=>f.core.parseSettingsExport(json));
-   await assert.rejects(f.controller.importSettings({json,expectedToken}));assert.deepEqual(f.state,before);assert.equal(f.writes,0);
+   assert.throws(()=>f.core.parseSettingsExport(json));await assert.rejects(f.controller.importSettings({json,expectedToken}));assert.deepEqual(f.state,before);assert.equal(f.writes,0);
  }
  const mixed=plain(base);mixed.settings.legacyMode=false;assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(mixed)));
 });
-test('既存の形式2はlegacyModeと作者リストを維持して読み込み、次の書き出しは形式3になる',async()=>{
+test('既存の形式2は明示的なインポートでsevereへ変換し、書き出しは形式3',async()=>{
  const f=backend(),doc=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));doc.schemaVersion=2;doc.settings.legacyMode=true;delete doc.settings.mode;
  doc.settings.authorDisplayRules=[{userId:'yeku',displayName:'YeKu',action:'hide'}];
- const json=JSON.stringify(doc);assert.equal(f.core.parseSettingsExport(json).legacyMode,true);
+ const json=JSON.stringify(doc);assert.equal(f.core.parseSettingsExport(json).mode,'severe');
  await f.controller.importSettings({json,expectedToken:f.core.settingsToken(f.core.readSettings(f.state))});
  const out=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));assert.equal(out.schemaVersion,3);assert.equal(out.settings.mode,'severe');assert.deepEqual(out.settings.authorDisplayRules,doc.settings.authorDisplayRules);
 });
-test('移行画面は未実装の社会復帰モードを明示し、読込ボタンを無効にしてJSONを保持する',async()=>{
+test('移行画面は社会復帰モードのJSONを読み込み、タグを保持して設定画面を利用可能',async()=>{
  const f=homeFixture();await flush();const core=f.c.HikikomoriNote,doc=JSON.parse(core.exportSettings(core.readSettings(f.state)));doc.settings.mode='social';
  const json=JSON.stringify(doc);f.nodes.get('settings-json').value=json;f.nodes.get('settings-json').oninput();
- assert.equal(f.nodes.get('import-settings').disabled,true);assert.match(f.nodes.get('transfer-validation').textContent,/社会復帰モード.*未対応/);assert.equal(f.nodes.get('settings-json').value,json);assert.equal(f.state.legacyMode,false);
+ assert.equal(f.nodes.get('import-settings').disabled,false);f.nodes.get('import-settings').onclick();await flush();assert.equal(f.state.mode,'social');assert.equal(f.nodes.get('nav-tags').hidden,true);assert.equal(f.nodes.get('settings-json').value,json);
 });
+
 test('作者の無料カードも非表示にし、有料フィルターとは独立して解除・購入済み例外・停止復元',()=>{
  const rule={userId:'yeku',displayName:'名前',action:'hide'},f=ui('<main>'+card+'</main>',{authorDisplayRules:[rule]});
  const c=f.doc.querySelector('main').children[0];f.update('https://note.com/tag/AI');assert.equal(c.hasAttribute('data-hikikomori-note-author-hidden'),true);
@@ -149,7 +149,7 @@ test('プロフィールの再確認は通常隠し、保存失敗・競合で�
  }
 });
 test('プロフィール管理は重度・拡張OFF・有料非表示OFFでも利用でき、自分には出さない',async()=>{
- for(const patch of [{legacyMode:true,enabled:false},{hidePaidArticles:false}]){let op;const f=ui(profile,patch,{async setAuthor(v){op=v;}});f.doc.getElementById('profile-name').textContent='作者名';f.update('https://note.com/yeku');const select=f.doc.querySelector('select');assert.ok(select);select.value='allow';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.equal(op.userId,'yeku');assert.equal(op.displayName,'作者名');assert.equal(op.action,'allow');}
+ for(const patch of [{mode:'severe',enabled:false},{hidePaidArticles:false}]){let op;const f=ui(profile,patch,{async setAuthor(v){op=v;}});f.doc.getElementById('profile-name').textContent='作者名';f.update('https://note.com/yeku');const select=f.doc.querySelector('select');assert.ok(select);select.value='allow';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.equal(op.userId,'yeku');assert.equal(op.displayName,'作者名');assert.equal(op.action,'allow');}
  const f=ui(profile,{noteUserId:'YeKu'});f.update('https://note.com/yeku');assert.equal(f.doc.querySelector('select'),null);
 });
 test('プロフィールの非表示から未設定への保存はDOM参照を送信せず実際の背景処理まで完了する',async()=>{
@@ -200,7 +200,7 @@ test('管理画面では通常の説明を省き、自己ID未設定・破損時
  f.changed({noteUserId:'me',authorDisplayRules:[{userId:'bad',displayName:'',action:'bad'}],authorDisplayRevision:0});assert.equal(f.nodes.get('authors-state').hidden,false);assert.match(f.nodes.get('authors-state').textContent,/異常/);
 });
 test('専用ホームは辞書順の既存ユーザーの状態変更・解除だけができ、新規登録欄がない',async()=>{
- const f=homeFixture({hash:'#authors',state:{enabled:false,legacyMode:true,authorDisplayRevision:0,authorDisplayRules:[{userId:'z',displayName:'か',action:'hide'},{userId:'b',displayName:'あ',action:'hide'}]}});await flush();const n=f.nodes;
+ const f=homeFixture({hash:'#authors',state:{enabled:false,mode:'severe',authorDisplayRevision:0,authorDisplayRules:[{userId:'z',displayName:'か',action:'hide'},{userId:'b',displayName:'あ',action:'hide'}]}});await flush();const n=f.nodes;
  assert.equal(n.get('panel-authors').hidden,false);assert.equal(n.get('author-form'),undefined);assert.equal(n.get('author-user'),undefined);assert.match(n.get('authors-hidden').children[0].textContent,/あ（b）/);
  n.get('authors-hidden').children[0].querySelector('button').onclick();await flush();assert.equal(f.state.authorDisplayRules.find(x=>x.userId==='b').action,'allow');assert.equal(f.state.enabled,false);
  n.get('authors-allowed').children[0].querySelectorAll('button')[1].onclick();await flush();assert.equal(f.state.authorDisplayRules.some(x=>x.userId==='b'),false);

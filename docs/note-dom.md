@@ -143,3 +143,12 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 利用者提供の/notesのHTMLを参照。外側flex flex-col gap-4の直下に、hidden md:blockの画像バナーと、flex flex-col gap-4の提案グループがある。バナーはflex-nowrap/overflow-x-auto/md:flex-wrapの中のrelative flex w-60 min-w-60 items-stretch md:w-full。imgのaltとnote.comへのabsolute inset-0リンクのaria-label/titleを確認する。提案はスマホ用border-border-default border-b bg-background-primary md:hidden内のdetails/summaryと、PC用section.hidden.rounded-lg.bg-surface-normal.p-6.md:blockに分かれ、「あなたへの提案」見出しとhttps://note.com/monetization-guideへのリンクがある。
 
 おすすめ非表示ONの/notesだけで親にdata-hikikomori-note-notes-promotionsを付け、確認済み子孫をCSSで非表示。画像はカレンダー等にも入れ替わるため、画像ファイル名・広告文言を固定しない。提供HTMLに基づく確認であり、確認用ブラウザでは未ログインのため実表示は未検証。
+
+
+## 0.2.4のモード条件（既存DOMを再利用）
+
+独自共通メニューとSSR親への先行クラスはmode=normalに限る。設定未取得時は公式領域を隠さず、storage読込後に既存の親クラス方式を適用する。social/severeへの変更では親クラス・直下の非表示印・狭幅UIを撤去する。
+
+プロフィールへのTL追加はnormal/socialで有効だが公式情報は隠さない。記事／プレビューの固定作者は全モード、TLはnormal/socialのみ。重度の作者単独ボタンはtop72px、公式固定プロフィールはtop124pxへ移し、両ボタン時は従来のtop184pxとする。未検出・狭幅・OFF時は位置調整も戻す。
+
+socialの公式ロゴは操作を奪わず、確認済みヘッダーに歯車だけ常時追加する。記事・非表示枠・検索・管理画面のDOM識別条件は従来どおり。新たなDOM探索対象や監視は追加しない。0.2.4の実ブラウザ受け入れ確認は未実施。

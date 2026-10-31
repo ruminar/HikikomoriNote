@@ -77,7 +77,7 @@ test("ダッシュボード設定を保存・復元し、全体OFF/ONと別タ�
   const f = controllerFixture({ enabled: true, noteUserId: "ruminar" });
   await f.controller.save({ dashboardDisabled: true }); assert.equal(f.rules.length, 4);
   await Promise.all([f.controller.save({ noteUserId: "other_user" }), f.controller.save({ enabled: false })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, ...settingsData.groups() });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "other_user", dashboardDisabled: true, mode:'normal', hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, ...settingsData.groups() });
   assert.equal(f.rules.length, 0);
   const restart = controllerFixture(f.value); await restart.controller.getState(); assert.equal(restart.rules.length, 0);
   await restart.controller.save({ enabled: true }); assert.equal(restart.rules.length, 4);
@@ -101,7 +101,7 @@ test("DNR：ホームの文書だけ専用ページへ転送、事前取得も�
 });
 test("保存したユーザー名・OFFを再起動後も適用", async () => {
   const f = controllerFixture({ enabled: false, noteUserId: "ruminar" });
-  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0, authorDisplayRules:[], authorDisplayRevision:0 });
+  assert.deepEqual(plain(await f.controller.getState()), { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, mode:'normal', hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, tagSchemaVersion: 2, tagGroups: [1,2,3,4].map(number=>({id:`group${number}`,name:"",tags:[]})), selectedTagGroupId:"group1", groupSelectionRevision:0, tagGroupsRevision:0, authorDisplayRules:[], authorDisplayRevision:0 });
   assert.deepEqual(f.rules, []);
   await f.controller.save({ enabled: true });
   const restart = controllerFixture(f.value); await restart.controller.getState();
@@ -116,7 +116,7 @@ test("OFFはルール解除・保存の順に完了してから成功を返す",
 test("複数タブから同時保存してもON/OFFとユーザー名を上書きし合わない", async () => {
   const f = controllerFixture();
   await Promise.all([f.controller.save({ enabled: false }), f.controller.save({ noteUserId: "ruminar" })]);
-  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, legacyMode: false, hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, ...settingsData.groups(), authorDisplayRules: [], authorDisplayRevision: 0 });
+  assert.deepEqual(f.value, { enabled: false, noteUserId: "ruminar", dashboardDisabled: false, mode:'normal', hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, ...settingsData.groups(), authorDisplayRules: [], authorDisplayRevision: 0 });
   assert.deepEqual(f.rules, []);
 });
 test("転送更新失敗時は設定を保存せず、次の操作は再試行できる", async () => {
@@ -234,7 +234,7 @@ test("後から出る記事タブの通常クリックを新着へ。並び順�
   for (const patch of [{ target: "_blank" }, { textContent: "人気" }, { getAttribute: () => null }, { hasAttribute: () => true }]) assert.equal(click({}, { ...anchor, ...patch }).defaultPrevented, false);
   f.location.href = "https://note.com/search?q=%23AI&context=note&sort=new";assert.equal(click().defaultPrevented, false);
   f.location.href = "https://note.com/search?q=%23AI&context=user";
-  for (const settings of [{ enabled: false }, { enabled: true, legacyMode: true }]) { f.changed(settings); assert.equal(click().defaultPrevented, false); }
+  for (const settings of [{ enabled: false }, { enabled: true, mode:'severe' }]) { f.changed(settings); assert.equal(click().defaultPrevented, false); }
   assert.equal(f.moves.length, 1);
 });
 test("OFF・記事リンク・修飾クリック・別タブ・ダウンロードには介入しない", async () => {
@@ -250,7 +250,7 @@ test("OFF・記事リンク・修飾クリック・別タブ・ダウンロー�
 });
 
 test("ロゴの通常クリックはイベント停止後にブラウザバック。重度でも適用しOFFで停止",async()=>{
- let event,calls=0;const f=contentFixture({noteLogoBrowserBack:true,legacyMode:true},{logoDetector:()=>true,back(){calls++;assert.equal(event.defaultPrevented,true);assert.equal(event.stopped,true);}});await flush();
+ let event,calls=0;const f=contentFixture({noteLogoBrowserBack:true,mode:'severe'},{logoDetector:()=>true,back(){calls++;assert.equal(event.defaultPrevented,true);assert.equal(event.stopped,true);}});await flush();
  event={button:0,isTrusted:true,cancelable:true,defaultPrevented:false,composedPath:()=>[{tagName:'A',href:'https://note.com/',hasAttribute:()=>false}],preventDefault(){this.defaultPrevented=true;},stopImmediatePropagation(){this.stopped=true;}};
  f.documentEvents.get('click')(event);assert.equal(calls,1);assert.deepEqual(f.moves,[['back']]);
  f.changed({enabled:false,noteLogoBrowserBack:true});assert.equal(f.click(undefined,{isTrusted:true,cancelable:true}).defaultPrevented,false);assert.equal(calls,1);
@@ -316,7 +316,7 @@ test("ダッシュボード導線は後から出るメニューも隠し、設�
   dashboard.href = "https://note.com/settings/account"; f.mutate(); await flush(); assert.equal(dashboard.hasAttribute(marker), false);
   submenu.href = ""; f.mutate(); await flush(); assert.equal(submenu.hasAttribute(marker), false);
   submenu.href = "https://note.com/dashboard/suggestions"; f.mutate(); await flush(); assert.equal(submenu.hasAttribute(marker), true);
-  f.changed({ enabled: true, dashboardDisabled: false, legacyMode: false }); assert.equal(submenu.hasAttribute(marker), false);
+  f.changed({ enabled: true, dashboardDisabled: false, mode:'normal' }); assert.equal(submenu.hasAttribute(marker), false);
   assert.equal(f.click(submenu.href).defaultPrevented, false);
   f.changed({ enabled: true, dashboardDisabled: true }); assert.equal(submenu.hasAttribute(marker), true);
   f.changed({ enabled: false, dashboardDisabled: true }); assert.equal(submenu.hasAttribute(marker), false);
@@ -432,7 +432,7 @@ test("アダプターは自拡張のhome.htmlだけを設定メッセージ送�
 });
 test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホーム全体を隠さない", () => {
   const m = JSON.parse(source("manifest.json"));
-  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.3");
+  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.4");
   assert.deepEqual(m.permissions, ["storage", "declarativeNetRequestWithHostAccess"]);
   assert.deepEqual(m.host_permissions, ["https://note.com/*"]);
   assert.deepEqual(m.web_accessible_resources, [{ resources: ["home.html"], matches: ["https://note.com/*"] }]);
@@ -451,4 +451,24 @@ test('プロフィールの専用ホーム導線は作者管理へ直行し、�
  let actions;const f=contentFixture({}, {ui:{create(doc,win,a){actions=a;return {update(){}};}}});await flush();
  assert.equal(actions.settingsUrl(),f.home+'#authors');
  for(const url of ['https://note.com/yeku/n/n123','https://note.com/search?q=AI']){f.location.href=url;assert.equal(actions.settingsUrl(),f.home);f.click();assert.equal(f.moves.at(-1)[1],f.home);}
+});
+
+test('社会復帰ではホームのロード・クリック・SPAを奪わず、ダッシュボード制限だけ継続',async()=>{
+ const f=contentFixture({mode:'social',noteLogoBrowserBack:true,dashboardDisabled:true},{url:'https://note.com/',logoDetector:()=>true,back(){throw Error('must not back');}});await flush();
+ assert.deepEqual(f.moves,[]);assert.equal(f.click(undefined,{isTrusted:true,cancelable:true}).defaultPrevented,false);
+ const event={cancelable:true,destination:{url:'https://note.com/'},preventDefault(){this.prevented=true;}};f.navigationEvents.get('navigate')(event);assert.equal(event.prevented,undefined);assert.deepEqual(f.moves,[]);
+ assert.equal(f.click('https://note.com/dashboard').defaultPrevented,true);assert.deepEqual(f.moves,[['assign',f.home+'#settings']]);
+ f.changed({enabled:true,mode:'normal',dashboardDisabled:true});assert.deepEqual(f.moves.at(-1),['replace',f.home]);
+});
+test('社会復帰の歯車は設定へ、プロフィールでは既存の作者管理へ向かう',async()=>{
+ for(const [url,suffix] of [['https://note.com/search','#settings'],['https://note.com/yeku','#authors']]){
+  let actions;const f=contentFixture({mode:'social'},{url,ui:{create:(doc,win,value)=>{actions=value;return {update(){}};}}});await flush();assert.equal(actions.settingsUrl(),f.home+suffix);
+ }
+});
+
+test('社会復帰でも検索の記事タブへの新着復帰を行い、タグリンク自体は書き換えない',async()=>{
+ const f=contentFixture({mode:'social'},{url:'https://note.com/search?q=%23AI&context=user'});await flush();
+ const anchor={tagName:'A',href:'https://note.com/search?q=%23AI&context=note',textContent:'記事',hasAttribute:()=>false,getAttribute:()=> 'NavigationItem'};
+ assert.equal(f.click(undefined,{composedPath:()=>[anchor]}).defaultPrevented,true);assert.equal(new URL(f.moves[0][1]).searchParams.get('sort'),'new');assert.equal(anchor.href,'https://note.com/search?q=%23AI&context=note');
+ assert.equal(f.click('https://note.com/tag/AI').defaultPrevented,false);
 });
