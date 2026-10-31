@@ -706,7 +706,7 @@
       if (main) {
         const groups = new Set();
         const planGroups = new Map();
-        const profileListing = [`/${page.user}`, `/${page.user}/all`, `/${page.user}/magazines`, `/${page.user}/likes`].includes(new URL(url).pathname.replace(/\/$/, ""));
+        const profileListing = [`/${page.user}`, `/${page.user}/all`, `/${page.user}/magazines`, `/${page.user}/likes`, `/${page.user}/archives`].includes(new URL(url).pathname.replace(/\/$/, ""));
         function promotionalGroup(wrapper) {
           const group = wrapper?.parentElement;
           if (group?.tagName !== "DIV") return null;

@@ -1401,10 +1401,10 @@ test('参加先の作者・見出し・月額・ボタン・一覧構造を確�
  }
 });
 
-test('作者の/all・/magazines・/likesでも参加プラン制御を適用し、許可・解除・membership直接表示との境界を維持',()=>{
+test('作者の/all・/magazines・/likes・/archivesで参加プラン制御と許可・解除・直接表示の境界を維持',()=>{
  for(const mode of ['normal','social','severe']){
   const f=membershipPlansFixture(),card=f.plan(),settings=f.core.readSettings({...groups(),mode,noteUserId:'me',hidePaidArticles:true});f.list.append(card);
-  for(const url of ['https://note.com/creator/all','https://note.com/creator/all/?page=2#top','https://note.com/creator/magazines','https://note.com/creator/magazines/?page=2#top','https://note.com/creator/likes','https://note.com/creator/likes/?page=2#top']){
+  for(const url of ['https://note.com/creator/all','https://note.com/creator/all/?page=2#top','https://note.com/creator/magazines','https://note.com/creator/magazines/?page=2#top','https://note.com/creator/likes','https://note.com/creator/likes/?page=2#top','https://note.com/creator/archives','https://note.com/creator/archives/?page=2#top']){
    f.ui.update(settings,url);assert.equal(f.list.hasAttribute(promotionMarker),true);assert.equal(card.hasAttribute(promotionMarker),true);assert.equal(f.intro.hasAttribute(promotionMarker),false);
    f.ui.update({...settings,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]},url);assert.equal(f.list.hasAttribute(promotionMarker),false);assert.equal(card.hasAttribute(promotionMarker),false);
    f.ui.update({...settings,hidePaidArticles:false},url);assert.equal(f.list.hasAttribute(promotionMarker),false);
