@@ -215,7 +215,7 @@ test('作者操作の送信元検証はトップフレーム・現URL・本人�
  assert.equal(await check(sender,'https://note.com/yeku/n/n999'),null);
  tab={url:articleUrl,pendingUrl:'https://note.com/other'};assert.equal(await check(sender,articleUrl),null);
  for(const url of ['https://evil.test/yeku','https://note.com/preview/n123','https://note.com/settings/account']){tab={url};assert.equal(await check(sender,url),null);}
- tab={url:'https://note.com/yeku'};assert.equal((await check(sender,tab.url)).type,'profile');
+ for(const url of ['https://note.com/yeku','https://note.com/yeku/store','https://note.com/yeku/store/?page=2']){tab={url};const owner=await check(sender,url);assert.equal(owner.type,'profile');assert.equal(owner.user,'yeku');}
 });
 test('背景は作者ページ以外の要求・別作者の要求・設定全置換の流用を拒否する',async()=>{
  const f=backend({hidePaidArticles:true});let handler,page={type:'article',user:'yeku'};
@@ -245,4 +245,12 @@ test('歯車はプロフィールから管理画面へ直行し、SPAで他の�
  let destination='chrome-extension://self/home.html#authors';const header='<header data-header-state="navbar"><div><a href="/"><svg role="img" aria-label="note"></svg></a></div></header>';
  const f=ui(header,{noteLogoBrowserBack:true},{settingsUrl:()=>destination});f.update('https://note.com/yeku');const gear=f.doc.querySelector('a[data-hikikomori-note-owned]');assert.equal(gear.href,destination);
  destination='chrome-extension://self/home.html';f.update('https://note.com/search');assert.equal(gear.href,destination);
+});
+
+test('ストアの作者表示設定から登録・解除でき、3モードとOFFで既存条件を維持',async()=>{
+ for(const patch of [{mode:'normal'},{mode:'social'},{mode:'severe'},{enabled:false}]){
+  let f;f=ui(profile,{...patch,hidePaidArticles:true},{async setAuthor(op,source){assert.equal(source,'profile');await f.backend.controller.author(op);f.control.update(f.core.readSettings(f.backend.state),'https://note.com/yeku/store');}});f.doc.getElementById('profile-name').textContent='作者名';f.update('https://note.com/yeku/store');
+  assert.ok(f.doc.querySelector('button[data-author-save]'));f.doc.querySelector('select').value='hide';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.equal(f.backend.state.authorDisplayRules[0].userId,'yeku');
+  f.doc.querySelector('select').value='';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.deepEqual(f.backend.state.authorDisplayRules,[]);
+ }
 });

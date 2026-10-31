@@ -639,7 +639,8 @@
       profilePromotionsDirty = false; profilePromotionsSignature = signature;
       const targets = new Set(), page = core.pageKind(url);
       const active = settings.enabled && settings.hidePaidArticles && settings.noteUserId && !settings.authorWarning &&
-        page?.type === "profile" && !core.isSelf(settings, page.user) && core.authorRule(settings, page.user)?.action !== "allow";
+        page?.type === "profile" && new URL(url).pathname.replace(/\/$/, "") !== `/${page.user}/store` &&
+        !core.isSelf(settings, page.user) && core.authorRule(settings, page.user)?.action !== "allow";
       // 表示管理UIと同じ確認済み作者を使う。TL用asideの形に依存させない。
       const author = active ? authorControls.profileOwner() : null;
       const main = author && author.userId === page?.user ? author.host.closest('[id="main-content"]') : null;

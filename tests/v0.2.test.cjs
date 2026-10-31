@@ -1412,3 +1412,16 @@ test('作者の/all・/magazines・/likesでも参加プラン制御を適用し
   f.ui.update(settings,'https://note.com/creator/all');f.ui.update(settings,'https://note.com/creator/membership');assert.equal(f.list.hasAttribute(promotionMarker),false);assert.equal(card.hasAttribute(promotionMarker),false);
  }
 });
+
+test('ストアを作者ページとして認識し、独自TL導線だけ追加。商品枠やプランは非表示にしない',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=membershipPlansFixture(),settings=f.core.readSettings({...groups(),mode,noteUserId:'me',hidePaidArticles:true}),card=f.plan();f.list.append(card);
+  for(const url of ['https://note.com/creator/store','https://note.com/creator/store/?page=2']){
+   assert.equal(f.core.pageKind(url).type,'profile');assert.equal(f.core.pageKind(url).user,'creator');f.ui.update(settings,url);
+   const navigation=f.doc.querySelector('[class~="hikikomori-note-profile-navigation"]');assert.equal(Boolean(navigation),mode!=='severe');if(navigation)assert.equal(navigation.querySelector('a').href,'https://note.com/following');
+   assert.ok(f.doc.querySelector('[class="hikikomori-note-author-profile"]'));for(const id of ['shop-group','amazon-group','mobile-promotions','membership-plans'])assert.equal(f.doc.getElementById(id).hasAttribute(promotionMarker),false,id);assert.equal(card.hasAttribute(promotionMarker),false);
+  }
+  f.ui.update({...settings,enabled:false},'https://note.com/creator/store');assert.equal(f.doc.querySelector('[class~="hikikomori-note-profile-navigation"]'),null);
+ }
+ const f=fixture();for(const url of ['https://note.com/creator/store/item','https://other.test/creator/store'])assert.equal(f.core.pageKind(url),null);
+});
