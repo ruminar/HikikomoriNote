@@ -158,3 +158,27 @@ socialの公式ロゴは操作を奪わず、確認済みヘッダーに歯車�
 利用者指定のマガジン検索を未ログインの確認用ブラウザで参照。価格span.text-text-successは入れ子の円記号を含む。マガジン1件の外側DIVはrelative／mb-[6px]／mr-[6px]／flex／w-[calc(100%-6px)]。直下にabsolute inset-0のtitle・aria-label付き /ユーザー/m/mIDリンクがあり、別の直下DIVにbefore:-z-20／after:-z-10／rounded-lg／border-border-defaultとh3がある。価格は作者avatarと同じisolateの行内、text-text-successのDIV配下にある。
 
 既存の価格走査・変更通知・非表示属性を共用し、外側の1件分を隠して空きを詰める。許可作者は既存のID照合で除外。本文内・外部ドメイン・未知構造・価格なしは対象外。マガジン詳細の取得や課金推測はしない。固定済み0.2.4とは別の開発変更。
+
+
+## 作者ページの販促枠（2026-10-31・0.2.5）
+
+note.com/nontsuをread-onlyで確認。作者表示管理UIと同じ識別結果（h1、avatar、URLの作者と一致するfollowingsリンクを持つ既知の親）を共有し、main-content内で成立する場合だけ適用する。TL追加用のasideクラス・幅条件は使わない。PCはaside内のmb-8/flex/flex-col/items-stretch/gap-4/empty:mb-0のDIV群、狭幅はmt-4/block/empty:hidden/lg:hidden内のflex/flex-nowrap/overflow-autoカルーセルにあるflex/items-stretch/gap-2のDIV群を対象とする。
+
+Amazonはamazon.co.jpまたはwww.amazon.co.jpのHTTPS商品dpリンク、確認済みSECTIONのクラス・商品画像・h3・タイトル付きオーバーレイを組み合わせて識別。ストアは貼付DOMのborder-border-strong等のクラス・画像・h3・価格を持つ外部商品カードと、同じ作者の/store向けButton「ストアをみる」を識別する。一般のプロフィール文中リンク、ストアタブ、記事、メンバーシップ、ストア直接アクセスは変更しない。リンク先を取得して調べる処理はない。
+
+専用非表示属性で1件分のラッパーを隠す。全子が対象の場合だけグループを隠し、狭幅では既知の外枠の余白も詰める。未知の子が混じるグループは残す。既存のDOM変更通知とdirtyフラグを使用し、監視やタイマーを増やさない。
+
+有料記事非表示ON、拡張ON、自己ID設定済み、他作者で表示許可以外、作者データ正常が条件。自分・許可作者・設定解除・OFF・作者移動・停止で印を外す。実DOM構造は確認済み、自動テスト210件成功。実拡張でのPC／Androidの表示確認は未実施。
+
+
+## 作者ホームの参加プラン（2026-10-31・0.2.5追加）
+
+完成後のDOMで、section内のh2から同じ作者のmembershipへリンクし、直下のmy-4/flex/flex-col/gap-4にrelativeのプランDIVとborder-border-defaultのhrが交互に入ることを確認。プランDIVはabsolute inset-0の/membership/joinリンク、h3、p.text-text-successの正の月額料金（¥500 / 月等）、data-name=Buttonの参加手続きへ／募集終了を持つ。
+
+作者ホームだけに適用する。対象プランと区切り線だけなら一覧親へ既存の販促非表示属性を付けるため、後挿入も同じ親のdisplay:noneを継承する。無料や未知の子があれば一覧は残し、確認済みカードと対象カード間の区切り線だけを隠す。紹介欄・membership直接表示は維持。新たなDOM監視・取得通信はなし。構文・自動テスト213件成功。実拡張では未確認。
+
+参加プランの適用URLは作者ホームと/作者ID/all（末尾スラッシュ可）。同じDOM判定と非表示条件を共用し、membershipへの直接アクセスは引き続き対象外。
+
+参加プランの適用URLに/作者ID/magazinesも追加。既存の作者識別とプラン判定を共用し、一覧本体の判定条件は変更しない。
+
+参加プランの適用URLに/作者ID/likesも追加。左側プランの識別・非表示だけを共用し、スキ一覧本体の制御は変更しない。

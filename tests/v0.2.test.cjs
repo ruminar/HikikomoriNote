@@ -1323,3 +1323,92 @@ test('後挿入のマガジンと価格変更に追従し、無料化・未知�
  }
  const f=magazineFixture(),settings=f.core.readSettings({...groups(),hidePaidArticles:true}),parent=f.card.parentElement;f.card.remove();f.ui.update(settings,url);parent.append(f.card);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.card.hasAttribute(marker),true);
 });
+
+const profileAmazon='<section class="relative flex rounded-lg border border-border-default bg-surface-normal p-4"><a class="absolute inset-0" title="商品" aria-label="商品" href="https://www.amazon.co.jp/dp/1234567890?tag=test"></a><img alt="商品画像"><div><h3></h3><footer><a href="https://www.amazon.co.jp">Amazon</a></footer></div></section>';
+const profileShopItem='<div class="w-full flex relative rounded-lg border border-solid border-border-strong p-4 items-center"><a class="absolute inset-0" title="商品" aria-label="商品" href="https://sample.base.shop/items/123"></a><img><div><h3></h3><span class="text-text-success"></span></div></div>';
+const profileShopButton='<a data-name="Button" href="https://creator/store"></a>'.replace('https://creator/store','https://note.com/creator/store');
+function profilePromotionFixture(){
+ const f=uiFixture('<main id="main-content"><aside class="w-full lg:w-96"><div><button data-name="avatar"></button><h1></h1><a href="https://note.com/creator/followings"></a><a id="bio-amazon" href="https://www.amazon.co.jp/dp/1234567890"></a></div><div class="mt-8 hidden lg:block"><div class="mb-8 flex flex-col items-stretch justify-start gap-4 empty:mb-0" id="amazon-group"><div id="amazon-wrapper">'+profileAmazon+'</div></div><div class="mb-8 flex flex-col items-stretch justify-start gap-4 empty:mb-0" id="shop-group"><div id="shop-wrapper">'+profileShopItem+'</div><div>'+profileShopButton+'</div></div></div></aside><div id="mobile-promotions" class="mt-4 block px-4 empty:hidden lg:hidden"><div class="-mr-4 flex flex-nowrap gap-2 overflow-auto pr-4"><div class="flex items-stretch gap-2"><div class="flex w-72 min-w-72">'+profileAmazon+'</div><div class="flex w-72 min-w-72">'+profileShopItem+'</div><div class="flex w-72 min-w-72">'+profileShopButton+'</div></div></div></div><nav><a id="store-tab" href="https://note.com/creator/store" data-id="NavigationItem"></a></nav><article><a id="article-amazon" href="https://www.amazon.co.jp/dp/1234567890"></a></article></main>');
+ for(const price of f.doc.querySelectorAll('span[class]'))if(price.classList.contains('text-text-success'))price.textContent='¥1,500';
+ for(const a of f.doc.querySelectorAll('a[data-name="Button"]'))a.textContent='ストアをみる';
+ return f;
+}
+const promotionMarker='data-hikikomori-note-profile-promotion-hidden';
+test('作者未許可かつ有料非表示ONだけ、PCと狭幅のAmazon商品・ストア枠を余白ごと隠す',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=profilePromotionFixture(),settings=f.core.readSettings({...groups(),mode,noteUserId:'me',hidePaidArticles:true});f.ui.update(settings,'https://note.com/creator');
+  for(const id of ['amazon-wrapper','amazon-group','shop-wrapper','shop-group','mobile-promotions'])assert.equal(f.doc.getElementById(id).hasAttribute(promotionMarker),true,id);
+  for(const id of ['bio-amazon','article-amazon','store-tab','main-content'])assert.equal(f.doc.getElementById(id).hasAttribute(promotionMarker),false,id);
+ }
+});
+test('作者許可・自己・OFF・未設定・破損設定では販促を隠さず、許可解除で再評価',()=>{
+ const f=profilePromotionFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true}),url='https://note.com/creator';
+ for(const patch of [{enabled:false},{hidePaidArticles:false},{noteUserId:''},{noteUserId:'creator'},{authorWarning:'broken'},{authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]}]){
+  f.ui.update(settings,url);assert.equal(f.doc.getElementById('shop-group').hasAttribute(promotionMarker),true);f.ui.update({...settings,...patch},url);assert.equal(f.doc.getElementById('shop-group').hasAttribute(promotionMarker),false);
+ }
+ f.ui.update({...settings,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'hide'}]},url);assert.equal(f.doc.getElementById('shop-group').hasAttribute(promotionMarker),true);
+});
+test('販促の後挿入・構造変更・作者移動・停止で再評価し、未知の枠や混在コンテンツを隠さない',()=>{
+ const f=profilePromotionFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true}),url='https://note.com/creator',group=f.doc.getElementById('shop-group'),wrapper=f.doc.getElementById('shop-wrapper'),parent=group.parentElement;
+ group.remove();f.ui.update(settings,url);parent.append(group);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(group.hasAttribute(promotionMarker),true);
+ const unknown=f.doc.createElement('p');group.append(unknown);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(group.hasAttribute(promotionMarker),false);assert.equal(unknown.hasAttribute(promotionMarker),false);assert.equal(wrapper.hasAttribute(promotionMarker),true);
+ f.doc.getElementById('amazon-wrapper').querySelector('a').href='https://www.amazon.co.jp.evil.test/dp/1234567890';f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.doc.getElementById('amazon-group').hasAttribute(promotionMarker),false);
+ f.ui.update(settings,'https://note.com/other');assert.equal(wrapper.hasAttribute(promotionMarker),false);f.ui.update(settings,url);assert.equal(wrapper.hasAttribute(promotionMarker),true);f.ui.stop();assert.equal(wrapper.hasAttribute(promotionMarker),false);
+});
+test('販促カードの本文内・未知の親・記事画面・ストア直接表示は変更しない',()=>{
+ for(const url of ['https://note.com/creator/n/n123','https://note.com/creator/store','https://note.com/search']){
+  const f=profilePromotionFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true});f.ui.update(settings,url);assert.equal(f.doc.getElementById('shop-group').hasAttribute(promotionMarker),false);
+ }
+ const f=profilePromotionFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true});f.doc.getElementById('shop-group').className='unknown';f.doc.getElementById('amazon-wrapper').querySelector('section').className='unknown';f.ui.update(settings,'https://note.com/creator');assert.equal(f.doc.getElementById('shop-wrapper').hasAttribute(promotionMarker),false);assert.equal(f.doc.getElementById('amazon-group').hasAttribute(promotionMarker),false);
+});
+
+test('販促は作者設定と同じ識別を使い、TL用asideクラスがないプロフィールでも隠す',()=>{
+ const f=profilePromotionFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true}),url='https://note.com/creator';
+ f.doc.querySelector('aside').className='profile-layout';f.ui.update(settings,url);
+ assert.ok(f.doc.querySelector('[class="hikikomori-note-author-profile"]'));assert.equal(f.doc.getElementById('shop-group').hasAttribute(promotionMarker),true);assert.equal(f.doc.getElementById('amazon-group').hasAttribute(promotionMarker),true);
+ f.ui.update({...settings,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]},url);assert.equal(f.doc.getElementById('shop-group').hasAttribute(promotionMarker),false);
+ f.doc.querySelector('h1').remove();f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.doc.getElementById('amazon-group').hasAttribute(promotionMarker),false);
+});
+
+function membershipPlansFixture(){
+ const f=profilePromotionFixture(),section=f.doc.createElement('section'),heading=f.doc.createElement('h2'),link=f.doc.createElement('a');link.href='https://note.com/creator/membership';heading.append(link);section.append(heading);
+ const intro=f.doc.createElement('div');intro.setAttribute('id','membership-intro');section.append(intro);
+ const list=f.doc.createElement('div');list.className='my-4 flex flex-col gap-4';list.setAttribute('id','membership-plans');section.append(list);f.doc.querySelector('aside').append(section);
+ function plan(text='参加手続きへ',price='¥500 / 月'){
+  const card=f.doc.createElement('div');card.className='relative';const join=f.doc.createElement('a');join.className='absolute inset-0';join.href='https://note.com/creator/membership/join';const h=f.doc.createElement('h3'),amount=f.doc.createElement('p'),button=f.doc.createElement('button');amount.className='font-bold text-text-success text-xs';amount.textContent=price;button.setAttribute('data-name','Button');button.textContent=text;button.disabled=text==='募集終了';card.append(join,h,amount,button);return card;
+ }
+ return {...f,list,section,intro,plan};
+}
+test('作者ホームの有料参加プランは募集終了も一覧と区切り線ごと隠し、紹介欄と許可作者は残す',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=membershipPlansFixture(),a=f.plan(),b=f.plan('募集終了','¥7,980 / 月'),hr=f.doc.createElement('hr');hr.className='border-border-default';f.list.append(a,hr,b);
+  const settings=f.core.readSettings({...groups(),mode,noteUserId:'me',hidePaidArticles:true}),url='https://note.com/creator';f.ui.update(settings,url);
+  assert.equal(f.list.hasAttribute(promotionMarker),true);assert.equal(a.hasAttribute(promotionMarker),true);assert.equal(b.hasAttribute(promotionMarker),true);assert.equal(f.intro.hasAttribute(promotionMarker),false);assert.equal(f.section.hasAttribute(promotionMarker),false);
+  for(const patch of [{enabled:false},{hidePaidArticles:false},{noteUserId:'creator'},{authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]}]){f.ui.update({...settings,...patch},url);assert.equal(f.list.hasAttribute(promotionMarker),false);assert.equal(a.hasAttribute(promotionMarker),false);f.ui.update(settings,url);}
+  f.ui.update(settings,'https://note.com/creator/membership');assert.equal(f.list.hasAttribute(promotionMarker),false);
+ }
+});
+test('後挿入プランを隠し、無料プラン・未知の子が混ざる一覧や本文は丸ごと隠さない',()=>{
+ const f=membershipPlansFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true}),url='https://note.com/creator';f.ui.update(settings,url);assert.equal(f.list.hasAttribute(promotionMarker),false);
+ const a=f.plan();f.list.append(a);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.list.hasAttribute(promotionMarker),true);
+ const free=f.plan('参加手続きへ','¥0 / 月');f.list.append(free);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.list.hasAttribute(promotionMarker),false);assert.equal(a.hasAttribute(promotionMarker),true);assert.equal(free.hasAttribute(promotionMarker),false);
+ const unknown=f.doc.createElement('p');f.list.append(unknown);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(unknown.hasAttribute(promotionMarker),false);
+ f.doc.querySelector('article').append(f.section);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(a.hasAttribute(promotionMarker),false);
+});
+test('参加先の作者・見出し・月額・ボタン・一覧構造を確認できないプランは非表示にしない',()=>{
+ for(const change of [f=>{f.list.querySelector('a').href='https://note.com/other/membership/join';},f=>{f.section.querySelector('h2').remove();},f=>{f.list.querySelector('p').textContent='¥500';},f=>{f.list.querySelector('button').textContent='別の操作';},f=>{f.list.className='unknown';}]){
+  const f=membershipPlansFixture(),card=f.plan();f.list.append(card);change(f);f.ui.update(f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true}),'https://note.com/creator');assert.equal(card.hasAttribute(promotionMarker),false);assert.equal(f.list.hasAttribute(promotionMarker),false);
+ }
+});
+
+test('作者の/all・/magazines・/likesでも参加プラン制御を適用し、許可・解除・membership直接表示との境界を維持',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=membershipPlansFixture(),card=f.plan(),settings=f.core.readSettings({...groups(),mode,noteUserId:'me',hidePaidArticles:true});f.list.append(card);
+  for(const url of ['https://note.com/creator/all','https://note.com/creator/all/?page=2#top','https://note.com/creator/magazines','https://note.com/creator/magazines/?page=2#top','https://note.com/creator/likes','https://note.com/creator/likes/?page=2#top']){
+   f.ui.update(settings,url);assert.equal(f.list.hasAttribute(promotionMarker),true);assert.equal(card.hasAttribute(promotionMarker),true);assert.equal(f.intro.hasAttribute(promotionMarker),false);
+   f.ui.update({...settings,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]},url);assert.equal(f.list.hasAttribute(promotionMarker),false);assert.equal(card.hasAttribute(promotionMarker),false);
+   f.ui.update({...settings,hidePaidArticles:false},url);assert.equal(f.list.hasAttribute(promotionMarker),false);
+  }
+  f.ui.update(settings,'https://note.com/creator/all');f.ui.update(settings,'https://note.com/creator/membership');assert.equal(f.list.hasAttribute(promotionMarker),false);assert.equal(card.hasAttribute(promotionMarker),false);
+ }
+});

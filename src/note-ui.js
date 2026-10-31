@@ -430,7 +430,7 @@
     const notesPromotionRoots = new Set();
     const notesPromotionRoot = "data-hikikomori-note-notes-promotions";
     let notesPromotionsDirty = true, notesPromotionsSignature;
-    function hasClasses(element, names) { return names.every(name => element.classList.contains(name)); }
+    function hasClasses(element, names) { return Boolean(element && names.every(name => element.classList.contains(name))); }
     function notesBanner(block) {
       if (block.tagName !== "DIV" || !hasClasses(block, ["hidden", "md:block"])) return false;
       return [...block.children].some(scroller => scroller.tagName === "DIV" &&
@@ -630,6 +630,87 @@
           return url.origin === "https://note.com" && url.pathname === `/${user}/followings`;
         }) && visible(element));
     }
+    const profilePromotions = new Set();
+    const profilePromotionHidden = "data-hikikomori-note-profile-promotion-hidden";
+    let profilePromotionsDirty = true, profilePromotionsSignature;
+    function syncProfilePromotions(settings, url) {
+      const signature = JSON.stringify([url, settings.enabled, settings.hidePaidArticles, settings.noteUserId, settings.authorDisplayRules, settings.authorWarning]);
+      if (!profilePromotionsDirty && signature === profilePromotionsSignature) return;
+      profilePromotionsDirty = false; profilePromotionsSignature = signature;
+      const targets = new Set(), page = core.pageKind(url);
+      const active = settings.enabled && settings.hidePaidArticles && settings.noteUserId && !settings.authorWarning &&
+        page?.type === "profile" && !core.isSelf(settings, page.user) && core.authorRule(settings, page.user)?.action !== "allow";
+      // 表示管理UIと同じ確認済み作者を使う。TL用asideの形に依存させない。
+      const author = active ? authorControls.profileOwner() : null;
+      const main = author && author.userId === page?.user ? author.host.closest('[id="main-content"]') : null;
+      if (main) {
+        const groups = new Set();
+        const planGroups = new Map();
+        const profileListing = [`/${page.user}`, `/${page.user}/all`, `/${page.user}/magazines`, `/${page.user}/likes`].includes(new URL(url).pathname.replace(/\/$/, ""));
+        function promotionalGroup(wrapper) {
+          const group = wrapper?.parentElement;
+          if (group?.tagName !== "DIV") return null;
+          const desktop = hasClasses(group, ["mb-8", "flex", "flex-col", "items-stretch", "gap-4", "empty:mb-0"]);
+          const carousel = hasClasses(group, ["flex", "items-stretch", "gap-2"]) &&
+            hasClasses(group.parentElement, ["flex", "flex-nowrap", "overflow-auto"]) &&
+            hasClasses(group.parentElement.parentElement, ["mt-4", "block", "empty:hidden", "lg:hidden"]);
+          return desktop || carousel ? group : null;
+        }
+        for (const link of main.querySelectorAll("a[href]")) {
+          if (link.closest("article") || link.closest('[id="note-body"]') || link.closest(`[${owned}]`)) continue;
+          let destination;
+          try { destination = new URL(link.href); } catch { continue; }
+          const card = link.parentElement;
+          if (profileListing &&
+              destination.origin === "https://note.com" && destination.pathname === `/${page.user}/membership/join` &&
+              link.classList.contains("absolute") && link.classList.contains("inset-0") &&
+              card.tagName === "DIV" && card.classList.contains("relative") && card.querySelector("h3")) {
+            const list = card.parentElement, section = list?.parentElement;
+            const membership = section?.tagName === "SECTION" && [...section.querySelectorAll("h2")].some(heading =>
+              [...heading.querySelectorAll("a[href]")].some(a => {
+                try { const u = new URL(a.href); return u.origin === "https://note.com" && u.pathname === `/${page.user}/membership`; } catch { return false; }
+              }));
+            const monthly = [...card.querySelectorAll("p[class]")].some(p => p.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*\/\s*月/.test(p.textContent.trim()));
+            const button = [...card.querySelectorAll('button[data-name="Button"]')].some(b => ["参加手続きへ", "募集終了"].includes(b.textContent.trim()));
+            if (membership && monthly && button && list.tagName === "DIV" && hasClasses(list, ["my-4", "flex", "flex-col", "gap-4"])) {
+              targets.add(card);
+              if (!planGroups.has(list)) planGroups.set(list, new Set());
+              planGroups.get(list).add(card);
+            }
+          }
+          const overlay = link.classList.contains("absolute") && link.classList.contains("inset-0") && link.getAttribute("title") && link.getAttribute("aria-label");
+          const amazon = overlay && destination.protocol === "https:" && ["amazon.co.jp", "www.amazon.co.jp"].includes(destination.hostname) &&
+            /^\/(?:dp\/[A-Z0-9]+|[^/]+\/dp\/[A-Z0-9]+)\/?$/i.test(destination.pathname) && card.tagName === "SECTION" &&
+            hasClasses(card, ["relative", "flex", "rounded-lg", "border-border-default", "bg-surface-normal", "p-4"]) && card.querySelector("h3") && card.querySelector('img[alt="商品画像"]');
+          const storeItem = overlay && destination.protocol === "https:" && destination.origin !== "https://note.com" && card.tagName === "DIV" &&
+            hasClasses(card, ["relative", "flex", "rounded-lg", "border-solid", "border-border-strong", "p-4", "items-center"]) &&
+            card.querySelector("h3") && card.querySelector("img") && [...card.querySelectorAll("span[class]")].some(isPaidPrice);
+          const storeButton = destination.origin === "https://note.com" && destination.pathname === `/${page.user}/store` &&
+            link.getAttribute("data-name") === "Button" && link.textContent.trim() === "ストアをみる";
+          const wrapper = storeButton ? link.parentElement : card.parentElement;
+          const group = promotionalGroup(wrapper);
+          if (!group || wrapper.tagName !== "DIV" || wrapper.children.length !== 1 || !(amazon || storeItem || storeButton)) continue;
+          targets.add(wrapper); groups.add(group);
+        }
+        for (const [list, plans] of planGroups) {
+          const children = [...list.children], separator = child => child.tagName === "HR" && child.classList.contains("border-border-default");
+          if (children.every(child => plans.has(child) || separator(child))) targets.add(list);
+          else children.forEach((child, index) => {
+            if (separator(child) && plans.has(children[index - 1]) && plans.has(children[index + 1])) targets.add(child);
+          });
+        }
+        for (const group of groups) {
+          if (![...group.children].every(child => targets.has(child))) continue;
+          targets.add(group);
+          const scroll = group.parentElement, region = scroll?.parentElement;
+          if (hasClasses(scroll, ["flex", "flex-nowrap", "overflow-auto"]) && scroll.children.length === 1 &&
+              hasClasses(region, ["mt-4", "block", "empty:hidden", "lg:hidden"]) && region.children.length === 1) targets.add(region);
+        }
+      }
+      for (const target of profilePromotions) if (!targets.has(target)) target.removeAttribute(profilePromotionHidden);
+      profilePromotions.clear();
+      for (const target of targets) { if (!target.hasAttribute(profilePromotionHidden)) target.setAttribute(profilePromotionHidden, ""); profilePromotions.add(target); }
+    }
     function update(settings, url) {
       if (disposed) return;
       prepareSidebar(url, settings);
@@ -647,6 +728,7 @@
       syncNotesPromotions(settings, url);
       syncTips(settings, url);
       syncPaidCards(settings, url);
+      syncProfilePromotions(settings, url);
       if (!settings.enabled || !page || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
       const officialAside = common && [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky"));
@@ -737,6 +819,7 @@
         notesPromotionsDirty = true;
         paidDirty = true;
         tipsDirty = true;
+        profilePromotionsDirty = true;
       },
       stop() {
         for (const root of sidebarRoots) root.classList.remove(rootClass);
@@ -762,6 +845,8 @@
         tips.clear();
         for (const container of paidCards.values()) container.removeAttribute(paidHidden);
         paidCards.clear();
+        for (const target of profilePromotions) target.removeAttribute(profilePromotionHidden);
+        profilePromotions.clear();
       }
     });
   }
@@ -769,7 +854,7 @@
   function createAuthorControls(doc, win, actions) {
     const marker = "data-hikikomori-note-author-hidden", hiddenCards = new Map();
     let settings, url, dirty = true, cardSignature, disposed = false;
-    let dialog, dialogContext, previousFocus, askedArticle, profileBlock, profileContext, profileSelect;
+    let dialog, dialogContext, previousFocus, askedArticle, profileBlock, profileContext, profileSelect, currentProfileOwner;
     let busy = false, uncertain = false, recoveryNeeded = false, currentArticle, lastSettings;
     function visible(element) {
       if (!element?.isConnected) return false;
@@ -948,6 +1033,7 @@
     }
     function syncProfile() {
       const owner = profileOwner();
+      currentProfileOwner = owner;
       if (!owner) { profileBlock?.remove(); profileBlock = undefined; profileContext = undefined; return; }
       const context = JSON.stringify([owner.userId, owner.displayName, settings.noteUserId, settings.authorWarning, core.authorRule(settings, owner.userId)]);
       if (profileBlock?.isConnected && context === profileContext && profileBlock.parentElement === owner.host) { refreshDisabled(); return; }
@@ -985,7 +1071,7 @@
     }
     function onVisibility() { dirty = true; if (!disposed && settings) update(settings, url); }
     doc.addEventListener?.("visibilitychange", onVisibility);
-    return { update, invalidate() { dirty = true; }, stop() {
+    return { update, profileOwner: () => currentProfileOwner, invalidate() { dirty = true; }, stop() {
       disposed = true; closeDialog(); profileBlock?.remove();
       for (const container of hiddenCards.values()) container.removeAttribute(marker);
       hiddenCards.clear(); doc.removeEventListener?.("visibilitychange", onVisibility);

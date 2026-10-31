@@ -12,6 +12,7 @@ a[data-hikikomori-note-dashboard-hidden] {
 }
 [data-hikikomori-note-menu-hidden] { display: none !important; }
 [data-hikikomori-note-product-hidden] { display: none !important; }
+[data-hikikomori-note-profile-promotion-hidden] { display: none !important; }
 [data-hikikomori-note-recommendations-hidden] { display: none !important; }
 .hikikomori-note-recommendations-root > div[class~="border-t"][class~="print:hidden"] > div.divide-y.divide-border-default > div.pt-6 {
   display: none !important;
