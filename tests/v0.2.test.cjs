@@ -81,7 +81,7 @@ test('保存失敗ではタグ・モードを確定せず、背景再起動後�
 test('左メニューでタグ管理と設定を切替。重度では設定入口とキャッチコピーだけにする',async()=>{
  const f=homeFixture({state:{...groups(['A'])}});await flush();const n=f.nodes;
  assert.match(n.get('mode').textContent,/通常モード（ひとみしりモード）/);
- assert.equal(n.get('panel-tags').hidden,false);assert.equal(n.get('nav-tags').getAttribute('aria-current'),'page');
+ assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('nav-settings').getAttribute('aria-current'),'page');
  for(const id of ['tabs','tab-main','panel-main','quick-access','main-tags'])assert.equal(n.has(id),false);
  assert.equal(n.get('home-menu').contains(n.get('nav-settings')),true);assert.equal(n.get('home-menu').contains(n.get('following')),false);
  n.get('nav-settings').onclick();assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('panel-tags').hidden,true);
@@ -554,7 +554,7 @@ test('公式ロゴが差し替われば歯車も付け直し、未確認のロ�
 });
 
 test('専用ホームの左メニューで設定を開き、#settingsは重度でも設定を直接表示する',async()=>{
- const f=homeFixture();await flush();assert.equal(f.nodes.get('panel-tags').hidden,false);
+ const f=homeFixture();await flush();assert.equal(f.nodes.get('panel-settings').hidden,false);
  f.nodes.get('nav-settings').onclick();assert.equal(f.nodes.get('panel-settings').hidden,false);assert.equal(f.nodes.get('nav-settings').getAttribute('aria-current'),'page');
  for(const mode of ["normal","severe","social"]){
   const direct=homeFixture({hash:'#settings',state:{mode}});await flush();assert.equal(direct.nodes.get('panel-settings').hidden,false);assert.equal(direct.nodes.get('panel-tags').hidden,true);assert.equal(direct.nodes.get('panel-intro').hidden,mode!=="severe");
@@ -1289,4 +1289,13 @@ test('社会復帰でもプロフィールのTLだけ追加し公式情報と関
  f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,2);
  f.ui.update(settings,'https://note.com/tag/AI');assert.equal(aside.children.length,1);assert.equal(product.hasAttribute('data-hikikomori-note-product-hidden'),true);assert.equal(f.doc.querySelector('[data-tag-add]'),null);
  f.ui.update({...settings,enabled:false},'https://note.com/tag/AI');assert.equal(product.hasAttribute('data-hikikomori-note-product-hidden'),false);
+});
+
+test('設定メニューは設定を先頭に並べ、タグ直行は#tagsだけ。社会復帰と重度はタグを開かない',async()=>{
+ const f=homeFixture();await flush();const n=f.nodes;
+ assert.deepEqual(n.get('home-menu').children.map(x=>x.getAttribute('id')),['nav-settings','nav-tags','nav-authors','nav-transfer']);assert.equal(n.get('panel-settings').hidden,false);
+ n.get('home-menu').fire('keydown',{key:'ArrowDown'});assert.equal(n.get('panel-tags').hidden,false);n.get('home-menu').fire('keydown',{key:'Home'});assert.equal(n.get('panel-settings').hidden,false);
+ for(const mode of ['normal','social','severe']){
+  const direct=homeFixture({hash:'#tags',state:{mode}});await flush();assert.equal(direct.nodes.get('panel-tags').hidden,mode!=='normal');
+ }
 });

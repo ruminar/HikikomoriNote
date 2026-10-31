@@ -336,7 +336,7 @@ const homeFixture = require("./helpers/home.cjs");
 
 test("専用ホームはnoteへの移動なしでタグ管理と設定を表示", async () => {
   const f = homeFixture(); await flush();
-  assert.equal(f.nodes.get("panel-tags").hidden, false); assert.equal(f.nodes.get("profile").href, "https://note.com/ruminar");
+  assert.equal(f.nodes.get("panel-settings").hidden, false); assert.equal(f.nodes.get("profile").href, "https://note.com/ruminar");
   assert.equal(f.nodes.get("note-user").value, "ruminar"); assert.equal(f.moves.length, 0);
 });
 test("OFFの完了応答前は通常noteを開かず、成功後にだけ移動", async () => {
@@ -450,7 +450,7 @@ test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホ�
 test('プロフィールの専用ホーム導線は作者管理へ直行し、記事や検索からは従来の初期画面',async()=>{
  let actions;const f=contentFixture({}, {ui:{create(doc,win,a){actions=a;return {update(){}};}}});await flush();
  assert.equal(actions.settingsUrl(),f.home+'#authors');
- for(const url of ['https://note.com/yeku/n/n123','https://note.com/search?q=AI']){f.location.href=url;assert.equal(actions.settingsUrl(),f.home);f.click();assert.equal(f.moves.at(-1)[1],f.home);}
+ for(const [url,suffix] of [['https://note.com/yeku/n/n123',''],['https://note.com/search?q=AI','#tags']]){f.location.href=url;assert.equal(actions.settingsUrl(),f.home+suffix);f.click();assert.equal(f.moves.at(-1)[1],f.home+suffix);}
 });
 
 test('社会復帰ではホームのロード・クリック・SPAを奪わず、ダッシュボード制限だけ継続',async()=>{
@@ -471,4 +471,15 @@ test('社会復帰でも検索の記事タブへの新着復帰を行い、タ�
  const anchor={tagName:'A',href:'https://note.com/search?q=%23AI&context=note',textContent:'記事',hasAttribute:()=>false,getAttribute:()=> 'NavigationItem'};
  assert.equal(f.click(undefined,{composedPath:()=>[anchor]}).defaultPrevented,true);assert.equal(new URL(f.moves[0][1]).searchParams.get('sort'),'new');assert.equal(anchor.href,'https://note.com/search?q=%23AI&context=note');
  assert.equal(f.click('https://note.com/tag/AI').defaultPrevented,false);
+});
+
+test('タグメニューを使う通常画面からだけタグ管理へ直行。記事と管理画面は設定を開く',async()=>{
+ for(const mode of ['normal','social','severe']){
+  let actions;const f=contentFixture({mode},{ui:{create:(doc,win,value)=>{actions=value;return {update(){}};}}});await flush();
+  for(const path of ['/following','/tag/AI','/hashtag/AI','/search?q=AI','/topic/education_learning']){
+   f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='normal'?'#tags':mode==='social'?'#settings':''));
+  }
+  for(const path of ['/ruminar/n/n123','/dashboard','/settings/account']){f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='social'?'#settings':''));}
+  f.location.href='https://note.com/yeku';assert.equal(actions.settingsUrl(),f.home+'#authors');
+ }
 });

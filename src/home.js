@@ -3,7 +3,7 @@
   const core = globalThis.HikikomoriNote;
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
-  const views = ["tags", "settings", "authors", "transfer"];
+  const views = ["settings", "tags", "authors", "transfer"];
   const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", mode: "operation-mode" };
   const modeNames = { normal: "通常モード（ひとみしりモード）", severe: "重度ひきこもりモード", social: "社会復帰モード" };
   function updateModeHelp() {
@@ -35,7 +35,7 @@
     byId("clear-settings-json").disabled = busy || copying || !text.length;
     byId("settings-json").disabled = busy && ["import", "export"].includes(pendingState);
   }
-  let state, selected = location.hash === "#authors" ? "authors" : location.hash === "#settings" ? "settings" : "tags", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
+  let state, selected = location.hash === "#authors" ? "authors" : location.hash === "#tags" ? "tags" : "settings", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectView(name, focus = false) {
     if (!state && name !== "settings") return;
     selected = state && !core.usesTags(state) && name === "tags" ? (core.modeOf(state) === "severe" ? "intro" : "settings") : name;
