@@ -152,3 +152,9 @@ note.com/topic/education_learningでread-only DOM参照により、asideにstick
 プロフィールへのTL追加はnormal/socialで有効だが公式情報は隠さない。記事／プレビューの固定作者は全モード、TLはnormal/socialのみ。重度の作者単独ボタンはtop72px、公式固定プロフィールはtop124pxへ移し、両ボタン時は従来のtop184pxとする。未検出・狭幅・OFF時は位置調整も戻す。
 
 socialの公式ロゴは操作を奪わず、確認済みヘッダーに歯車だけ常時追加する。記事・非表示枠・検索・管理画面のDOM識別条件は従来どおり。新たなDOM探索対象や監視は追加しない。0.2.4の実ブラウザ受け入れ確認は未実施。
+
+## 有料マガジンカード（2026-10-31・0.2.5）
+
+利用者指定のマガジン検索を未ログインの確認用ブラウザで参照。価格span.text-text-successは入れ子の円記号を含む。マガジン1件の外側DIVはrelative／mb-[6px]／mr-[6px]／flex／w-[calc(100%-6px)]。直下にabsolute inset-0のtitle・aria-label付き /ユーザー/m/mIDリンクがあり、別の直下DIVにbefore:-z-20／after:-z-10／rounded-lg／border-border-defaultとh3がある。価格は作者avatarと同じisolateの行内、text-text-successのDIV配下にある。
+
+既存の価格走査・変更通知・非表示属性を共用し、外側の1件分を隠して空きを詰める。許可作者は既存のID照合で除外。本文内・外部ドメイン・未知構造・価格なしは対象外。マガジン詳細の取得や課金推測はしない。固定済み0.2.4とは別の開発変更。

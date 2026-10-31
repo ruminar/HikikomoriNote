@@ -242,8 +242,30 @@
       return price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*[〜～]?\s*$/.test(price.textContent.trim());
     }
     let paidDirty = true, paidSignature;
+    function isMagazineCard(card) {
+      return card.tagName === "DIV" && ["relative", "mb-[6px]", "mr-[6px]", "flex", "w-[calc(100%-6px)]"].every(name => card.classList.contains(name));
+    }
+    function isPaidMagazineCard(card, settings) {
+      if (!isMagazineCard(card)) return false;
+      const cover = [...card.children].find(child => child.tagName === "DIV" &&
+        ["before:-z-20", "after:-z-10", "rounded-lg", "border-border-default"].every(name => child.classList.contains(name)));
+      if (!cover?.querySelector("h3")) return false;
+      const link = [...card.children].find(child => {
+        if (child.tagName !== "A" || !child.classList.contains("absolute") || !child.classList.contains("inset-0") ||
+            !child.getAttribute("title") || !child.getAttribute("aria-label")) return false;
+        try { const url = new URL(child.href); return url.origin === "https://note.com" && /^\/[a-zA-Z0-9_]+\/m\/m[a-zA-Z0-9]+\/?$/.test(url.pathname); }
+        catch { return false; }
+      });
+      if (!link || isAllowedCard(card, link, settings)) return false;
+      return [...cover.querySelectorAll("span[class]")].some(price => {
+        const holder = price.parentElement, metadata = holder?.parentElement;
+        return isPaidPrice(price) && holder.tagName === "DIV" && holder.classList.contains("text-text-success") &&
+          metadata?.classList.contains("isolate") && Boolean(metadata.querySelector('a[data-name="avatar"]'));
+      });
+    }
     function isPaidCard(card, settings) {
       if (!card.isConnected || card.closest('article') || card.closest('[id="note-body"]')) return false;
+      if (isPaidMagazineCard(card, settings)) return true;
       return [...card.querySelectorAll('a[href]')].some(link =>
         link.parentElement?.parentElement === card && link.classList.contains("absolute") &&
         link.classList.contains("inset-0") && link.getAttribute("title") && link.getAttribute("aria-label") && core.isArticle(link.href) &&
@@ -279,7 +301,7 @@
       for (const indicator of [...prices, ...locks]) {
         let card = indicator.parentElement;
         for (let depth = 0; card && depth < 10; depth++, card = card.parentElement) {
-          if (!card.classList.contains("grid-rows-subgrid")) continue;
+          if (!card.classList.contains("grid-rows-subgrid") && !isMagazineCard(card)) continue;
           if (isPaidCard(card, settings)) {
             const container = paidCardContainer(card);
             container.setAttribute(paidHidden, ""); paidCards.set(card, container);

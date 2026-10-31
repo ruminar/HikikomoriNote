@@ -1299,3 +1299,27 @@ test('設定メニューは設定を先頭に並べ、タグ直行は#tagsだけ
   const direct=homeFixture({hash:'#tags',state:{mode}});await flush();assert.equal(direct.nodes.get('panel-tags').hidden,mode!=='normal');
  }
 });
+
+// 2026-10-31: note公式マガジン検索のDOMを参照。名前・IDはテスト用。
+const magazineHtml='<main><div class="flex flex-col gap-4 md:grid"><div id="magazine" class="relative mb-[6px] mr-[6px] flex w-[calc(100%-6px)]"><a class="absolute inset-0" title="マガジン" aria-label="マガジン" href="https://note.com/creator/m/m123"></a><div class="before:-z-20 after:-z-10 flex w-full flex-col rounded-lg border border-border-default bg-surface-normal"><div class="flex flex-1 flex-col justify-between gap-3 overflow-hidden p-4"><div class="w-full"><div><h3></h3></div></div><div class="isolate w-full"><div class="flex gap-2 isolate flex-row justify-between"><a data-name="avatar" href="https://note.com/creator"></a><div class="flex items-center gap-1 text-text-success"><span id="magazine-price" class="text-text-success text-sm"><span>¥</span>1,200<span></span></span></div></div></div></div></div></div><div id="free-magazine"></div></div></main>';
+function magazineFixture(){const f=uiFixture(magazineHtml),price=f.doc.getElementById('magazine-price');price.children[0].textContent='¥';price.children[1].textContent='1,200';return {...f,card:f.doc.getElementById('magazine'),price};}
+test('価格付きマガジンは全モードで1件分を隠し、無料・購入済み例外と設定OFFを維持',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=magazineFixture(),settings=f.core.readSettings({...groups(),mode,hidePaidArticles:true}),marker='data-hikikomori-note-paid-hidden',url='https://note.com/search?context=magazine&q=AI';
+  f.ui.update(settings,url);assert.equal(f.card.hasAttribute(marker),true);assert.equal(f.doc.getElementById('free-magazine').hasAttribute(marker),false);assert.equal(f.card.parentElement.hasAttribute(marker),false);
+  for(const override of [{enabled:false},{hidePaidArticles:false}]){f.ui.update({...settings,...override},url);assert.equal(f.card.hasAttribute(marker),false);f.ui.update(settings,url);}
+  f.ui.update(settings,'https://note.com/notes/purchased');assert.equal(f.card.hasAttribute(marker),false);f.ui.update(settings,url);f.ui.stop();assert.equal(f.card.hasAttribute(marker),false);
+ }
+});
+test('許可したマガジン作者は価格付きでも表示し、解除と作者の変更を再評価',()=>{
+ const f=magazineFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true,authorDisplayRevision:0,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]}),url='https://note.com/search?context=magazine&q=AI',marker='data-hikikomori-note-paid-hidden';
+ f.ui.update(settings,url);assert.equal(f.card.hasAttribute(marker),false);f.ui.update({...settings,authorDisplayRules:[]},url);assert.equal(f.card.hasAttribute(marker),true);
+ f.ui.update(settings,url);assert.equal(f.card.hasAttribute(marker),false);f.card.querySelector('a').href='https://note.com/other/m/m123';f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.card.hasAttribute(marker),true);
+});
+test('後挿入のマガジンと価格変更に追従し、無料化・未知構造・本文・外部リンクを誤判定しない',()=>{
+ const url='https://note.com/search?context=magazine&q=AI',marker='data-hikikomori-note-paid-hidden';
+ for(const change of [f=>{f.price.textContent='¥0';},f=>{f.price.remove();},f=>{f.card.className='unknown';},f=>{f.card.querySelector('a').href='https://other.test/creator/m/m123';},f=>{f.card.querySelector('a').href='https://note.com/creator';},f=>{const body=f.doc.createElement('article');f.card.parentElement.append(body);body.append(f.card);},f=>{f.price.parentElement.className='unknown';}]){
+  const f=magazineFixture(),settings=f.core.readSettings({...groups(),hidePaidArticles:true});f.ui.update(settings,url);assert.equal(f.card.hasAttribute(marker),true);change(f);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.card.hasAttribute(marker),false);
+ }
+ const f=magazineFixture(),settings=f.core.readSettings({...groups(),hidePaidArticles:true}),parent=f.card.parentElement;f.card.remove();f.ui.update(settings,url);parent.append(f.card);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.card.hasAttribute(marker),true);
+});
