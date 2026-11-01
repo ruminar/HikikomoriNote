@@ -34,8 +34,16 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (!["select-tag-group", "add-current-tag", "add-current-user", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    if (!["select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
     operation = (async () => {
+      if (message.type === "add-current-magazine") {
+        const patch = message.patch, page = await port.currentMagazinePage(sender, patch?.pageUrl);
+        if (page?.type !== "magazine" || typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase() || page.magazineId !== patch.magazineId) throw Object.assign(new Error("現在のマガジンを確認できません。"), { code: "CONFLICT" });
+        return controller.tag({ type: "ADD_MAGAZINE", groupId: patch.groupId, userId: patch.userId, magazineId: patch.magazineId, displayName: patch.displayName }, { requireEnabled: true, currentUser: page.user, currentMagazineId: page.magazineId, validateCurrent: async () => {
+          const current = await port.currentMagazinePage(sender, patch.pageUrl);
+          return current?.type === "magazine" && current.user.toLowerCase() === page.user.toLowerCase() && current.magazineId === page.magazineId;
+        } });
+      }
       if (message.type === "add-current-user") {
         const patch = message.patch, page = await port.currentAuthorPage(sender, patch?.pageUrl);
         if (page?.type !== "profile" || typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase()) throw Object.assign(new Error("現在の作者ページを確認できません。"), { code: "CONFLICT" });

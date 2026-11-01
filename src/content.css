@@ -174,6 +174,15 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 }
 .hikikomori-note-profile-actions .hikikomori-note-navigation-following { flex: 1; min-width: 0; width: auto; min-height: 40px; }
 .hikikomori-note-favorite-toggle[aria-expanded="true"] { background: rgba(128,128,128,.18); }
+.hikikomori-note-magazine-toggle {
+  box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 48px; width: 48px; min-height: 48px; padding: 8px; margin: 0;
+  border: 1px solid currentColor; border-radius: 8px; background: transparent; color: inherit; cursor: pointer;
+}
+.hikikomori-note-magazine-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.hikikomori-note-book-icon { display: inline-block; vertical-align: -.2em; flex-shrink: 0; margin-right: .4em; }
+.hikikomori-note-magazine-toggle .hikikomori-note-book-icon { margin: 0; }
+@media print { .hikikomori-note-magazine-toggle { display: none !important; } }
 .hikikomori-note-author-profile select { max-width: 100%; }
 .hikikomori-note-author-dialog :focus-visible, .hikikomori-note-author-profile :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 @media print { .hikikomori-note-author-profile, .hikikomori-note-author-dialog { display: none !important; } }

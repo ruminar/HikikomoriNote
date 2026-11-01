@@ -12,6 +12,11 @@
   }
   const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
     settingsUrl: () => homeDestination(),
+    async addCurrentMagazine(groupId, userId, magazineId, displayName) {
+      const before = revision;
+      const value = await platform.addCurrentMagazine(groupId, userId, magazineId, displayName);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
+    },
     async addCurrentUser(groupId, userId, displayName) {
       const before = revision;
       const value = await platform.addCurrentUser(groupId, userId, displayName);
@@ -100,7 +105,7 @@
   }
   function homeDestination() {
     const page = core.pageKind(location.href);
-    const tags = core.usesTags(settings) && ["following", "tag", "search", "topic"].includes(page?.type);
+    const tags = core.usesTags(settings) && ["following", "tag", "search", "topic", "magazine"].includes(page?.type);
     return platform.homeUrl() + (page?.type === "profile" ? "#authors" : tags ? "#tags" : core.modeOf(settings) === "social" ? "#settings" : "");
   }
   function checkHome() {

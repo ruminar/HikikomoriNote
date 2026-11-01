@@ -93,7 +93,14 @@
     tags.forEach((tag, index) => {
       const row = document.createElement("li"); row.className = "tag-row"; row.draggable = true;
       const name = document.createElement("a");
-      name.textContent = typeof tag === "string" ? core.favoriteLabel(tag) : tag.displayName ? `＠${tag.displayName} (${tag.userId})` : `＠${tag.userId}`;
+      name.textContent = typeof tag === "string" ? core.favoriteLabel(tag) : tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : tag.displayName ? `＠${tag.displayName} (${tag.userId})` : `＠${tag.userId}`;
+      if (tag?.type === "magazine") {
+        const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), path = document.createElementNS(ns, "path");
+        svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "20"); svg.setAttribute("height", "20");
+        svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor"); svg.setAttribute("stroke-width", "1.6");
+        svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false"); svg.setAttribute("class", "favorite-book-icon");
+        path.setAttribute("d", core.bookIconPath); svg.append(path); name.prepend(svg);
+      }
       name.href = core.favoriteUrl(tag); name.setAttribute("target", "_self");
       name.setAttribute("title", name.textContent); name.className = "tag-name"; row.append(name);
       function action(text, label, operation, edge = false) {
@@ -350,7 +357,7 @@
     const json = byId("settings-json").value, expectedToken = core.settingsToken(state);
     const version = JSON.parse(json).schemaVersion;
     const oldFormat = (version === 1 ? " このJSONには作者の表示設定がなく、現在の作者設定も解除されます。" : "") +
-      (version < 5 && state.tagGroups.some(g => g.tags.some(item => typeof item !== "string")) ? " このJSONにはお気に入りユーザーがなく、現在のお気に入りユーザーも解除されます。" : "");
+      (version < 5 && state.tagGroups.some(g => g.tags.some(item => typeof item !== "string")) ? " このJSONには作者・マガジンのお気に入りが含まれないため、現在登録されている作者・マガジンのお気に入りも解除されます。" : "");
     if (!confirm(`現在の設定とお気に入り・作者の表示設定をすべて置き換えます。未保存の入力も破棄します。${oldFormat}読み込みますか？`)) return;
     void perform(() => platform.importSettings({ json, expectedToken }), { kind: "import" });
   };

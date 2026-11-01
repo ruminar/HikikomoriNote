@@ -432,7 +432,7 @@ test("アダプターは自拡張のhome.htmlだけを設定メッセージ送�
 });
 test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホーム全体を隠さない", () => {
   const m = JSON.parse(source("manifest.json"));
-  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.7");
+  assert.equal(m.manifest_version, 3); assert.equal(m.version, "0.2.8");
   assert.deepEqual(m.permissions, ["storage", "declarativeNetRequestWithHostAccess"]);
   assert.deepEqual(m.host_permissions, ["https://note.com/*"]);
   assert.deepEqual(m.web_accessible_resources, [{ resources: ["home.html"], matches: ["https://note.com/*"] }]);
@@ -476,7 +476,7 @@ test('社会復帰でも検索の記事タブへの新着復帰を行い、タ�
 test('タグメニューを使う通常画面からだけタグ管理へ直行。記事と管理画面は設定を開く',async()=>{
  for(const mode of ['normal','social','severe']){
   let actions;const f=contentFixture({mode},{ui:{create:(doc,win,value)=>{actions=value;return {update(){}};}}});await flush();
-  for(const path of ['/following','/tag/AI','/hashtag/AI','/search?q=AI','/topic/education_learning']){
+  for(const path of ['/following','/tag/AI','/hashtag/AI','/search?q=AI','/topic/education_learning','/kinokoro/m/m95cee8dfaa5e','/kinokoro/m/m95cee8dfaa5e/archive','/kinokoro/m/m95cee8dfaa5e/hashtag']){
    f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='normal'?'#tags':mode==='social'?'#settings':''));
   }
   for(const path of ['/ruminar/n/n123','/dashboard','/settings/account']){f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='social'?'#settings':''));}

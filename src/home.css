@@ -58,3 +58,5 @@ hr { border: 0; border-top: 1px solid #d9dfd5; margin: 24px 0; }
 .author-list { list-style: none; padding: 0; }
 .author-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid #d9dfd5; }
 .author-row a { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+/* お気に入りマガジンは外部配信不要の輪郭SVGで区別する。 */
+.favorite-book-icon { display: inline-block; vertical-align: -.2em; margin-right: .4em; }

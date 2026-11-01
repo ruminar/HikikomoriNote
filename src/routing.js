@@ -82,7 +82,7 @@
         const imported = core.parseSettingsExport(patch.json);
         const previous = core.readSettings(await port.load());
         if (core.settingsToken(previous) !== patch.expectedToken) throw failure("別の画面で設定が変更されました。状態を再確認し、もう一度読み込んでください。", "CONFLICT");
-        const next = { ...imported, tagSchemaVersion: imported.tagGroups.some(g => g.tags.some(t => typeof t !== "string")) ? 3 : 2,
+        const next = { ...imported, tagSchemaVersion: core.favoriteSchema(imported.tagGroups),
           groupSelectionRevision: increment(previous.groupSelectionRevision), tagGroupsRevision: increment(previous.tagGroupsRevision), authorDisplayRevision: increment(previous.authorDisplayRevision) };
         await port.setRules(rules(next.enabled, next.dashboardDisabled, core.modeOf(next)));
         try { await port.store(next); }
@@ -116,12 +116,13 @@
         return core.readSettings(next);
       }),
       tag: (operation, options = {}) => run(async () => {
-        if (!operation || !["ADD_TAG", "ADD_USER", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
-            Object.keys(operation).some(key => !["type", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "displayName"].includes(key)) ||
+        if (!operation || !["ADD_TAG", "ADD_USER", "ADD_MAGAZINE", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
+            Object.keys(operation).some(key => !["type", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "magazineId", "displayName"].includes(key)) ||
             !core.groupIds.includes(operation.groupId)) throw new Error("グループを指定して画面を再読み込みしてください。");
         if (operation.type === "ADD_TAG") core.normalizeTag(operation.tag);
         if (["REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG"].includes(operation.type)) core.favorite(operation.tag);
         if (operation.type === "ADD_USER" && (!options.validateCurrent || !options.currentUser || core.authorId(operation.userId).toLowerCase() !== options.currentUser.toLowerCase())) throw new Error("作者ページから登録してください。");
+        if (operation.type === "ADD_MAGAZINE" && (!options.validateCurrent || !options.currentUser || core.authorId(operation.userId).toLowerCase() !== options.currentUser.toLowerCase() || operation.magazineId !== options.currentMagazineId)) throw new Error("マガジンのページから登録してください。");
         if (operation.type === "RENAME_TAG_GROUP") core.normalizeGroupName(operation.name);
         const loaded = await port.load(), raw = loaded === undefined ? core.defaultSettings() : loaded;
         const settings = core.readSettings(raw);
@@ -134,7 +135,7 @@
         const group = groups.find(item => item.id === operation.groupId);
         async function storeGroups(patch = {}) {
           if (options.validateCurrent && !await options.validateCurrent()) throw failure("現在の作者が変わりました。ページを再確認してください。", "CONFLICT");
-          const next = { ...storedValue(raw, settings), tagSchemaVersion: groups.some(g => g.tags.some(t => typeof t !== "string")) ? 3 : settings.tagSchemaVersion, tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision), ...patch };
+          const next = { ...storedValue(raw, settings), tagSchemaVersion: core.favoriteSchema(groups, settings.tagSchemaVersion), tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision), ...patch };
           if (JSON.stringify(next).length > 1048576) throw new Error("設定データが大きすぎます。登録を整理してください。");
           await port.store(next); return core.readSettings(next);
         }
@@ -148,10 +149,10 @@
           if (name === group.name) return settings;
           group.name = name; return storeGroups();
         }
-        const tag = operation.type === "ADD_USER" ? core.favoriteUser({ type: "user", userId: operation.userId, displayName: operation.displayName }) : operation.type === "ADD_TAG" ? core.normalizeTag(operation.tag) : core.favorite(operation.tag);
+        const tag = operation.type === "ADD_MAGAZINE" ? core.favoriteMagazine({ type: "magazine", userId: operation.userId, magazineId: operation.magazineId, displayName: operation.displayName }) : operation.type === "ADD_USER" ? core.favoriteUser({ type: "user", userId: operation.userId, displayName: operation.displayName }) : operation.type === "ADD_TAG" ? core.normalizeTag(operation.tag) : core.favorite(operation.tag);
         const tags = group.tags;
         const key = core.favoriteKey(tag), index = tags.findIndex(item => core.favoriteKey(item) === key);
-        if (["ADD_TAG", "ADD_USER"].includes(operation.type)) {
+        if (["ADD_TAG", "ADD_USER", "ADD_MAGAZINE"].includes(operation.type)) {
           if (index >= 0) throw failure("このお気に入りは既に登録されています。", "CONFLICT");
           tags.push(tag);
         } else {

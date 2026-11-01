@@ -1729,7 +1729,7 @@ test('作者お気に入りは実際の背景メッセージで現在ページ�
 
 test('旧JSONでお気に入りユーザーが解除されることを確認し、キャンセルなら保存しない',async()=>{
  const h=homeFixture({state:{...groups(['A',favoriteCreator]),tagSchemaVersion:3}});await flush();const c=h.c.HikikomoriNote,d=JSON.parse(c.exportSettings({...settingsData(),...groups(['old'])}));d.schemaVersion=4;for(const g of d.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}
- h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/お気に入りユーザーも解除/);assert.deepEqual(h.state.tagGroups[0].tags,['A',favoriteCreator]);
+ h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/作者・マガジンのお気に入りも解除/);assert.deepEqual(h.state.tagGroups[0].tags,['A',favoriteCreator]);
 });
 
 test('作者お気に入りの＠は通常だけ初期閉状態で出し、Escapeでフォーカスを戻し、作者移動で開状態を引き継がない',()=>{
@@ -1740,12 +1740,102 @@ test('作者お気に入りの＠は通常だけ初期閉状態で出し、Escap
  f.ui.stop();assert.equal(replacement.isConnected,false);assert.match(source('src/content.css'),/\.hikikomori-note-favorite-profile\[hidden\]\s*\{ display: none !important;/);
 });
 
-test('形式5の予約マガジンを含むJSONは全体を未対応として拒否し、保存・転送ルールを変更しない',async()=>{
- const f=fixture({...groups(['keep'])});await f.controller.tag(addFavorite(),favoriteOptions());await f.controller.getState();const before=plain(f.stored),rules=plain(f.rules),writes=f.writes,d=JSON.parse(f.core.exportSettings(await f.controller.getState()));
- d.settings.tagGroups[2].items.push({type:'magazine',userId:'kinokoro',magazineId:'m95cee8dfaa5e',displayName:'なんのはなしですかマガジン【きのころコミック】'});const json=JSON.stringify(d);
- assert.throws(()=>f.core.parseSettingsExport(json),{code:'UNSUPPORTED_FEATURE'});await assert.rejects(f.controller.importSettings({json,expectedToken:f.core.settingsToken(await f.controller.getState())}),{code:'UNSUPPORTED_FEATURE'});assert.equal(f.writes,writes);assert.deepEqual(f.stored,before);assert.deepEqual(f.rules,rules);
- const exported=JSON.parse(f.core.exportSettings(await f.controller.getState()));assert.equal(exported.schemaVersion,5);assert.deepEqual(exported.settings.tagGroups[0].items,[{type:'tag',tag:'keep'},favoriteCreator]);
+const favoriteMagazine=Object.freeze({type:'magazine',userId:'kinokoro',magazineId:'m95cee8dfaa5e',displayName:'きのころコミック'});
+const magazineUrl='https://note.com/kinokoro/m/m95cee8dfaa5e';
+const addMagazine=(groupId='group1',item=favoriteMagazine)=>({type:'ADD_MAGAZINE',groupId,userId:item.userId,magazineId:item.magazineId,displayName:item.displayName});
+const magazineOptions=()=>({...favoriteOptions(),currentMagazineId:favoriteMagazine.magazineId});
+
+test('マガジンは既知のURLだけ識別し、IDからURLを生成する。タグ・作者とは重複しない',()=>{
+ const c=fixture().core;
+ for(const tail of ['', '/', '/archive','/hashtag?tag=AI'])assert.deepEqual(plain(c.pageKind(magazineUrl+tail)),{type:'magazine',user:'kinokoro',magazineId:'m95cee8dfaa5e'});
+ for(const url of [magazineUrl+'/unknown',magazineUrl.replace('/m/m','/m/n'),magazineUrl.replace('https://','http://'),magazineUrl.replace('note.com','evil.test'),magazineUrl.replace('kinokoro','settings')])assert.equal(c.pageKind(url),null);
+ assert.equal(c.favoriteUrl(favoriteMagazine),magazineUrl);assert.notEqual(c.favoriteKey(favoriteMagazine),c.favoriteKey(favoriteCreator));assert.notEqual(c.favoriteKey(favoriteMagazine),c.favoriteKey('きのころコミック'));
+ for(const patch of [{magazineId:'m1/../../evil'},{magazineId:'m'},{userId:'settings'},{displayName:'bad\nname'},{url:'https://evil.test'}])assert.throws(()=>c.favoriteMagazine({...favoriteMagazine,...patch}));
 });
-test('移行画面も予約マガジンの読込を無効化し、貼り付けたJSONと現在の設定を保持する',async()=>{
- const h=homeFixture({state:{...groups(['keep',favoriteCreator]),tagSchemaVersion:3}});await flush();const before=plain(h.state),d=JSON.parse(h.c.HikikomoriNote.exportSettings(h.c.HikikomoriNote.readSettings(h.state)));d.settings.tagGroups[1].items.push({type:'magazine',userId:'kinokoro',magazineId:'m95cee8dfaa5e',displayName:'マガジン'});const json=JSON.stringify(d);h.nodes.get('settings-json').value=json;h.nodes.get('settings-json').oninput();assert.equal(h.nodes.get('import-settings').disabled,true);assert.match(h.nodes.get('transfer-validation').textContent,/マガジン対応版/);assert.equal(h.nodes.get('settings-json').value,json);assert.deepEqual(h.state,before);
+
+test('マガジンを混在順序のまま追加・並べ替え・移動・削除し、選択グループと作者ルールを変えない',async()=>{
+ const f=fixture({...groups(['A',favoriteCreator,'B']),tagSchemaVersion:3,selectedTagGroupId:'group3'});await f.controller.tag(addMagazine(),magazineOptions());
+ assert.equal(f.stored.tagSchemaVersion,4);assert.deepEqual(f.stored.tagGroups[0].tags,['A',favoriteCreator,'B',favoriteMagazine]);assert.equal(f.stored.selectedTagGroupId,'group3');assert.equal(f.stored.groupSelectionRevision,0);assert.deepEqual(plain((await f.controller.getState()).authorDisplayRules),[]);
+ await assert.rejects(f.controller.tag(addMagazine('group1',{...favoriteMagazine,userId:'KINOKORO'}),magazineOptions()),/既に登録/);await f.controller.tag(addMagazine('group2'),magazineOptions());
+ await f.controller.tag({type:'MOVE_TAG',groupId:'group1',tag:favoriteMagazine,beforeTag:favoriteCreator});assert.deepEqual(f.stored.tagGroups[0].tags,['A',favoriteMagazine,favoriteCreator,'B']);
+ await assert.rejects(f.controller.tag({type:'TRANSFER_TAG',groupId:'group1',targetGroupId:'group2',tag:favoriteMagazine}),/既に登録/);
+ await f.controller.tag({type:'TRANSFER_TAG',groupId:'group1',targetGroupId:'group4',tag:favoriteMagazine});await f.controller.tag({type:'REMOVE_TAG',groupId:'group4',tag:favoriteMagazine});assert.deepEqual(f.stored.tagGroups[0].tags,['A',favoriteCreator,'B']);assert.deepEqual(f.stored.tagGroups[3].tags,[]);
+ const stored=plain(f.stored);await f.restart().getState();assert.deepEqual(f.stored,stored);
+});
+
+test('マガジン保存の失敗・モード・OFF・偽登録を拒否し、既存キューで競合を直列化する',async()=>{
+ for(const patch of [{enabled:false},{mode:'social'},{mode:'severe'}]){const f=fixture(patch);await assert.rejects(f.controller.tag(addMagazine(),magazineOptions()));assert.equal(f.writes,0);}
+ const f=fixture({...groups(['A'])});for(const options of [{},{...magazineOptions(),currentMagazineId:'mOther'},{...magazineOptions(),validateCurrent:async()=>false}])await assert.rejects(f.controller.tag(addMagazine(),options));assert.equal(f.writes,0);
+ f.options.fail=true;await assert.rejects(f.controller.tag(addMagazine(),magazineOptions()));assert.deepEqual(f.stored.tagGroups[0].tags,['A']);f.options.fail=false;
+ await Promise.all([f.controller.tag(addMagazine(),magazineOptions()),f.controller.tag(addFavorite(),favoriteOptions()),f.controller.save({hidePaidArticles:true})]);assert.deepEqual(f.stored.tagGroups[0].tags,['A',favoriteMagazine,favoriteCreator]);assert.equal(f.stored.hidePaidArticles,true);
+});
+
+test('形式5を維持して3種類を順序通り往復し、不正マガジンは全置換前に全体を拒否する',async()=>{
+ const f=fixture({...groups(['keep',favoriteCreator,favoriteMagazine]),tagSchemaVersion:4}),json=f.core.exportSettings(await f.controller.getState()),d=JSON.parse(json);assert.equal(d.schemaVersion,5);assert.deepEqual(d.settings.tagGroups[0].items,[{type:'tag',tag:'keep'},favoriteCreator,favoriteMagazine]);
+ const target=fixture();await target.controller.importSettings({json,expectedToken:target.core.settingsToken(target.stored)});assert.deepEqual(target.stored.tagGroups[0].tags,['keep',favoriteCreator,favoriteMagazine]);assert.equal(target.stored.tagSchemaVersion,4);assert.equal(target.core.exportSettings(await target.controller.getState()),json);
+ const before=plain(target.stored),writes=target.writes,rules=plain(target.rules);
+ for(const change of [x=>x.items.push({...favoriteMagazine,userId:'KINOKORO'}),x=>x.items.push('raw tag'),x=>{x.items[2].magazineId='../bad';},x=>{x.items[2].extra=true;},x=>{x.items[2].type='unknown';}]){const bad=JSON.parse(json);change(bad.settings.tagGroups[0]);await assert.rejects(target.controller.importSettings({json:JSON.stringify(bad),expectedToken:target.core.settingsToken(before)}));assert.deepEqual(target.stored,before);assert.equal(target.writes,writes);assert.deepEqual(target.rules,rules);}
+ const broken=fixture({...before,tagGroups:[{id:'group1',name:'',tags:[{...favoriteMagazine,extra:true}]}]});await broken.controller.save({dashboardDisabled:true});assert.equal(broken.stored.tagGroups[0].tags[0].extra,true);await assert.rejects(broken.controller.tag(addMagazine(),magazineOptions()));
+});
+
+function favoriteMagazineUiFixture(actions={},paid=false){
+ const button=paid?'<div><button data-name="Button" id="official-buy"></button></div>':'<button data-name="ToggleButton" aria-pressed="false" id="official-follow"></button>';
+ const f=uiFixture(`<main><div id="magazine-root"><div class="flex flex-col gap-4 px-4 md:row-span-2 md:px-0" id="magazine-details"><div><h1></h1></div><div id="mobile-actions"><div class="flex flex-wrap justify-end gap-4" id="mobile-row"><div class="min-w-0 flex-1">${button.replaceAll('official-', 'mobile-')}</div></div></div><div id="desktop-actions"><div class="flex flex-wrap justify-end gap-4" id="desktop-row"><div class="min-w-0 flex-1">${button}</div></div></div></div><dl><a aria-label="きのころのクリエイターページへ" href="https://note.com/kinokoro"></a></dl></div><nav><a data-id="NavigationItem" href="https://note.com/kinokoro/m/m95cee8dfaa5e"></a></nav></main>`,actions);
+ f.doc.querySelector('h1').textContent='きのころコミック';for(const b of f.doc.querySelectorAll('button'))b.textContent=paid?'購入手続きへ':'フォロー';f.doc.getElementById('mobile-actions').hidden=true;return f;
+}
+
+test('本アイコンは公式フォローの隣で初期閉。選択先だけに登録し、公式操作・閲覧グループを変更しない',async()=>{
+ let state,calls=[];const f=favoriteMagazineUiFixture({async addCurrentMagazine(groupId,userId,magazineId,displayName){calls.push([groupId,userId,magazineId,displayName]);state={...state,tagSchemaVersion:4,tagGroups:state.tagGroups.map(g=>({...g,tags:g.id===groupId?[...g.tags,favoriteMagazine]:g.tags}))};f.ui.update(state,magazineUrl);},async refresh(){}});state=f.core.readSettings({...groups([favoriteCreator]),tagSchemaVersion:3,selectedTagGroupId:'group3'});f.ui.update(state,magazineUrl);
+ const toggle=f.doc.querySelector('[class~="hikikomori-note-magazine-toggle"]'),panel=f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]');assert.ok(toggle.querySelector('svg'));assert.equal(toggle.parentElement,f.doc.getElementById('desktop-row'));assert.equal(toggle.parentElement.children[0],toggle);assert.equal(panel.hidden,true);assert.equal(toggle.getAttribute('aria-expanded'),'false');assert.equal(f.doc.querySelector('[class="hikikomori-note-navigation"]'),null);
+ const official=f.doc.getElementById('official-follow');assert.equal(official.getAttribute('aria-pressed'),'false');assert.equal(official.getAttribute('data-hikikomori-note-owned'),null);
+ toggle.onclick();const select=panel.querySelector('select'),save=panel.querySelector('button');assert.equal(select.value,'');assert.equal(save.disabled,true);select.value='group1';select.onchange();assert.equal(save.disabled,false);await save.onclick();assert.deepEqual(calls,[['group1','kinokoro','m95cee8dfaa5e','きのころコミック']]);assert.equal(save.textContent,'登録済み');assert.equal(save.disabled,true);assert.equal(state.selectedTagGroupId,'group3');assert.equal(official.textContent,'フォロー');
+ select.value='group2';select.onchange();assert.equal(save.disabled,false);select.focus();panel.fire('keydown',{key:'Escape'});assert.equal(panel.hidden,true);assert.equal(f.doc.activeElement,toggle);
+});
+
+test('狭幅では本アイコンを表示中の公式列へ移す。フォロー中・有料にも対応し、DOM再生成と離脱で撤去',()=>{
+ for(const paid of [false,true]){const f=favoriteMagazineUiFixture({async addCurrentMagazine(){}},paid),state=f.core.readSettings({...groups()});if(!paid)f.doc.getElementById('official-follow').textContent='フォロー中';f.ui.update(state,magazineUrl);const toggle=f.doc.querySelector('[class~="hikikomori-note-magazine-toggle"]'),panel=f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]');assert.ok(toggle);assert.equal(toggle.parentElement.children[0],toggle);toggle.onclick();const select=panel.querySelector('select');select.value='group4';select.onchange();
+ f.doc.getElementById('desktop-actions').hidden=true;f.doc.getElementById('mobile-actions').hidden=false;f.ui.update(state,magazineUrl);assert.equal(toggle.parentElement,f.doc.getElementById('mobile-row'));assert.equal(toggle.parentElement.children[0],toggle);assert.equal(panel.hidden,false);assert.equal(select.value,'group4');assert.equal(f.doc.querySelectorAll('[class~="hikikomori-note-magazine-toggle"]').length,1);
+ panel.remove();f.ui.update(state,magazineUrl);assert.equal(toggle.isConnected,false);const replacement=f.doc.querySelector('[class~="hikikomori-note-magazine-toggle"]');assert.ok(replacement);assert.equal(replacement.getAttribute('aria-expanded'),'false');f.ui.update(state,'https://note.com/kinokoro');assert.equal(replacement.isConnected,false);
+ }
+});
+
+test('マガジンの未知DOM・別作者・本文・モード/OFF・停止では登録UIを安全に出さない',()=>{
+ for(const change of [f=>{f.doc.getElementById('magazine-details').className='unknown';},f=>{f.doc.querySelector('a').href='https://note.com/other';},f=>{f.doc.querySelector('h1').textContent='';},f=>{f.doc.getElementById('official-follow').textContent='unknown';},f=>{const a=f.doc.createElement('article');f.doc.root.append(a);a.append(f.doc.getElementById('magazine-root'));}]){const f=favoriteMagazineUiFixture({async addCurrentMagazine(){}});change(f);f.ui.update(f.core.readSettings({...groups()}),magazineUrl);assert.equal(f.doc.querySelector('[class~="hikikomori-note-magazine-toggle"]'),null);}
+ const f=favoriteMagazineUiFixture({async addCurrentMagazine(){}}),state=f.core.readSettings({...groups()});for(const patch of [{enabled:false},{mode:'social'},{mode:'severe'}]){f.ui.update(state,magazineUrl);const toggle=f.doc.querySelector('[class~="hikikomori-note-magazine-toggle"]');assert.ok(toggle);f.ui.update({...state,...patch},magazineUrl);assert.equal(toggle.isConnected,false);}f.ui.update(state,magazineUrl);f.ui.stop();assert.equal(f.doc.querySelector('[class~="hikikomori-note-magazine-toggle"]'),null);
+});
+
+test('マガジン登録の未確認は再確認まで再送せず、別マガジン移動で欄を作り直す',async()=>{
+ let calls=0;const f=favoriteMagazineUiFixture({async addCurrentMagazine(){calls++;throw Object.assign(Error('結果未確認'),{code:'UNCONFIRMED'});},async refresh(){}}),state=f.core.readSettings({...groups()});f.ui.update(state,magazineUrl);const panel=f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),select=panel.querySelector('select'),save=panel.querySelector('button');select.value='group1';select.onchange();await save.onclick();await save.onclick();assert.equal(calls,1);assert.equal(save.disabled,true);await panel.querySelectorAll('button')[1].onclick();assert.equal(save.disabled,false);
+ f.ui.update(state,magazineUrl.replace('m95cee8dfaa5e','mOther'));assert.equal(panel.isConnected,false);assert.equal(f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),null);f.doc.querySelector('[data-id="NavigationItem"]').href=magazineUrl.replace('m95cee8dfaa5e','mOther');f.ui.update(state,magazineUrl.replace('m95cee8dfaa5e','mOther'));assert.equal(f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]').hidden,true);
+});
+
+test('マガジンのお気に入りは左メニューで本SVG・新しいタブ、設定では同じタブでID付きリンク',async()=>{
+ const state={...groups(['A',favoriteMagazine,favoriteCreator]),tagSchemaVersion:4},f=uiFixture(sidebarHtml);f.ui.update(f.core.readSettings(state),'https://note.com/following');const link=f.doc.querySelector('ul').children[1].querySelector('a');assert.equal(link.href,magazineUrl);assert.equal(link.getAttribute('target'),'_blank');assert.equal(link.getAttribute('rel'),'noopener noreferrer');assert.ok(link.querySelector('svg'));assert.equal(link.textContent,'きのころコミック');
+ const h=homeFixture({state});await flush();const rows=h.nodes.get('edit-tags').children;assert.equal(rows[1].children[0].textContent,'きのころコミック (kinokoro/m95cee8dfaa5e)');assert.ok(rows[1].children[0].querySelector('svg'));assert.equal(rows[1].children[0].href,magazineUrl);assert.equal(rows[1].children[0].getAttribute('target'),'_self');rows[1].querySelector('button').onclick();await flush();assert.deepEqual(h.state.tagGroups[0].tags,[favoriteMagazine,'A',favoriteCreator]);
+ h.nodes.get('export-settings').onclick();await flush();assert.equal(JSON.parse(h.nodes.get('settings-json').value).schemaVersion,5);assert.equal(JSON.parse(h.nodes.get('settings-json').value).settings.tagGroups[0].items[0].type,'magazine');
+});
+
+test('形式5のマガジンを移行画面で読み込める。不正なIDは読み込み無効で保存しない',async()=>{
+ const h=homeFixture();await flush();const c=h.c.HikikomoriNote,d=JSON.parse(c.exportSettings(c.readSettings(h.state)));d.settings.tagGroups[1].items.push({...favoriteMagazine});h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();assert.equal(h.nodes.get('import-settings').disabled,false);h.nodes.get('import-settings').onclick();await flush();assert.deepEqual(h.state.tagGroups[1].tags,[favoriteMagazine]);
+ const before=plain(h.state);d.settings.tagGroups[1].items[0].magazineId='bad';h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();assert.equal(h.nodes.get('import-settings').disabled,true);assert.deepEqual(h.state,before);
+});
+test('マガジン登録メッセージは現在のタブ・保存直前・フレームを照合する',async()=>{
+ let tab={url:magazineUrl},failed=false;
+ const c=vm.createContext({URL,chrome:{runtime:{id:'self'},tabs:{get:async()=>{if(failed)throw Error('closed');return tab;}}}});for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),c);
+ const check=c.HikikomoriNoteBackgroundPlatform.currentMagazinePage,sender={id:'self',frameId:0,tab:{id:1},url:magazineUrl};assert.equal((await check(sender,magazineUrl)).magazineId,'m95cee8dfaa5e');
+ for(const invalid of [{...sender,id:'other'},{...sender,frameId:1},{...sender,url:'https://other.test'},{...sender,tab:{}}])assert.equal(await check(invalid,magazineUrl),null);
+ for(const claimed of [undefined,'bad',magazineUrl+'/archive','https://other.test'])assert.equal(await check(sender,claimed),null);tab.pendingUrl=magazineUrl+'/archive';assert.equal(await check(sender,magazineUrl),null);delete tab.pendingUrl;failed=true;assert.equal(await check(sender,magazineUrl),null);
+ const f=fixture();let handler,checks=0,change=false;
+ const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:s=>s.home===true,isNoteSender:s=>s.note===true,currentMagazinePage:async()=>{checks++;return {type:'magazine',user:'kinokoro',magazineId:change&&checks>1?'mOther':'m95cee8dfaa5e'};}};
+ const bg=vm.createContext({console,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>f.controller}});vm.runInContext(source('src/background.js'),bg);await flush();
+ const patch={...favoriteMagazine,groupId:'group2',pageUrl:magazineUrl};delete patch.type;
+ const send=(patch,sender={note:true},type='add-current-magazine')=>new Promise(resolve=>{if(handler({type,patch},sender,resolve)===false)resolve(null);});
+ assert.equal(await send(patch,{home:true}),null);assert.equal(await send(patch,{note:false}),null);assert.equal((await send({...patch,magazineId:'mOther'})).ok,false);assert.equal((await send({...patch,userId:'other'})).ok,false);assert.equal(f.writes,0);
+ const answer=await send(patch);assert.equal(answer.ok,true,JSON.stringify(answer));assert.deepEqual(f.stored.tagGroups[1].tags,[favoriteMagazine]);checks=0;change=true;assert.equal((await send({...patch,groupId:'group3'})).ok,false);assert.equal(f.writes,1);
+ assert.equal((await send(addMagazine('group3'),{home:true},'tag-operation')).ok,false);assert.equal(f.writes,1);
+});
+
+test('旧JSON全置換はマガジンの解除も確認し、キャンセルでは現在の設定を保持する',async()=>{
+ const h=homeFixture({state:{...groups([favoriteMagazine]),tagSchemaVersion:4}});await flush();const c=h.c.HikikomoriNote,d=JSON.parse(c.exportSettings(c.readSettings({...settingsData(),...groups(['old'])})));d.schemaVersion=4;for(const g of d.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}
+ h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/作者・マガジンのお気に入りも解除/,h.nodes.get('transfer-validation').textContent+' '+h.nodes.get('status').textContent);assert.deepEqual(h.state.tagGroups[0].tags,[favoriteMagazine]);
 });

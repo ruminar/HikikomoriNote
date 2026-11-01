@@ -41,6 +41,7 @@
     author: operation => request("author-operation", operation),
     currentAuthor: (operation, source) => request("current-author-operation", { operation, source, pageUrl: globalThis.location.href }),
     addCurrentUser: (groupId, userId, displayName) => request("add-current-user", { groupId, userId, displayName, pageUrl: globalThis.location.href }),
+    addCurrentMagazine: (groupId, userId, magazineId, displayName) => request("add-current-magazine", { groupId, userId, magazineId, displayName, pageUrl: globalThis.location.href }),
     tag: operation => request("tag-operation", operation),
     addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision, pageUrl: globalThis.location.href }),
     selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),
@@ -65,6 +66,16 @@
       url: api.runtime.getURL("home.html") + (activationFailed ? "#activation-failed" : "")
     }),
     isNoteSender,
+    async currentMagazinePage(sender, pageUrl) {
+      if (!isNoteSender(sender)) return null;
+      try {
+        const tab = await api.tabs.get(sender.tab.id), current = new URL(tab.url);
+        if (current.origin !== "https://note.com" || new URL(pageUrl).href !== current.href ||
+            (tab.pendingUrl && new URL(tab.pendingUrl).href !== current.href)) return null;
+        const page = globalThis.HikikomoriNote.pageKind(current.href);
+        return page?.type === "magazine" ? page : null;
+      } catch { return null; }
+    },
     async currentAuthorPage(sender, pageUrl) {
       if (!isNoteSender(sender)) return null;
       try {
