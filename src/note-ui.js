@@ -64,19 +64,32 @@
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
     let favoriteProfile;
     function syncFavoriteProfile(settings) {
-      const owner = settings.enabled && core.usesTags(settings) ? authorControls.profileOwner() : null;
+      const owner = settings.enabled && core.usesTags(settings) && actions.addCurrentUser ? authorControls.profileOwner() : null;
       if (favoriteProfile && (!owner || owner.userId !== favoriteProfile.owner.userId || owner.host !== favoriteProfile.owner.host || !favoriteProfile.block.isConnected)) {
-        favoriteProfile.block.remove(); favoriteProfile = undefined;
+        favoriteProfile.toggle.remove(); favoriteProfile.block.remove(); favoriteProfile = undefined;
       }
       if (!owner) return;
       if (!favoriteProfile) {
         const block = doc.createElement("div"); block.setAttribute(owned, ""); block.className = "hikikomori-note-author-profile hikikomori-note-favorite-profile";
+        block.id = "hikikomori-note-favorite-profile"; block.setAttribute("id", block.id); block.hidden = true;
+        const toggle = doc.createElement("button"); toggle.type = "button"; toggle.setAttribute(owned, "");
+        toggle.className = "hikikomori-note-favorite-toggle"; toggle.textContent = "＠";
+        toggle.setAttribute("aria-label", "この作者をお気に入りに追加"); toggle.setAttribute("title", "この作者をお気に入りに追加");
+        toggle.setAttribute("aria-expanded", "false"); toggle.setAttribute("aria-controls", block.id);
         const label = doc.createElement("label"); label.textContent = "お気に入りに追加　登録先";
         const select = doc.createElement("select"); select.setAttribute("aria-label", "お気に入りの登録先グループ"); label.append(select);
         const button = doc.createElement("button"); button.type = "button"; button.textContent = "この作者を追加";
         const status = doc.createElement("p"); status.setAttribute("role", "status");
         const refresh = doc.createElement("button"); refresh.type = "button"; refresh.textContent = "状態を再確認"; refresh.hidden = true;
-        const context = { block, select, button, status, refresh, owner, groupId: "", busy: false, uncertain: false };
+        const context = { block, toggle, select, button, status, refresh, owner, groupId: "", busy: false, uncertain: false };
+        toggle.onclick = () => {
+          if (favoriteProfile !== context) return;
+          block.hidden = !block.hidden; toggle.setAttribute("aria-expanded", String(!block.hidden));
+          if (block.hidden && block.contains(doc.activeElement)) toggle.focus();
+        };
+        block.onkeydown = event => {
+          if (event.key === "Escape") { event.preventDefault(); block.hidden = true; toggle.setAttribute("aria-expanded", "false"); toggle.focus(); }
+        };
         select.onchange = () => { context.groupId = select.value; status.textContent = ""; repaint(); };
         button.onclick = async () => {
           if (favoriteProfile !== context || context.busy || context.uncertain || button.disabled) return;
@@ -972,7 +985,10 @@
         following.className = "hikikomori-note-navigation-following";
         following.textContent = "フォロー中のTL";
         if (page.type === "following") following.setAttribute("aria-current", "page");
-        menu.append(following);
+        if (page.type === "profile" && favoriteProfile) {
+          const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
+          row.append(favoriteProfile.toggle, following); menu.append(row);
+        } else menu.append(following);
         if (page.type !== "profile") {
           let registered = false;
           if (page.type === "tag") {
@@ -1023,6 +1039,14 @@
         }
         signature = nextSignature;
       }
+      if (page.type === "profile" && favoriteProfile) {
+        let row = menu.querySelector('[class="hikikomori-note-profile-actions"]');
+        if (!row) {
+          const following = menu.querySelector('[class="hikikomori-note-navigation-following"]');
+          row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions"; row.append(following); menu.prepend(row);
+        }
+        if (favoriteProfile.toggle.parentElement !== row) row.prepend(favoriteProfile.toggle);
+      }
       // 独自メニューを挿入できてから、aside直下の公式メニューだけを隠す。
       if (page.type !== "profile" && host !== mobileHost) {
         for (const element of host.children) {
@@ -1047,7 +1071,7 @@
         sidebarRoots.clear();
         authorControls.stop();
         disposed = true;
-        favoriteProfile?.block.remove(); favoriteProfile = undefined;
+        favoriteProfile?.toggle.remove(); favoriteProfile?.block.remove(); favoriteProfile = undefined;
         syncPinnedHeader({ enabled: false }, currentUrl);
         removeMobile();
         syncHeaderSettings(false);
