@@ -1012,7 +1012,11 @@
           for (const tag of group.tags) {
             const item = doc.createElement("li"), link = doc.createElement("a");
             link.textContent = core.favoriteLabel(tag); link.href = core.favoriteUrl(tag);
-            link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : core.authorLabel(tag));
+            link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : `${core.authorLabel(tag)}（新しいタブで開く）`);
+            if (typeof tag !== "string") {
+              link.setAttribute("target", "_blank"); link.setAttribute("rel", "noopener noreferrer");
+              link.setAttribute("aria-label", `${core.favoriteLabel(tag)}（新しいタブで開く）`);
+            }
             if (activeTag === tag) link.setAttribute("aria-current", "page");
             item.append(link); list.append(item);
           }
