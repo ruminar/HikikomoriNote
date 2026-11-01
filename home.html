@@ -19,7 +19,7 @@
       <aside class="home-sidebar">
         <nav id="home-menu" aria-label="専用ホーム" hidden>
           <button type="button" id="nav-settings" aria-controls="panel-settings">設定</button>
-          <button type="button" id="nav-tags" aria-controls="panel-tags">お気に入りタグ</button>
+          <button type="button" id="nav-tags" aria-controls="panel-tags">お気に入り</button>
           <button type="button" id="nav-authors" aria-controls="panel-authors">ユーザーの表示管理</button>
           <button type="button" id="nav-transfer" aria-controls="panel-transfer">設定の移行</button>
         </nav>
@@ -35,7 +35,7 @@
           <p class="catchphrase">枠を超えたら落選したので、殻を作りました。</p>
         </section>
         <section id="panel-tags" aria-labelledby="tags-heading" hidden>
-          <h2 id="tags-heading">お気に入りタグ</h2>
+          <h2 id="tags-heading">お気に入り</h2>
           <div id="edit-groups" class="tag-groups"></div>
           <form id="group-name-form" class="tag-form">
             <label for="group-name">グループ名</label>
@@ -48,7 +48,7 @@
             <input id="tag-input" type="text" autocomplete="off" placeholder="例：ComfyUI" disabled>
             <button id="add-tag" type="submit" disabled>追加</button>
           </form>
-          <p id="tags-empty" class="muted">お気に入りタグは未登録です。タグ名を入力して追加できます。</p>
+          <p id="tags-empty" class="muted">お気に入りは未登録です。タグ名を入力するか、作者ページから追加できます。</p>
           <ul id="edit-tags" class="tag-editor"></ul>
         </section>
         <section id="panel-settings" aria-labelledby="settings-heading" hidden>
@@ -107,7 +107,7 @@
             <button id="import-settings" type="button" disabled>設定の読み込み</button>
           </div>
           <p id="transfer-status" class="muted" role="status" aria-live="polite"></p>
-          <p class="muted">読み込みは、拡張のON/OFF・ユーザー名・表示設定・4グループのタグ・作者の表示設定（ユーザー名と表示名を含む）をすべて置き換えます。形式4のJSONにはヘッダ常時表示も含み、読み込みには対応版が必要です。旧形式1～3も読み込めますが、ヘッダ常時表示はOFFになります。JSONはnoteの下書き記事などへ手動で貼り付けて保存できます。</p>
+          <p class="muted">読み込みは、拡張のON/OFF・ユーザー名・表示設定・4グループのお気に入り・作者の表示設定（ユーザー名と表示名を含む）をすべて置き換えます。形式5のJSONにはタグ・作者の混在したお気に入りも含み、読み込みには対応版が必要です。旧形式1～4も読み込めます。形式1～3ではヘッダ常時表示はOFFになります。JSONはnoteの下書き記事などへ手動で貼り付けて保存できます。</p>
         </section>
       </div>
     </div>

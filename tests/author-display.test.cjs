@@ -64,19 +64,19 @@ test('記事からの保存だけは拡張ON・有料非表示ON・未登録が�
  for(const patch of [{enabled:false,hidePaidArticles:true},{hidePaidArticles:false}]){const f=backend(patch);await assert.rejects(f.controller.author(operation(f),{fromArticle:true}),{code:'CONFLICT'});}
  const f=backend({hidePaidArticles:true});await f.controller.author(operation(f),{fromArticle:true});await assert.rejects(f.controller.author(operation(f,'yeku','allow'),{fromArticle:true}),{code:'CONFLICT'});
 });
-test('設定形式4は作者名・状態を往復し、形式1は確認用の空リストとして取り込む',async()=>{
- const f=backend();await f.controller.author(operation(f));const json=f.core.exportSettings(f.core.readSettings(f.state));assert.equal(JSON.parse(json).schemaVersion,4);
+test('設定形式5は作者名・状態を往復し、形式1は確認用の空リストとして取り込む',async()=>{
+ const f=backend();await f.controller.author(operation(f));const json=f.core.exportSettings(f.core.readSettings(f.state));assert.equal(JSON.parse(json).schemaVersion,5);
  assert.deepEqual(plain(f.core.parseSettingsExport(json).authorDisplayRules),f.state.authorDisplayRules);
- const old=JSON.parse(json);old.schemaVersion=1;delete old.settings.keepNoteHeaderVisible;old.settings.legacyMode=old.settings.mode==='severe';delete old.settings.mode;delete old.settings.authorDisplayRules;
+ const old=JSON.parse(json);old.schemaVersion=1;for(const g of old.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete old.settings.keepNoteHeaderVisible;old.settings.legacyMode=old.settings.mode==='severe';delete old.settings.mode;delete old.settings.authorDisplayRules;
  assert.deepEqual(plain(f.core.parseSettingsExport(JSON.stringify(old)).authorDisplayRules),[]);
  const token=f.core.settingsToken(f.core.readSettings(f.state));await f.controller.importSettings({json:JSON.stringify(old),expectedToken:token});assert.deepEqual(f.state.authorDisplayRules,[]);assert.equal(f.state.authorDisplayRevision,2);
  const bad=JSON.parse(json);bad.settings.authorDisplayRules[0].displayName='x\ny';assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(bad)));
 });
-test('形式4は3モードを内部保存・書き出しで往復し作者名を保持',async()=>{
+test('形式5は3モードを内部保存・書き出しで往復し作者名を保持',async()=>{
  for(const mode of ['normal','severe','social']){
    const f=backend({mode,enabled:false,authorDisplayRules:[{userId:'yeku',displayName:'作者名',action:'allow'}]});
    const json=f.core.exportSettings(f.core.readSettings(f.state)),doc=JSON.parse(json);
-   assert.equal(doc.schemaVersion,4);assert.equal(doc.settings.mode,mode);assert.equal(Object.hasOwn(doc.settings,'legacyMode'),false);
+   assert.equal(doc.schemaVersion,5);assert.equal(doc.settings.mode,mode);assert.equal(Object.hasOwn(doc.settings,'legacyMode'),false);
    assert.equal(f.core.parseSettingsExport(json).mode,mode);
    await f.controller.importSettings({json,expectedToken:f.core.settingsToken(f.core.readSettings(f.state))});
    assert.equal(f.state.mode,mode);assert.equal(Object.hasOwn(f.state,'legacyMode'),false);assert.equal(f.state.authorDisplayRules[0].displayName,'作者名');assert.equal(f.state.enabled,false);
@@ -90,12 +90,12 @@ test('未知mode・旧フラグ混在は読み込み前に拒否し、保存済�
  }
  const mixed=plain(base);mixed.settings.legacyMode=false;assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(mixed)));
 });
-test('既存の形式2は明示的なインポートでsevereへ変換し、書き出しは形式4',async()=>{
- const f=backend(),doc=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));doc.schemaVersion=2;delete doc.settings.keepNoteHeaderVisible;doc.settings.legacyMode=true;delete doc.settings.mode;
+test('既存の形式2は明示的なインポートでsevereへ変換し、書き出しは形式5',async()=>{
+ const f=backend(),doc=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));doc.schemaVersion=2;for(const g of doc.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete doc.settings.keepNoteHeaderVisible;doc.settings.legacyMode=true;delete doc.settings.mode;
  doc.settings.authorDisplayRules=[{userId:'yeku',displayName:'YeKu',action:'hide'}];
  const json=JSON.stringify(doc);assert.equal(f.core.parseSettingsExport(json).mode,'severe');
  await f.controller.importSettings({json,expectedToken:f.core.settingsToken(f.core.readSettings(f.state))});
- const out=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));assert.equal(out.schemaVersion,4);assert.equal(out.settings.mode,'severe');assert.deepEqual(out.settings.authorDisplayRules,doc.settings.authorDisplayRules);
+ const out=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));assert.equal(out.schemaVersion,5);assert.equal(out.settings.mode,'severe');assert.deepEqual(out.settings.authorDisplayRules,doc.settings.authorDisplayRules);
 });
 test('移行画面は社会復帰モードのJSONを読み込み、タグを保持して設定画面を利用可能',async()=>{
  const f=homeFixture();await flush();const core=f.c.HikikomoriNote,doc=JSON.parse(core.exportSettings(core.readSettings(f.state)));doc.settings.mode='social';
@@ -142,15 +142,15 @@ test('プロフィールの再確認は通常隠し、保存失敗・競合で�
    const f=ui(profile,{}, {async setAuthor(){throw Object.assign(Error('保存失敗'),{code});},async refresh(){if(failRefresh)throw Error('確認失敗');}});
    f.doc.getElementById('profile-name').textContent='作者名';f.update('https://note.com/yeku');
    assert.equal(f.doc.querySelector('button[data-author-refresh]').hidden,true);
-   f.doc.querySelector('select').value='hide';f.doc.querySelector('button[data-author-save]').onclick();await flush();
+   f.doc.querySelector('[class="hikikomori-note-author-profile"]').querySelector('select').value='hide';f.doc.querySelector('button[data-author-save]').onclick();await flush();
    assert.equal(f.doc.querySelector('button[data-author-refresh]').hidden,false);
    await f.doc.querySelector('button[data-author-refresh]').onclick();assert.equal(f.doc.querySelector('button[data-author-refresh]').hidden,false);
    failRefresh=false;await f.doc.querySelector('button[data-author-refresh]').onclick();assert.equal(f.doc.querySelector('button[data-author-refresh]').hidden,true);
  }
 });
 test('プロフィール管理は重度・拡張OFF・有料非表示OFFでも利用でき、自分には出さない',async()=>{
- for(const patch of [{mode:'severe',enabled:false},{hidePaidArticles:false}]){let op;const f=ui(profile,patch,{async setAuthor(v){op=v;}});f.doc.getElementById('profile-name').textContent='作者名';f.update('https://note.com/yeku');const select=f.doc.querySelector('select');assert.ok(select);select.value='allow';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.equal(op.userId,'yeku');assert.equal(op.displayName,'作者名');assert.equal(op.action,'allow');}
- const f=ui(profile,{noteUserId:'YeKu'});f.update('https://note.com/yeku');assert.equal(f.doc.querySelector('select'),null);
+ for(const patch of [{mode:'severe',enabled:false},{hidePaidArticles:false}]){let op;const f=ui(profile,patch,{async setAuthor(v){op=v;}});f.doc.getElementById('profile-name').textContent='作者名';f.update('https://note.com/yeku');const select=f.doc.querySelector('[class="hikikomori-note-author-profile"]').querySelector('select');assert.ok(select);select.value='allow';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.equal(op.userId,'yeku');assert.equal(op.displayName,'作者名');assert.equal(op.action,'allow');}
+ const f=ui(profile,{noteUserId:'YeKu'});f.update('https://note.com/yeku');assert.equal(f.doc.querySelector('[class="hikikomori-note-author-profile"]'),null);
 });
 test('プロフィールの非表示から未設定への保存はDOM参照を送信せず実際の背景処理まで完了する',async()=>{
  let f;
@@ -164,8 +164,8 @@ test('プロフィールの非表示から未設定への保存はDOM参照を�
    }
  });
  f.doc.getElementById('profile-name').textContent='作者名';f.update('https://note.com/yeku');
- f.doc.querySelector('select').value='';await f.doc.querySelector('button[data-author-save]').onclick();await flush();
- assert.deepEqual(f.backend.state.authorDisplayRules,[]);assert.equal(f.backend.state.authorDisplayRevision,1);assert.equal(f.doc.querySelector('select').value,'');
+ f.doc.querySelector('[class="hikikomori-note-author-profile"]').querySelector('select').value='';await f.doc.querySelector('button[data-author-save]').onclick();await flush();
+ assert.deepEqual(f.backend.state.authorDisplayRules,[]);assert.equal(f.backend.state.authorDisplayRevision,1);assert.equal(f.doc.querySelector('[class="hikikomori-note-author-profile"]').querySelector('select').value,'');
 });
 test('ユーザーページではIDフィルターを外し、有料カードだけを既存設定で隠す',()=>{
  const f=ui('<main>'+card+card+'</main>',{hidePaidArticles:true,authorDisplayRules:[{userId:'yeku',displayName:'作者名',action:'hide'}]});
@@ -204,7 +204,7 @@ test('専用ホームは辞書順の既存ユーザーの状態変更・解除�
  assert.equal(n.get('panel-authors').hidden,false);assert.equal(n.get('author-form'),undefined);assert.equal(n.get('author-user'),undefined);assert.match(n.get('authors-hidden').children[0].textContent,/あ（b）/);
  n.get('authors-hidden').children[0].querySelector('button').onclick();await flush();assert.equal(f.state.authorDisplayRules.find(x=>x.userId==='b').action,'allow');assert.equal(f.state.enabled,false);
  n.get('authors-allowed').children[0].querySelectorAll('button')[1].onclick();await flush();assert.equal(f.state.authorDisplayRules.some(x=>x.userId==='b'),false);
- const doc=JSON.parse(f.c.HikikomoriNote.exportSettings(f.c.HikikomoriNote.readSettings(f.state)));doc.schemaVersion=1;delete doc.settings.keepNoteHeaderVisible;doc.settings.legacyMode=doc.settings.mode==='severe';delete doc.settings.mode;delete doc.settings.authorDisplayRules;n.get('settings-json').value=JSON.stringify(doc);n.get('settings-json').oninput();n.get('import-settings').onclick();await flush();assert.match(f.confirmations.at(-1),/作者設定も解除/);assert.deepEqual(f.state.authorDisplayRules,[]);
+ const doc=JSON.parse(f.c.HikikomoriNote.exportSettings(f.c.HikikomoriNote.readSettings(f.state)));doc.schemaVersion=1;for(const g of doc.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete doc.settings.keepNoteHeaderVisible;doc.settings.legacyMode=doc.settings.mode==='severe';delete doc.settings.mode;delete doc.settings.authorDisplayRules;n.get('settings-json').value=JSON.stringify(doc);n.get('settings-json').oninput();n.get('import-settings').onclick();await flush();assert.match(f.confirmations.at(-1),/作者設定も解除/);assert.deepEqual(f.state.authorDisplayRules,[]);
 });
 test('作者操作の送信元検証はトップフレーム・現URL・本人・pendingUrlを確認する',async()=>{
  let tab={url:articleUrl};const api={runtime:{id:'self'},tabs:{async get(){return tab;}}};
@@ -250,7 +250,7 @@ test('歯車はプロフィールから管理画面へ直行し、SPAで他の�
 test('ストアの作者表示設定から登録・解除でき、3モードとOFFで既存条件を維持',async()=>{
  for(const patch of [{mode:'normal'},{mode:'social'},{mode:'severe'},{enabled:false}]){
   let f;f=ui(profile,{...patch,hidePaidArticles:true},{async setAuthor(op,source){assert.equal(source,'profile');await f.backend.controller.author(op);f.control.update(f.core.readSettings(f.backend.state),'https://note.com/yeku/store');}});f.doc.getElementById('profile-name').textContent='作者名';f.update('https://note.com/yeku/store');
-  assert.ok(f.doc.querySelector('button[data-author-save]'));f.doc.querySelector('select').value='hide';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.equal(f.backend.state.authorDisplayRules[0].userId,'yeku');
-  f.doc.querySelector('select').value='';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.deepEqual(f.backend.state.authorDisplayRules,[]);
+  assert.ok(f.doc.querySelector('button[data-author-save]'));f.doc.querySelector('[class="hikikomori-note-author-profile"]').querySelector('select').value='hide';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.equal(f.backend.state.authorDisplayRules[0].userId,'yeku');
+  f.doc.querySelector('[class="hikikomori-note-author-profile"]').querySelector('select').value='';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.deepEqual(f.backend.state.authorDisplayRules,[]);
  }
 });

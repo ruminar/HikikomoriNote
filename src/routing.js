@@ -82,7 +82,7 @@
         const imported = core.parseSettingsExport(patch.json);
         const previous = core.readSettings(await port.load());
         if (core.settingsToken(previous) !== patch.expectedToken) throw failure("別の画面で設定が変更されました。状態を再確認し、もう一度読み込んでください。", "CONFLICT");
-        const next = { ...imported, tagSchemaVersion: 2,
+        const next = { ...imported, tagSchemaVersion: imported.tagGroups.some(g => g.tags.some(t => typeof t !== "string")) ? 3 : 2,
           groupSelectionRevision: increment(previous.groupSelectionRevision), tagGroupsRevision: increment(previous.tagGroupsRevision), authorDisplayRevision: increment(previous.authorDisplayRevision) };
         await port.setRules(rules(next.enabled, next.dashboardDisabled, core.modeOf(next)));
         try { await port.store(next); }
@@ -116,10 +116,12 @@
         return core.readSettings(next);
       }),
       tag: (operation, options = {}) => run(async () => {
-        if (!operation || !["ADD_TAG", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
-            Object.keys(operation).some(key => !["type", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName"].includes(key)) ||
+        if (!operation || !["ADD_TAG", "ADD_USER", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
+            Object.keys(operation).some(key => !["type", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "displayName"].includes(key)) ||
             !core.groupIds.includes(operation.groupId)) throw new Error("グループを指定して画面を再読み込みしてください。");
-        if (["ADD_TAG", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG"].includes(operation.type)) core.normalizeTag(operation.tag);
+        if (operation.type === "ADD_TAG") core.normalizeTag(operation.tag);
+        if (["REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG"].includes(operation.type)) core.favorite(operation.tag);
+        if (operation.type === "ADD_USER" && (!options.validateCurrent || !options.currentUser || core.authorId(operation.userId).toLowerCase() !== options.currentUser.toLowerCase())) throw new Error("作者ページから登録してください。");
         if (operation.type === "RENAME_TAG_GROUP") core.normalizeGroupName(operation.name);
         const loaded = await port.load(), raw = loaded === undefined ? core.defaultSettings() : loaded;
         const settings = core.readSettings(raw);
@@ -131,7 +133,9 @@
         const groups = settings.tagGroups.map(group => ({ ...group, tags: [...group.tags] }));
         const group = groups.find(item => item.id === operation.groupId);
         async function storeGroups(patch = {}) {
-          const next = { ...storedValue(raw, settings), tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision), ...patch };
+          if (options.validateCurrent && !await options.validateCurrent()) throw failure("現在の作者が変わりました。ページを再確認してください。", "CONFLICT");
+          const next = { ...storedValue(raw, settings), tagSchemaVersion: groups.some(g => g.tags.some(t => typeof t !== "string")) ? 3 : settings.tagSchemaVersion, tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision), ...patch };
+          if (JSON.stringify(next).length > 1048576) throw new Error("設定データが大きすぎます。登録を整理してください。");
           await port.store(next); return core.readSettings(next);
         }
         if (operation.type === "SELECT_TAG_GROUP") {
@@ -144,27 +148,27 @@
           if (name === group.name) return settings;
           group.name = name; return storeGroups();
         }
-        const tag = core.normalizeTag(operation.tag);
+        const tag = operation.type === "ADD_USER" ? core.favoriteUser({ type: "user", userId: operation.userId, displayName: operation.displayName }) : operation.type === "ADD_TAG" ? core.normalizeTag(operation.tag) : core.favorite(operation.tag);
         const tags = group.tags;
-        const index = tags.indexOf(tag);
-        if (operation.type === "ADD_TAG") {
-          if (index >= 0) throw failure("このタグは既に登録されています。", "CONFLICT");
+        const key = core.favoriteKey(tag), index = tags.findIndex(item => core.favoriteKey(item) === key);
+        if (["ADD_TAG", "ADD_USER"].includes(operation.type)) {
+          if (index >= 0) throw failure("このお気に入りは既に登録されています。", "CONFLICT");
           tags.push(tag);
         } else {
           if (index < 0) throw failure("対象タグが別の画面で削除されています。最新一覧を確認してください。", "CONFLICT");
           if (operation.type === "TRANSFER_TAG") {
             const target = groups.find(item => item.id === operation.targetGroupId);
             if (!target || target === group) throw new Error("別の移動先グループを指定してください。");
-            if (target.tags.includes(tag)) throw failure("移動先には既に登録されています。", "CONFLICT");
-            tags.splice(index, 1); target.tags.push(tag);
+            if (target.tags.some(item => core.favoriteKey(item) === key)) throw failure("移動先には既に登録されています。", "CONFLICT");
+            target.tags.push(tags.splice(index, 1)[0]);
           } else if (operation.type === "REMOVE_TAG") tags.splice(index, 1);
           else {
-            if (operation.beforeTag !== null && typeof operation.beforeTag !== "string") throw new Error("移動先を指定してください。");
-            const before = operation.beforeTag === null ? null : core.normalizeTag(operation.beforeTag);
-            if (before === tag) return settings;
-            if (before !== null && !tags.includes(before)) throw failure("移動先のタグが削除されています。最新一覧を確認してください。", "CONFLICT");
-            tags.splice(index, 1);
-            tags.splice(before === null ? tags.length : tags.indexOf(before), 0, tag);
+            const before = operation.beforeTag === null ? null : core.favorite(operation.beforeTag);
+            const beforeKey = before === null ? null : core.favoriteKey(before);
+            if (beforeKey === key) return settings;
+            if (before !== null && !tags.some(item => core.favoriteKey(item) === beforeKey)) throw failure("移動先のタグが削除されています。最新一覧を確認してください。", "CONFLICT");
+            const moved = tags.splice(index, 1)[0];
+            tags.splice(before === null ? tags.length : tags.findIndex(item => core.favoriteKey(item) === beforeKey), 0, moved);
           }
         }
         return storeGroups();

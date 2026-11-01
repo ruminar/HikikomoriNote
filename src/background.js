@@ -22,7 +22,7 @@ port.onAction(() => {
     await port.openHome(activationFailed);
   })().catch(error => console.warn(error));
 });
-// note上はグループ選択と送信元URLのタグ追加だけ。設定変更・削除・並べ替えは専用ホームに限定。
+// note上はグループ選択と表示中のタグ・作者の登録。設定変更・削除・並べ替えは専用ホームに限定。
 port.onMessage((message, sender, respond) => {
   let operation;
   if (port.isHomeSender(sender)) {
@@ -34,8 +34,16 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (!["select-tag-group", "add-current-tag", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    if (!["select-tag-group", "add-current-tag", "add-current-user", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
     operation = (async () => {
+      if (message.type === "add-current-user") {
+        const patch = message.patch, page = await port.currentAuthorPage(sender, patch?.pageUrl);
+        if (page?.type !== "profile" || typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase()) throw Object.assign(new Error("現在の作者ページを確認できません。"), { code: "CONFLICT" });
+        return controller.tag({ type: "ADD_USER", groupId: patch.groupId, userId: patch.userId, displayName: patch.displayName }, { requireEnabled: true, currentUser: page.user, validateCurrent: async () => {
+          const current = await port.currentAuthorPage(sender, patch.pageUrl);
+          return current?.type === "profile" && current.user.toLowerCase() === page.user.toLowerCase();
+        } });
+      }
       if (message.type === "current-author-operation") {
         const page = await port.currentAuthorPage(sender, message.patch?.pageUrl);
         const source = message.patch?.source, patch = message.patch?.operation;

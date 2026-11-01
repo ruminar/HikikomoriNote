@@ -7,7 +7,7 @@
   const fields = { hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", keepNoteHeaderVisible: "keep-note-header-visible", mode: "operation-mode" };
   const modeNames = { normal: "通常モード（ひとみしりモード）", severe: "重度ひきこもりモード", social: "社会復帰モード" };
   function updateModeHelp() {
-    byId("operation-mode-help").textContent = { normal: "専用ホームとお気に入りタグから、見たい記事を選んで閲覧します。", severe: "公式ホームを開かず、タグやTLの独自メニューも停止します。作者ページへの導線は残します。", social: "note公式ホームと左メニューを使用し、記事の非表示設定や追加導線は使います。" }[byId("operation-mode").value] || "";
+    byId("operation-mode-help").textContent = { normal: "専用ホームとお気に入りから、見たい記事を選んで閲覧します。", severe: "公式ホームを開かず、タグやTLの独自メニューも停止します。作者ページへの導線は残します。", social: "note公式ホームと左メニューを使用し、記事の非表示設定や追加導線は使います。" }[byId("operation-mode").value] || "";
   }
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
@@ -21,7 +21,7 @@
       if (text.trim()) {
         try {
           parsedImport = core.parseSettingsExport(text);
-          message = `読み込み可能です。4グループ・タグ${parsedImport.tagGroups.reduce((total, group) => total + group.tags.length, 0)}件。`;
+          message = `読み込み可能です。4グループ・お気に入り${parsedImport.tagGroups.reduce((total, group) => total + group.tags.length, 0)}件。`;
         } catch (error) { message = error.message; }
       }
       byId("transfer-validation").textContent = message;
@@ -78,7 +78,7 @@
     const group = core.selectedGroup(state), tags = group.tags;
     for (const id of ["edit-groups"]) {
       const container = byId(id), focused = container.contains(document.activeElement) ? document.activeElement?.getAttribute("data-group-id") : null;
-      container.replaceChildren(); container.setAttribute("role", "group"); container.setAttribute("aria-label", "お気に入りタグのグループ");
+      container.replaceChildren(); container.setAttribute("role", "group"); container.setAttribute("aria-label", "お気に入りのグループ");
       state.tagGroups.forEach((item, index) => {
         const button = document.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
         button.setAttribute("data-group-id", item.id); button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
@@ -92,26 +92,26 @@
     byId("tags-empty").hidden = tags.length !== 0;
     tags.forEach((tag, index) => {
       const row = document.createElement("li"); row.className = "tag-row"; row.draggable = true;
-      const name = document.createElement("span"); name.textContent = `# ${tag}`; name.className = "tag-name"; row.append(name);
+      const name = document.createElement("span"); name.textContent = core.favoriteLabel(tag); name.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : core.authorLabel(tag)); name.className = "tag-name"; row.append(name);
       function action(text, label, operation, edge = false) {
         const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
-        button.textContent = text; button.setAttribute("aria-label", `${tag}：${label}`); button.dataset.edge = String(edge);
+        button.textContent = text; button.setAttribute("aria-label", `${core.favoriteLabel(tag)}：${label}`); button.dataset.edge = String(edge);
         button.onclick = () => { void mutateTag({ ...operation, groupId: group.id }, { focusTagInput: true }); }; row.append(button);
       }
       action("↑", "上へ移動", { type: "MOVE_TAG", tag, beforeTag: tags[index - 1] ?? null }, index === 0);
       action("↓", "下へ移動", { type: "MOVE_TAG", tag, beforeTag: tags[index + 2] ?? null }, index === tags.length - 1);
       action("削除", "削除", { type: "REMOVE_TAG", tag });
-      const destination = document.createElement("select"); destination.setAttribute("aria-label", `${tag}の移動先`);
+      const destination = document.createElement("select"); destination.setAttribute("aria-label", `${core.favoriteLabel(tag)}の移動先`);
       for (const item of state.tagGroups.filter(item => item.id !== group.id)) {
         const option = document.createElement("option"); option.value = item.id; option.textContent = `${core.groupIds.indexOf(item.id) + 1} ${core.groupName(item)}`; destination.append(option);
       }
       destination.value = state.tagGroups.find(item => item.id !== group.id).id; row.append(destination);
       const transfer = document.createElement("button"); transfer.type = "button"; transfer.textContent = "移動";
-      transfer.setAttribute("aria-label", `${tag}を別グループへ移動`);
+      transfer.setAttribute("aria-label", `${core.favoriteLabel(tag)}を別グループへ移動`);
       transfer.onclick = () => { void mutateTag({ type: "TRANSFER_TAG", groupId: group.id, targetGroupId: destination.value, tag }); }; row.append(transfer);
       row.ondragstart = event => {
         if (busy || uncertain || !core.usesTags(state) || state.tagWarning) { event.preventDefault(); return; }
-        dragTag = { tag, groupId: group.id }; event.dataTransfer.setData("text/plain", tag); event.dataTransfer.effectAllowed = "move";
+        dragTag = { tag, groupId: group.id }; event.dataTransfer.setData("text/plain", core.favoriteKey(tag)); event.dataTransfer.effectAllowed = "move";
       };
       row.ondragover = event => { if (dragTag && !busy && !uncertain) event.preventDefault(); };
       row.ondrop = event => {
@@ -345,8 +345,10 @@
     transferControls();
     if (byId("import-settings").disabled) return;
     const json = byId("settings-json").value, expectedToken = core.settingsToken(state);
-    const oldFormat = JSON.parse(json).schemaVersion === 1 ? " このJSONには作者の表示設定がなく、現在の作者設定も解除されます。" : "";
-    if (!confirm(`現在の設定とお気に入りタグ・作者の表示設定をすべて置き換えます。未保存の入力も破棄します。${oldFormat}読み込みますか？`)) return;
+    const version = JSON.parse(json).schemaVersion;
+    const oldFormat = (version === 1 ? " このJSONには作者の表示設定がなく、現在の作者設定も解除されます。" : "") +
+      (version < 5 && state.tagGroups.some(g => g.tags.some(item => typeof item !== "string")) ? " このJSONにはお気に入りユーザーがなく、現在のお気に入りユーザーも解除されます。" : "");
+    if (!confirm(`現在の設定とお気に入り・作者の表示設定をすべて置き換えます。未保存の入力も破棄します。${oldFormat}読み込みますか？`)) return;
     void perform(() => platform.importSettings({ json, expectedToken }), { kind: "import" });
   };
   platform.subscribe(value => { revision++; show(value); });

@@ -20,10 +20,10 @@
   function inspectGroups(value) {
     let warning = !value || typeof value !== "object" || Array.isArray(value) ? "設定の保存形式に異常があります。タグ編集を停止しました。" : "";
     const source = Array.isArray(value?.tagGroups) ? value.tagGroups : [];
-    if (value?.tagSchemaVersion !== 2 || source.length !== 4) warning = "タググループの保存形式に異常があります。元データを保持し、編集を停止しました。";
+    if (![2, 3].includes(value?.tagSchemaVersion) || source.length !== 4) warning = "お気に入りの保存形式に異常があります。元データを保持し、編集を停止しました。";
     const groups = groupIds.map((id, index) => {
       const matches = source.filter(group => group?.id === id), item = matches.length === 1 ? matches[0] : undefined;
-      const tags = inspectTags(item?.tags); let name = "";
+      const tags = inspectTags(item?.tags, value?.tagSchemaVersion === 3); let name = "";
       try { name = normalizeGroupName(item?.name); if (name !== item.name) warning ||= "グループ名の保存値に異常があります。"; }
       catch { warning ||= "グループ名の保存値に異常があります。"; }
       if (!item || !Array.isArray(item.tags) || source[index]?.id !== id || tags.warning) warning ||= "タググループの保存データに異常があります。編集を停止しました。";
@@ -92,15 +92,26 @@
     try { encodeURIComponent(tag); } catch { throw new Error("タグ名に使用できない文字が含まれています。"); }
     return tag;
   }
-  function inspectTags(value) {
+  function favoriteUser(value) {
+    if (!exactKeys(value, ["type", "userId", "displayName"]) || value.type !== "user") throw new Error("お気に入りユーザーの形式が正しくありません。");
+    const userId = authorId(value.userId), displayName = authorName(value.displayName);
+    if (userId !== value.userId || displayName !== value.displayName) throw new Error("お気に入りユーザーの保存値が正しくありません。");
+    return { type: "user", userId, displayName };
+  }
+  function favorite(value) { return typeof value === "string" ? normalizeTag(value) : favoriteUser(value); }
+  function favoriteKey(value) { return typeof value === "string" ? `tag:${value}` : `user:${value.userId.toLowerCase()}`; }
+  function favoriteLabel(value) { return typeof value === "string" ? `# ${value}` : `＠${value.displayName || value.userId}`; }
+  function favoriteUrl(value) { return typeof value === "string" ? tagUrl(value) : profileUrl(value.userId); }
+  function inspectTags(value, allowUsers = false) {
     if (value === undefined) return { tags: [], warning: "" };
     const tags = [], seen = new Set();
     let invalid = !Array.isArray(value);
     for (const item of Array.isArray(value) ? value : []) {
       try {
-        const tag = normalizeTag(item);
-        if (tag !== item || seen.has(tag)) { invalid = true; continue; }
-        seen.add(tag); tags.push(tag);
+        const tag = typeof item === "string" ? normalizeTag(item) : allowUsers ? favoriteUser(item) : normalizeTag(item);
+        const key = favoriteKey(tag);
+        if ((typeof item === "string" && tag !== item) || seen.has(key)) { invalid = true; continue; }
+        seen.add(key); tags.push(tag);
       } catch { invalid = true; }
     }
     return { tags, warning: invalid ? "タグの保存データに異常があります。正常な項目だけ表示しています。タグ編集を停止しました。元のデータを保存してから、開発者へ修復をご相談ください。" : "" };
@@ -197,21 +208,31 @@
     if (typeof value.noteUserId !== "string" || normalizeUserId(value.noteUserId) !== value.noteUserId) throw new Error("ユーザー名の保存値が正しくありません。");
     if (!Array.isArray(value.tagGroups) || value.tagGroups.length !== 4 || !groupIds.includes(value.selectedTagGroupId)) throw new Error("4グループと選択グループを確認してください。");
     const groups = value.tagGroups.map((group, index) => {
-      if (!exactKeys(group, ["id", "name", "tags"]) || group.id !== groupIds[index] ||
-          normalizeGroupName(group.name) !== group.name || !Array.isArray(group.tags) || inspectTags(group.tags).warning) {
+      const items = version >= 5 ? group?.items : group?.tags;
+      if (!exactKeys(group, ["id", "name", version >= 5 ? "items" : "tags"]) || group.id !== groupIds[index] ||
+          normalizeGroupName(group.name) !== group.name || !Array.isArray(items)) {
         throw new Error(`グループ${index + 1}の名前・タグ・並び順が正しくありません。`);
       }
-      return { id: group.id, name: group.name, tags: [...group.tags] };
+      const tags = version >= 5 ? items.map(item => {
+        if (item?.type === "tag" && exactKeys(item, ["type", "tag"]) && normalizeTag(item.tag) === item.tag) return item.tag;
+        return favoriteUser(item);
+      }) : items;
+      if (inspectTags(tags, version >= 5).warning) throw new Error("お気に入りの内容または重複を確認してください。");
+      return { id: group.id, name: group.name, tags: [...tags] };
     });
     return { ...Object.fromEntries(transferFlags.filter(key => key !== "legacyMode").map(key => [key, value[key]])), keepNoteHeaderVisible: version >= 4 ? value.keepNoteHeaderVisible : false, mode, noteUserId: value.noteUserId,
       tagGroups: groups, selectedTagGroupId: value.selectedTagGroupId, authorDisplayRules: version >= 2 ? validateAuthors(value.authorDisplayRules) : [] };
   }
   function transferSettings(settings) {
     if (settings.tagWarning || settings.groupSelectionInvalid || settings.authorWarning) throw new Error("保存データに異常があります。状態を再確認してください。");
-    return validateTransferSettings(Object.fromEntries([...transferFlags.filter(key => key !== "legacyMode"), "keepNoteHeaderVisible", "mode", "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "mode" ? modeOf(settings) : key === "keepNoteHeaderVisible" ? settings[key] ?? false : key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]])), 4);
+    const value = Object.fromEntries([...transferFlags.filter(key => key !== "legacyMode"), "keepNoteHeaderVisible", "mode", "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "mode" ? modeOf(settings) : key === "keepNoteHeaderVisible" ? settings[key] ?? false : key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]]));
+    value.tagGroups = value.tagGroups.map(group => ({ id: group.id, name: group.name, items: group.tags.map(item => typeof item === "string" ? { type: "tag", tag: item } : item) }));
+    return validateTransferSettings(value, 5);
   }
   function exportSettings(settings) {
-    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 4, settings: transferSettings(settings) }, null, 2);
+    const value = transferSettings(settings);
+    value.tagGroups = value.tagGroups.map(group => ({ id: group.id, name: group.name, items: group.tags.map(item => typeof item === "string" ? { type: "tag", tag: item } : item) }));
+    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 5, settings: value }, null, 2);
     if (json.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     return json;
   }
@@ -219,8 +240,8 @@
     if (typeof text !== "string" || text.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     let document;
     try { document = JSON.parse(text); } catch { throw new Error("JSONの書式が正しくありません。"); }
-    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || ![1, 2, 3, 4].includes(document.schemaVersion)) {
-      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1・2・3・4）を入力してください。");
+    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || ![1, 2, 3, 4, 5].includes(document.schemaVersion)) {
+      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1～5）を入力してください。");
     }
     return validateTransferSettings(document.settings, document.schemaVersion);
   }
@@ -230,5 +251,6 @@
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
     modeOf, usesTags, usesFollowing, usesLogoBack,
     exportSettings, parseSettingsExport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
+    favorite, favoriteKey, favoriteLabel, favoriteUrl, favoriteUser,
     normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

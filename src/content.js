@@ -12,6 +12,11 @@
   }
   const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
     settingsUrl: () => homeDestination(),
+    async addCurrentUser(groupId, userId, displayName) {
+      const before = revision;
+      const value = await platform.addCurrentUser(groupId, userId, displayName);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
+    },
     async setAuthor(operation, source) {
       const before = revision;
       const value = await platform.currentAuthor(operation, source);

@@ -239,3 +239,7 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 /kan11jpと/allで確認。左マガジン欄はdiv.flex.flex-col.gap-4内のdiv.relative、直属のオーバーレイリンク（title・aria-label・作者ID/m/m…）とh3・imgを持つ。価格行はdiv.flex.items-center.gap-1.font-bold.text-text-success.text-xsで、先頭のtext-text-primaryな件数DIV（SVGを含む）と価格のテキストが混在し、全体は「3件¥2,480」。件数の文字列を先頭から除き、残りだけを既存の正額判定へ渡す。ボタンの有無では判定しない。
 
 別の一覧形はul.grid > li.border-border-default.border-b > div.relative.flex.items-start.gap-4.bg-surface-normal.py-4。右側のrelative.z-10.ml-auto内の価格spanを判定し、liごと隠す。無料カードはそのまま。既存のプロフィール販促処理・作者識別・dirtyフラグ・専用属性を共用し、正常な自分ID設定・別作者・有料非表示ON・非許可の条件を維持する。ホーム/all/magazines/likes/archivesが対象で、store・マガジン直接表示は変更しない。未知構造・本文内・別作者のリンクは保持する。
+
+## 作者のお気に入り登録（0.2.7開発中）
+
+/kinokoroでh1の表示名とavatar・followingsリンクを含む祖先（確認時はh1から4段上）が既存の作者識別に合致することを読み取り確認。作者表示管理の識別結果を共用して登録欄を同じホストへ配置し、自分の場合も識別は行うが表示管理UIは従来どおり出さない。登録欄は拡張所有DOMとし、通常モード・拡張ONのときだけ出す。新規の監視・ネットワーク取得は追加しない。登録先は閲覧グループと独立した未選択状態から選ぶ。非同期保存中は送信内容を固定し、ページ移動・DOM差し替え時に古い欄を撤去する。保存先・送信境界とJSON形式5の詳細は0.2.7仕様書を参照。

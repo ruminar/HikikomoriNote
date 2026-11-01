@@ -62,6 +62,52 @@
     let articleFollowing;
     let articleAuthor, authorSignature;
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
+    let favoriteProfile;
+    function syncFavoriteProfile(settings) {
+      const owner = settings.enabled && core.usesTags(settings) ? authorControls.profileOwner() : null;
+      if (favoriteProfile && (!owner || owner.userId !== favoriteProfile.owner.userId || owner.host !== favoriteProfile.owner.host || !favoriteProfile.block.isConnected)) {
+        favoriteProfile.block.remove(); favoriteProfile = undefined;
+      }
+      if (!owner) return;
+      if (!favoriteProfile) {
+        const block = doc.createElement("div"); block.setAttribute(owned, ""); block.className = "hikikomori-note-author-profile hikikomori-note-favorite-profile";
+        const label = doc.createElement("label"); label.textContent = "お気に入りに追加　登録先";
+        const select = doc.createElement("select"); select.setAttribute("aria-label", "お気に入りの登録先グループ"); label.append(select);
+        const button = doc.createElement("button"); button.type = "button"; button.textContent = "この作者を追加";
+        const status = doc.createElement("p"); status.setAttribute("role", "status");
+        const refresh = doc.createElement("button"); refresh.type = "button"; refresh.textContent = "状態を再確認"; refresh.hidden = true;
+        const context = { block, select, button, status, refresh, owner, groupId: "", busy: false, uncertain: false };
+        select.onchange = () => { context.groupId = select.value; status.textContent = ""; repaint(); };
+        button.onclick = async () => {
+          if (favoriteProfile !== context || context.busy || context.uncertain || button.disabled) return;
+          context.busy = true; const groupId = context.groupId, user = context.owner; status.textContent = "保存しています…"; repaint();
+          try { await actions.addCurrentUser(groupId, user.userId, user.displayName); if (favoriteProfile === context) status.textContent = "お気に入りに追加しました。"; }
+          catch (error) { context.uncertain = error.code === "UNCONFIRMED"; if (favoriteProfile === context) status.textContent = `${error.message || "保存できませんでした。"} 「状態を再確認」で確認してください。`; refresh.hidden = false; }
+          finally { context.busy = false; repaint(); }
+        };
+        refresh.onclick = async () => {
+          if (context.busy || favoriteProfile !== context) return;
+          context.busy = true; repaint();
+          try { await actions.refresh(); context.uncertain = false; refresh.hidden = true; status.textContent = "保存済みの状態を確認しました。"; }
+          catch { status.textContent = "状態を確認できませんでした。"; }
+          finally { context.busy = false; repaint(); }
+        };
+        block.append(label, button, status, refresh); owner.host.prepend(block); favoriteProfile = context;
+      }
+      const context = favoriteProfile; context.owner = owner;
+      const names = JSON.stringify(settings.tagGroups.map(g => [g.id, core.groupName(g)]));
+      if (context.names !== names) {
+        context.select.replaceChildren(); const placeholder = doc.createElement("option"); placeholder.value = ""; placeholder.textContent = "登録先を選択"; context.select.append(placeholder);
+        settings.tagGroups.forEach((group, index) => { const option = doc.createElement("option"); option.value = group.id; option.textContent = `${["①", "②", "③", "④"][index]} ${core.groupName(group)}`; context.select.append(option); }); context.names = names;
+      }
+      context.select.value = context.groupId;
+      const group = settings.tagGroups.find(g => g.id === context.groupId);
+      const registered = group?.tags.some(item => typeof item !== "string" && item.userId.toLowerCase() === owner.userId.toLowerCase());
+      context.button.textContent = context.busy ? "保存中…" : registered ? "登録済み" : "この作者を追加";
+      context.button.disabled = !group || registered || context.busy || context.uncertain || Boolean(settings.tagWarning) || !actions.addCurrentUser;
+      context.select.disabled = context.busy || context.uncertain || Boolean(settings.tagWarning);
+      context.refresh.disabled = context.busy || !actions.refresh;
+    }
     const pinnedHeaders = new Set();
     const headerPinned = "data-hikikomori-note-header-pinned";
     const headerSidebars = new Set();
@@ -884,6 +930,7 @@
       currentSettings = settings; currentUrl = url;
       syncPinnedHeader(settings, url);
       authorControls.update(settings, url);
+      syncFavoriteProfile(settings);
       syncSearchClear(settings.enabled);
       syncHeaderSettings(settings.enabled && (core.modeOf(settings) === "social" || settings.noteLogoBrowserBack));
       syncLogoCursor(core.usesLogoBack(settings));
@@ -948,9 +995,9 @@
             const refresh = doc.createElement("button"); refresh.type = "button"; refresh.textContent = "状態を再確認";
             refresh.disabled = adding; refresh.onclick = () => { void refreshTags(); }; menu.append(refresh);
           }
-          const title = doc.createElement("p"); title.textContent = "お気に入りタグ"; menu.append(title);
+          const title = doc.createElement("p"); title.textContent = "お気に入り"; menu.append(title);
           const selector = doc.createElement("div"); selector.className = "hikikomori-note-group-selector";
-          selector.setAttribute("role", "group"); selector.setAttribute("aria-label", "お気に入りタグのグループ");
+          selector.setAttribute("role", "group"); selector.setAttribute("aria-label", "お気に入りのグループ");
           settings.tagGroups.forEach((item, index) => {
             const button = doc.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
             button.setAttribute("data-group-id", item.id); button.setAttribute("title", core.groupName(item));
@@ -964,8 +1011,8 @@
           const list = doc.createElement("ul"); menu.append(list);
           for (const tag of group.tags) {
             const item = doc.createElement("li"), link = doc.createElement("a");
-            link.textContent = `# ${tag}`; link.href = core.tagUrl(tag);
-            link.setAttribute("title", `# ${tag}`);
+            link.textContent = core.favoriteLabel(tag); link.href = core.favoriteUrl(tag);
+            link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : core.authorLabel(tag));
             if (activeTag === tag) link.setAttribute("aria-current", "page");
             item.append(link); list.append(item);
           }
@@ -996,6 +1043,7 @@
         sidebarRoots.clear();
         authorControls.stop();
         disposed = true;
+        favoriteProfile?.block.remove(); favoriteProfile = undefined;
         syncPinnedHeader({ enabled: false }, currentUrl);
         removeMobile();
         syncHeaderSettings(false);
@@ -1192,7 +1240,7 @@
     }
     function profileOwner() {
       const page = core.pageKind(url);
-      if (page?.type !== "profile" || core.isSelf(settings, page.user)) return null;
+      if (page?.type !== "profile") return null;
       for (const heading of doc.querySelectorAll("h1")) {
         if (heading.closest("article") || heading.closest(`[${owned}]`)) continue;
         let root = heading.parentElement;
@@ -1208,7 +1256,7 @@
     function syncProfile() {
       const owner = profileOwner();
       currentProfileOwner = owner;
-      if (!owner) { profileBlock?.remove(); profileBlock = undefined; profileContext = undefined; return; }
+      if (!owner || core.isSelf(settings, owner.userId)) { profileBlock?.remove(); profileBlock = undefined; profileContext = undefined; return; }
       const context = JSON.stringify([owner.userId, owner.displayName, settings.noteUserId, settings.authorWarning, core.authorRule(settings, owner.userId)]);
       if (profileBlock?.isConnected && context === profileContext && profileBlock.parentElement === owner.host) { refreshDisabled(); return; }
       profileBlock?.remove(); profileContext = context;
