@@ -92,7 +92,10 @@
     byId("tags-empty").hidden = tags.length !== 0;
     tags.forEach((tag, index) => {
       const row = document.createElement("li"); row.className = "tag-row"; row.draggable = true;
-      const name = document.createElement("span"); name.textContent = core.favoriteLabel(tag); name.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : core.authorLabel(tag)); name.className = "tag-name"; row.append(name);
+      const name = document.createElement("a");
+      name.textContent = typeof tag === "string" ? core.favoriteLabel(tag) : tag.displayName ? `＠${tag.displayName} (${tag.userId})` : `＠${tag.userId}`;
+      name.href = core.favoriteUrl(tag); name.setAttribute("target", "_self");
+      name.setAttribute("title", name.textContent); name.className = "tag-name"; row.append(name);
       function action(text, label, operation, edge = false) {
         const button = document.createElement("button"); button.type = "button"; button.className = "secondary";
         button.textContent = text; button.setAttribute("aria-label", `${core.favoriteLabel(tag)}：${label}`); button.dataset.edge = String(edge);
