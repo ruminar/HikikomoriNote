@@ -214,6 +214,8 @@
         throw new Error(`グループ${index + 1}の名前・タグ・並び順が正しくありません。`);
       }
       const tags = version >= 5 ? items.map(item => {
+        // 形式5にマガジンを予約。未対応版では一部だけ読み込まず、全体を停止する。
+        if (item?.type === "magazine") throw Object.assign(new Error("この設定JSONにはマガジンのお気に入りが含まれています。マガジン対応版で読み込んでください。現在の設定は変更していません。"), { code: "UNSUPPORTED_FEATURE" });
         if (item?.type === "tag" && exactKeys(item, ["type", "tag"]) && normalizeTag(item.tag) === item.tag) return item.tag;
         return favoriteUser(item);
       }) : items;

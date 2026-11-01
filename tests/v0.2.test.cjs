@@ -1739,3 +1739,13 @@ test('作者お気に入りの＠は通常だけ初期閉状態で出し、Escap
  f.doc.getElementById('followings').href='https://note.com/other/followings';f.ui.invalidatePaidCards();f.ui.update(settings,'https://note.com/other');assert.equal(toggle.isConnected,false);assert.equal(panel.isConnected,false);const replacement=f.doc.querySelector('[class="hikikomori-note-favorite-toggle"]');assert.ok(replacement);assert.equal(replacement.getAttribute('aria-expanded'),'false');assert.equal(f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]').hidden,true);
  f.ui.stop();assert.equal(replacement.isConnected,false);assert.match(source('src/content.css'),/\.hikikomori-note-favorite-profile\[hidden\]\s*\{ display: none !important;/);
 });
+
+test('形式5の予約マガジンを含むJSONは全体を未対応として拒否し、保存・転送ルールを変更しない',async()=>{
+ const f=fixture({...groups(['keep'])});await f.controller.tag(addFavorite(),favoriteOptions());await f.controller.getState();const before=plain(f.stored),rules=plain(f.rules),writes=f.writes,d=JSON.parse(f.core.exportSettings(await f.controller.getState()));
+ d.settings.tagGroups[2].items.push({type:'magazine',userId:'kinokoro',magazineId:'m95cee8dfaa5e',displayName:'なんのはなしですかマガジン【きのころコミック】'});const json=JSON.stringify(d);
+ assert.throws(()=>f.core.parseSettingsExport(json),{code:'UNSUPPORTED_FEATURE'});await assert.rejects(f.controller.importSettings({json,expectedToken:f.core.settingsToken(await f.controller.getState())}),{code:'UNSUPPORTED_FEATURE'});assert.equal(f.writes,writes);assert.deepEqual(f.stored,before);assert.deepEqual(f.rules,rules);
+ const exported=JSON.parse(f.core.exportSettings(await f.controller.getState()));assert.equal(exported.schemaVersion,5);assert.deepEqual(exported.settings.tagGroups[0].items,[{type:'tag',tag:'keep'},favoriteCreator]);
+});
+test('移行画面も予約マガジンの読込を無効化し、貼り付けたJSONと現在の設定を保持する',async()=>{
+ const h=homeFixture({state:{...groups(['keep',favoriteCreator]),tagSchemaVersion:3}});await flush();const before=plain(h.state),d=JSON.parse(h.c.HikikomoriNote.exportSettings(h.c.HikikomoriNote.readSettings(h.state)));d.settings.tagGroups[1].items.push({type:'magazine',userId:'kinokoro',magazineId:'m95cee8dfaa5e',displayName:'マガジン'});const json=JSON.stringify(d);h.nodes.get('settings-json').value=json;h.nodes.get('settings-json').oninput();assert.equal(h.nodes.get('import-settings').disabled,true);assert.match(h.nodes.get('transfer-validation').textContent,/マガジン対応版/);assert.equal(h.nodes.get('settings-json').value,json);assert.deepEqual(h.state,before);
+});
