@@ -313,7 +313,10 @@
       return path.getAttribute("d") === membershipLock && Boolean(path.closest("svg") && path.closest("h3"));
     }
     function isPaidPrice(price) {
-      return price.classList.contains("text-text-success") && /^¥\s*[1-9]\d*(?:,\d{3})*\s*[〜～]?\s*$/.test(price.textContent.trim());
+      return price.classList.contains("text-text-success") && isPaidAmount(price.textContent);
+    }
+    function isPaidAmount(text) {
+      return /^¥\s*[1-9]\d*(?:,\d{3})*\s*[〜～]?\s*$/.test(text.trim());
     }
     let paidDirty = true, paidSignature;
     function isMagazineCard(card) {
@@ -766,6 +769,31 @@
     const profilePromotions = new Set();
     const profilePromotionHidden = "data-hikikomori-note-profile-promotion-hidden";
     let profilePromotionsDirty = true, profilePromotionsSignature;
+    function profilePaidMagazine(link, destination, user) {
+      const parts = destination.pathname.replace(/\/$/, "").split("/");
+      if (destination.origin !== "https://note.com" || parts.length !== 4 || parts[1] !== user || parts[2] !== "m" || !/^m[a-zA-Z0-9]+$/.test(parts[3]) ||
+          !hasClasses(link, ["absolute", "inset-0"]) || !link.getAttribute("title") || !link.getAttribute("aria-label")) return null;
+      const card = link.parentElement, list = card?.parentElement;
+      if (card?.tagName !== "DIV" || !card.classList.contains("relative") || !card.querySelector("h3") || !card.querySelector("img")) return null;
+      if (list?.tagName === "DIV" && hasClasses(list, ["flex", "flex-col", "gap-4"]) &&
+          [...card.children].some(child => hasClasses(child, ["flex", "items-center", "gap-2"]))) {
+        // サイド欄は「3件¥2,480」。既知の件数要素を除いた残りだけを価格として検証する。
+        const paid = [...card.querySelectorAll("div[class]")].some(row => {
+          if (!hasClasses(row, ["flex", "items-center", "gap-1", "font-bold", "text-text-success", "text-xs"])) return false;
+          const count = row.children[0], text = row.textContent.trim(), prefix = count?.textContent.trim();
+          return count?.tagName === "DIV" && count.classList.contains("text-text-primary") && count.querySelector("svg") &&
+            /^[\d,]+件$/.test(prefix) && text.startsWith(prefix) && isPaidAmount(text.slice(prefix.length));
+        });
+        return paid ? card : null;
+      }
+      if (hasClasses(card, ["flex", "items-start", "gap-4", "bg-surface-normal", "py-4"]) &&
+          list?.tagName === "LI" && hasClasses(list, ["border-border-default", "border-b"]) &&
+          list.children.length === 1 && list.parentElement?.tagName === "UL" && list.parentElement.classList.contains("grid")) {
+        const priceArea = [...card.children].find(child => hasClasses(child, ["relative", "z-10", "ml-auto"]));
+        return priceArea && [...priceArea.querySelectorAll("span[class]")].some(isPaidPrice) ? list : null;
+      }
+      return null;
+    }
     function syncProfilePromotions(settings, url) {
       const signature = JSON.stringify([url, settings.enabled, settings.hidePaidArticles, settings.noteUserId, settings.authorDisplayRules, settings.authorWarning]);
       if (!profilePromotionsDirty && signature === profilePromotionsSignature) return;
@@ -795,6 +823,10 @@
           let destination;
           try { destination = new URL(link.href); } catch { continue; }
           const card = link.parentElement;
+          if (profileListing) {
+            const magazine = profilePaidMagazine(link, destination, page.user);
+            if (magazine) targets.add(magazine);
+          }
           if (profileListing &&
               destination.origin === "https://note.com" && destination.pathname === `/${page.user}/membership/join` &&
               link.classList.contains("absolute") && link.classList.contains("inset-0") &&

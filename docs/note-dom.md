@@ -233,3 +233,9 @@ keepNoteHeaderVisibleがONなら、公式ロゴも確認したヘッダだけに
 仕様変更（2026-11-01）：利用者の指定により、常時表示ON中の作者固定バーは下へずらす方式を廃止し、非表示へ変更。確認済みDOMの識別は維持し、専用属性と既存content.cssだけで制御する。高さの実測・動的style生成は削除。通常のタブは保持し、設定解除・拡張OFF・離脱・停止で属性を外して公式表示へ戻す。
 
 followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/top-3/max-h-screen/w-[11.375rem]/overflow-y-autoで、top:12px、max-height:100vh。PCのヘッダ高65pxの下へ来るよう、常時表示ONでは固定位置をヘッダ実測高さ＋12px（確認時77px）へ変更し、最大高さも画面高からその分を引く。公式・独自メニュー共通のasideへ専用属性を付け、拡張所有styleで高さのCSS変数を設定する。リサイズ・後生成は既存update経路で処理し、変更がない場合はstyleを再生成しない。解除・OFF・離脱・ヘッダ不在・停止で属性とstyleを除去。239件成功、実拡張での再確認待ち。
+
+## 作者ページの有料マガジン（2026-11-01・0.2.7開発中）
+
+/kan11jpと/allで確認。左マガジン欄はdiv.flex.flex-col.gap-4内のdiv.relative、直属のオーバーレイリンク（title・aria-label・作者ID/m/m…）とh3・imgを持つ。価格行はdiv.flex.items-center.gap-1.font-bold.text-text-success.text-xsで、先頭のtext-text-primaryな件数DIV（SVGを含む）と価格のテキストが混在し、全体は「3件¥2,480」。件数の文字列を先頭から除き、残りだけを既存の正額判定へ渡す。ボタンの有無では判定しない。
+
+別の一覧形はul.grid > li.border-border-default.border-b > div.relative.flex.items-start.gap-4.bg-surface-normal.py-4。右側のrelative.z-10.ml-auto内の価格spanを判定し、liごと隠す。無料カードはそのまま。既存のプロフィール販促処理・作者識別・dirtyフラグ・専用属性を共用し、正常な自分ID設定・別作者・有料非表示ON・非許可の条件を維持する。ホーム/all/magazines/likes/archivesが対象で、store・マガジン直接表示は変更しない。未知構造・本文内・別作者のリンクは保持する。

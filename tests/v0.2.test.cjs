@@ -1633,3 +1633,38 @@ test('固定有料記事も許可作者は表示し、無料化・鍵・後挿�
  const parent=f.slot.parentElement;f.slot.remove();f.ui.invalidatePaidCards();f.ui.update(hidden,url);parent.prepend(f.slot);f.ui.invalidatePaidCards();f.ui.update(hidden,url);assert.equal(f.slot.hasAttribute(paidMarker),true);
  f.ui.update(settings,url);assert.equal(f.slot.hasAttribute(paidMarker),false);
 });
+
+
+// 0.2.7: 作者の共通マガジン欄。検索用とは別の2構造。
+function profileMagazinesFixture(){
+ const f=profilePromotionFixture(),doc=f.doc,sideList=doc.createElement('div'),grid=doc.createElement('ul');sideList.className='flex flex-col gap-4';grid.className='grid grid-cols-1 gap-x-4';doc.querySelector('aside').append(sideList);doc.getElementById('main-content').append(grid);
+ function base(){const card=doc.createElement('div'),link=doc.createElement('a'),h=doc.createElement('h3'),img=doc.createElement('img');link.className='absolute inset-0';link.href='https://note.com/creator/m/m123';link.setAttribute('title','マガジン');link.setAttribute('aria-label','マガジン');card.append(link);return {card,link,h,img};}
+ function side(value){const b=base(),layout=doc.createElement('div'),row=doc.createElement('div'),count=doc.createElement('div'),icon=doc.createElement('svg'),price={value};b.card.className='relative';layout.className='flex items-center gap-2';row.className='flex items-center gap-1 font-bold text-text-success text-xs';count.className='flex items-center gap-1 font-bold text-text-primary';count.append(icon);Object.defineProperty(count,'textContent',{get:()=> '3件'});row.append(count);Object.defineProperty(row,'textContent',{get:()=>count.textContent+price.value});layout.append(b.img,b.h,row);b.card.append(layout);sideList.append(b.card);return {...b,row,count,price};}
+ function main(value){const b=base(),slot=doc.createElement('li'),area=doc.createElement('div'),price=doc.createElement('span');b.card.className='relative flex items-start gap-4 bg-surface-normal py-4';slot.className='border-border-default border-b';area.className='relative z-10 ml-auto';price.className='text-text-success text-sm';price.textContent=value;area.append(price);b.card.append(b.img,b.h,area);slot.append(b.card);grid.append(slot);return {...b,slot,price};}
+ return {...f,sideList,grid,sidePaid:side('¥2,480'),sideFree:side(''),mainPaid:main('¥29,800'),mainFree:main('')};
+}
+test('作者の有料マガジンは全モードの共通欄と一覧で非表示にし、無料・一覧全体は残す',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=profileMagazinesFixture(),settings=f.core.readSettings({...groups(),mode,noteUserId:'me',hidePaidArticles:true});
+  for(const suffix of ['', '/all','/magazines','/likes','/archives','/all/?page=2#top']){
+   f.ui.update(settings,'https://note.com/creator'+suffix);assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),true);assert.equal(f.mainPaid.slot.hasAttribute(promotionMarker),true);
+   for(const node of [f.sideFree.card,f.mainFree.slot,f.sideList,f.grid])assert.equal(node.hasAttribute(promotionMarker),false);
+  }
+ }
+});
+test('作者マガジンは許可・自己・未設定・異常・設定解除・OFFで表示し、直接表示・離脱・停止も復元',()=>{
+ const f=profileMagazinesFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true}),url='https://note.com/creator/all';
+ for(const patch of [{enabled:false},{hidePaidArticles:false},{noteUserId:''},{noteUserId:'creator'},{authorWarning:'broken'},{authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]}]){f.ui.update(settings,url);assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),true);f.ui.update({...settings,...patch},url);assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),false);assert.equal(f.mainPaid.slot.hasAttribute(promotionMarker),false);}
+ for(const target of ['https://note.com/creator/store','https://note.com/creator/m/m123','https://note.com/creator/membership','https://note.com/other','https://note.com/search']){f.ui.update(settings,url);f.ui.update(settings,target);assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),false);assert.equal(f.mainPaid.slot.hasAttribute(promotionMarker),false);}
+ f.ui.update(settings,url);f.ui.stop();assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),false);assert.equal(f.mainPaid.slot.hasAttribute(promotionMarker),false);
+});
+test('マガジンの後挿入・無料化・価格変更・狭幅・再挿入を再評価し、件数や説明文の価格を誤認しない',()=>{
+ const f=profileMagazinesFixture(),settings=f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true}),url='https://note.com/creator';const parent=f.sidePaid.card.parentElement;f.sidePaid.card.remove();f.ui.update(settings,url);parent.append(f.sidePaid.card);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),true);
+ for(const price of ['', '¥0','3件','¥2,480円相当の紹介']){f.sidePaid.price.value=price;f.mainPaid.price.textContent=price;f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),false);assert.equal(f.mainPaid.slot.hasAttribute(promotionMarker),false);}
+ f.sidePaid.price.value='¥2,480';f.mainPaid.price.textContent='¥29,800';f.win.wide=false;f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),true);assert.equal(f.mainPaid.slot.hasAttribute(promotionMarker),true);
+});
+test('別作者・外部リンク・未知構造・本文内のマガジンは推測で非表示にしない',()=>{
+ for(const change of [f=>{f.sidePaid.link.href='https://note.com/other/m/m123';f.mainPaid.link.href='https://note.com/other/m/m123';},f=>{f.sidePaid.link.href='https://other.test/creator/m/m123';f.mainPaid.link.href='https://other.test/creator/m/m123';},f=>{f.sidePaid.row.className='unknown';f.mainPaid.card.className='unknown';},f=>{f.sidePaid.link.removeAttribute('title');f.mainPaid.link.removeAttribute('title');},f=>{f.doc.querySelector('article').append(f.sideList,f.grid);}]){
+  const f=profileMagazinesFixture();change(f);f.ui.update(f.core.readSettings({...groups(),noteUserId:'me',hidePaidArticles:true}),'https://note.com/creator');assert.equal(f.sidePaid.card.hasAttribute(promotionMarker),false);assert.equal(f.mainPaid.slot.hasAttribute(promotionMarker),false);
+ }
+});
