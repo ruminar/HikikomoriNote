@@ -254,3 +254,60 @@ test('ストアの作者表示設定から登録・解除でき、3モードとO
   f.doc.querySelector('[class="hikikomori-note-author-profile"]').querySelector('select').value='';f.doc.querySelector('button[data-author-save]').onclick();await flush();assert.deepEqual(f.backend.state.authorDisplayRules,[]);
  }
 });
+test('作者検索は非表示と表示許可を大小文字に依存せず取得し、未登録・特殊なIDでも従来と同じ',()=>{
+ const {core}=backend(),rules=Object.freeze([{userId:'YeKu',displayName:'作者',action:'hide'},{userId:'allowed',displayName:'許可',action:'allow'},{userId:'constructor',displayName:'同名',action:'allow'},{userId:'__proto__',displayName:'特殊',action:'hide'}].map(Object.freeze)),state={authorDisplayRules:rules};
+ for(const id of ['yeku','YEKU','ALLOWED','constructor','__PROTO__','unknown','toString'])assert.equal(core.authorRule(state,id),rules.find(rule=>rule.userId.toLowerCase()===id.toLowerCase()));
+ const duplicate={authorDisplayRules:[rules[0],{userId:'YEKU',displayName:'後の項目',action:'allow'}]};assert.equal(core.authorRule(duplicate,'yeku'),rules[0]);
+});
+
+test('作者ルール配列の差し替えで変更・追加・削除を反映し、同じ更新番号の別設定や以前の状態と混同しない',()=>{
+ const {core}=backend(),old={authorDisplayRevision:1,authorDisplayRules:[{userId:'yeku',displayName:'作者',action:'hide'}]},state={...old};assert.equal(core.authorRule(state,'yeku').action,'hide');
+ state.authorDisplayRules=[{userId:'yeku',displayName:'作者',action:'allow'},{userId:'new_user',displayName:'新規',action:'hide'}];assert.equal(core.authorRule(state,'yeku').action,'allow');assert.equal(core.authorRule(state,'NEW_USER').action,'hide');assert.equal(core.authorRule(old,'yeku').action,'hide');
+ state.authorDisplayRules=[];assert.equal(core.authorRule(state,'yeku'),undefined);assert.equal(core.authorRule(state,'new_user'),undefined);assert.equal(core.authorRule(old,'yeku').action,'hide');
+});
+
+test('5000件の作者検索を繰り返しても同じ配列のIDを再走査せず、設定の他項目だけの変更でも再利用',()=>{
+ const {core}=backend();let idReads=0;const rules=Object.freeze(Array.from({length:5000},(_,i)=>Object.freeze({get userId(){idReads++;return `author_${i}`;},displayName:`作者${i}`,action:i%2?'allow':'hide'}))),state={authorDisplayRules:rules};
+ assert.equal(core.authorRule(state,'AUTHOR_4999'),rules[4999]);assert.equal(idReads,5000);
+ for(let i=0;i<1000;i++){assert.equal(core.authorRule(state,`author_${i}`),rules[i]);assert.equal(core.authorRule(state,`missing_${i}`),undefined);}
+ assert.equal(core.authorRule({...state,enabled:false},'author_100'),rules[100]);assert.equal(idReads,5000);
+});
+
+test('作者索引は保存・JSON・競合トークンに混ざらず、表示設定の保存とJSON再読込を反映',async()=>{
+ const f=backend({authorDisplayRules:[{userId:'yeku',displayName:'作者',action:'hide'}],authorDisplayRevision:1}),s=f.core.readSettings(f.state),before=JSON.stringify(s),json=f.core.exportSettings(s),token=f.core.settingsToken(s),raw=plain(f.state);
+ for(const id of ['yeku','unknown','YEKU'])f.core.authorRule(s,id);assert.equal(JSON.stringify(s),before);assert.equal(f.core.exportSettings(s),json);assert.equal(f.core.settingsToken(s),token);assert.deepEqual(f.state,raw);assert.equal(f.writes,0);assert.equal(JSON.parse(json).schemaVersion,6);
+ await f.controller.author(operation(f,'yeku','allow'));const allowed=f.core.readSettings(f.state);assert.equal(f.core.authorRule(allowed,'YEKU').action,'allow');assert.equal(f.core.authorRule(s,'yeku').action,'hide');
+ await f.controller.importSettings({json,expectedToken:f.core.settingsToken(allowed)});assert.equal(f.core.authorRule(f.core.readSettings(f.state),'yeku').action,'hide');assert.deepEqual(f.state.authorDisplayRules,raw.authorDisplayRules);
+});
+function profileAllowanceFixture(){
+ const f=backend({hidePaidArticles:true,authorDisplayRules:[{userId:'creator',displayName:'作者',action:'allow'}]}),doc=documentFromHtml('<main></main>'),calls=[];
+ f.c.HikikomoriNote={...f.core,authorRule(settings,id){calls.push(id.toLowerCase());return f.core.authorRule(settings,id);}};vm.runInContext(source('src/note-ui.js'),f.c);
+ const control=f.c.HikikomoriNoteUi.create(doc,{wide:true,matchMedia:()=>({matches:true}),getComputedStyle:()=>({display:'block'})});
+ function addCard(user='creator',paid=true){const outer=doc.createElement('div'),inner=doc.createElement('div'),link=doc.createElement('a'),heading=doc.createElement('h3'),avatar=doc.createElement('a'),price=doc.createElement('span');outer.className='grid-rows-subgrid';link.className='absolute inset-0';link.setAttribute('title','記事');link.setAttribute('aria-label','記事');link.href=`https://note.com/${user}/n/n123`;avatar.setAttribute('data-name','avatar');avatar.href=`https://note.com/${user}`;price.className='text-text-success';price.textContent=paid?'¥200':'';inner.append(link,heading,avatar,price);outer.append(inner);doc.querySelector('main').append(outer);return {outer,link,avatar};}
+ const cards=[addCard(),addCard(),addCard()];return {...f,doc,control,calls,cards,addCard,settings:f.core.readSettings(f.state)};
+}
+const priceHidden='data-hikikomori-note-paid-hidden';
+
+test('作者トップとallの有料表示許可は本人分だけ1回判定し、DOM追加・再描画・同一作者の移動で再利用',()=>{
+ const f=profileAllowanceFixture(),s=f.settings;f.control.update(s,'https://note.com/creator');assert.deepEqual(f.calls,['creator']);for(const card of f.cards)assert.equal(card.outer.hasAttribute(priceHidden),false);
+ for(const url of ['https://note.com/creator','https://note.com/creator/all','https://note.com/creator/all/?page=2#list']){f.control.invalidatePaidCards();f.control.update(s,url);assert.equal(f.calls.length,1);}
+ const added=f.addCard();f.control.invalidatePaidCards();f.control.update(s,'https://note.com/creator/all');assert.equal(f.calls.length,1);assert.equal(added.outer.hasAttribute(priceHidden),false);
+ for(const mode of ['normal','social','severe']){f.control.update({...s,mode},'https://note.com/creator/all');assert.equal(f.calls.length,1);}f.control.stop();
+});
+
+test('本人の許可変更・解除・自己ID・異常状態の変更を再判定し、非表示設定でも無料記事を隠さない',()=>{
+ const f=profileAllowanceFixture(),free=f.addCard('creator',false);let s=f.settings;f.control.update(s,'https://note.com/creator');
+ for(const rules of [[{userId:'creator',displayName:'作者',action:'hide'}],[],[{userId:'creator',displayName:'作者',action:'allow'}]]){s={...s,authorDisplayRules:rules};f.control.update(s,'https://note.com/creator');assert.equal(f.cards[0].outer.hasAttribute(priceHidden),rules[0]?.action!=='allow');assert.equal(free.outer.hasAttribute(priceHidden),false);assert.equal(free.outer.hasAttribute('data-hikikomori-note-author-hidden'),false);}
+ assert.equal(f.calls.length,4);for(const patch of [{noteUserId:''},{noteUserId:'creator'},{authorWarning:'broken'}]){f.control.update({...s,...patch},'https://note.com/creator');assert.equal(f.cards[0].outer.hasAttribute(priceHidden),true);f.control.update(s,'https://note.com/creator');assert.equal(f.cards[0].outer.hasAttribute(priceHidden),false);}
+ f.control.update({...s,enabled:false},'https://note.com/creator');assert.equal(f.cards[0].outer.hasAttribute(priceHidden),false);f.control.update({...s,hidePaidArticles:false},'https://note.com/creator');assert.equal(f.cards[0].outer.hasAttribute(priceHidden),false);
+});
+
+test('作者トップでも別作者と作者不一致のカードには本人の許可を流用せず、作者移動でも結果を持ち越さない',()=>{
+ const f=profileAllowanceFixture(),other=f.addCard('other'),unverified=f.addCard();unverified.avatar.href='https://note.com/other';f.control.update(f.settings,'https://note.com/creator');assert.equal(f.calls.filter(id=>id==='creator').length,1);assert.ok(f.calls.includes('other'));assert.equal(other.outer.hasAttribute(priceHidden),true);assert.equal(unverified.outer.hasAttribute(priceHidden),true);assert.equal(f.cards[0].outer.hasAttribute(priceHidden),false);
+ f.control.invalidatePaidCards();f.control.update(f.settings,'https://note.com/creator/all');assert.equal(f.calls.filter(id=>id==='creator').length,1);assert.equal(other.outer.hasAttribute(priceHidden),true);
+ f.control.update(f.settings,'https://note.com/other/all');assert.equal(other.outer.hasAttribute(priceHidden),true);assert.equal(f.cards[0].outer.hasAttribute(priceHidden),false);
+});
+
+test('likes等の対象外はカードごとの許可判定を維持し、トップへ戻ると改めて本人分を判定',()=>{
+ for(const path of ['/creator/likes','/creator/magazines','/creator/archives','/search?q=AI']){const f=profileAllowanceFixture();f.control.update(f.settings,'https://note.com'+path);assert.ok(f.calls.filter(id=>id==='creator').length>=3,path);for(const card of f.cards)assert.equal(card.outer.hasAttribute(priceHidden),false);const before=f.calls.length;f.control.update(f.settings,'https://note.com/creator');assert.equal(f.calls.length,before+1);f.control.invalidatePaidCards();f.control.update(f.settings,'https://note.com/creator');assert.equal(f.calls.length,before+1);}
+});

@@ -198,7 +198,22 @@
     return value.trim();
   }
   function isSelf(settings, id) { return Boolean(settings.noteUserId && settings.noteUserId.toLowerCase() === id.toLowerCase()); }
-  function authorRule(settings, id) { return settings.authorDisplayRules.find(rule => rule.userId.toLowerCase() === id.toLowerCase()); }
+  // 保存用配列には触れず、配列の寿命に合わせた検索索引だけを保持する。
+  // ルール更新時は配列を差し替える。同じ配列内でIDの変更・追加・削除は行わない。
+  const authorIndexes = new WeakMap();
+  function authorRule(settings, id) {
+    const rules = settings.authorDisplayRules;
+    let index = authorIndexes.get(rules);
+    if (!index) {
+      index = new Map();
+      for (const rule of rules) {
+        const key = rule.userId.toLowerCase();
+        if (!index.has(key)) index.set(key, rule); // findと同じ先頭優先。通常は検証済みで重複なし。
+      }
+      authorIndexes.set(rules, index);
+    }
+    return index.get(id.toLowerCase());
+  }
   function authorLabel(rule) { return rule.displayName ? `${rule.displayName}（${rule.userId}）` : rule.userId; }
   function sortAuthors(rules) {
     const collator = new Intl.Collator("ja");

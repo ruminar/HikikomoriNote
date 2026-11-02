@@ -470,6 +470,26 @@
       }
     }
     const paidCards = new Map();
+    // 本人の記事が並ぶトップと/allだけ、許可結果を共有する。各カードの作者照合は省略しない。
+    let profilePaidAllowance;
+    function prepareProfilePaidAllowance(settings, url) {
+      let owner;
+      try {
+        const page = core.pageKind(url), path = new URL(url).pathname.replace(/\/$/, "");
+        if (settings.enabled && settings.hidePaidArticles && page?.type === "profile" &&
+            [`/${page.user}`, `/${page.user}/all`].includes(path)) owner = page.user;
+      } catch { /* 確認できないページはカードごとの判定を維持する */ }
+      if (!owner) { profilePaidAllowance = undefined; return; }
+      const userId = owner.toLowerCase();
+      if (profilePaidAllowance?.userId === userId && profilePaidAllowance.rules === settings.authorDisplayRules &&
+          profilePaidAllowance.self === settings.noteUserId && profilePaidAllowance.warning === settings.authorWarning) return;
+      const allowed = Boolean(settings.noteUserId && !settings.authorWarning && !core.isSelf(settings, owner) && core.authorRule(settings, owner)?.action === "allow");
+      profilePaidAllowance = { userId, rules: settings.authorDisplayRules, self: settings.noteUserId, warning: settings.authorWarning, allowed };
+    }
+    function isAllowedAuthor(settings, userId) {
+      if (!settings.noteUserId || settings.authorWarning || core.isSelf(settings, userId)) return false;
+      return profilePaidAllowance?.userId === userId.toLowerCase() ? profilePaidAllowance.allowed : core.authorRule(settings, userId)?.action === "allow";
+    }
     const paidHidden = "data-hikikomori-note-paid-hidden";
     const membershipLock = "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2Zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2Zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2Z";
     function isMembershipLock(path) {
@@ -524,7 +544,7 @@
     function isAllowedCard(card, link, settings) {
       if (!settings.noteUserId || settings.authorWarning) return false;
       const userId = cardCreatorId(card, link);
-      return Boolean(userId && !core.isSelf(settings, userId) && core.authorRule(settings, userId)?.action === "allow");
+      return Boolean(userId && isAllowedAuthor(settings, userId));
     }
     function paidCardContainer(card) {
       // ホームの横並びでは幅を確保する1件分の枠も隠す。
@@ -1050,7 +1070,7 @@
       const targets = new Set(), page = core.pageKind(url);
       const active = settings.enabled && settings.hidePaidArticles && settings.noteUserId && !settings.authorWarning &&
         page?.type === "profile" && new URL(url).pathname.replace(/\/$/, "") !== `/${page.user}/store` &&
-        !core.isSelf(settings, page.user) && core.authorRule(settings, page.user)?.action !== "allow";
+        !core.isSelf(settings, page.user) && !isAllowedAuthor(settings, page.user);
       // 表示管理UIと同じ確認済み作者を使う。TL用asideの形に依存させない。
       const author = active ? authorControls.profileOwner() : null;
       const main = author && author.userId === page?.user ? author.host.closest('[id="main-content"]') : null;
@@ -1136,6 +1156,7 @@
       prepareSidebar(url, settings);
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
       currentSettings = settings; currentUrl = url;
+      prepareProfilePaidAllowance(settings, url);
       syncPinnedHeader(settings, url);
       authorControls.update(settings, url);
       syncFavoriteProfile(settings);
@@ -1275,6 +1296,7 @@
         sidebarRoots.clear();
         authorControls.stop();
         disposed = true;
+        profilePaidAllowance = undefined;
         favoriteProfile?.toggle.remove(); favoriteProfile?.block.remove(); favoriteProfile?.mount?.remove(); favoriteProfile = undefined;
         profileLayout?.root.remove(); profileLayout = undefined;
         syncPinnedHeader({ enabled: false }, currentUrl);
