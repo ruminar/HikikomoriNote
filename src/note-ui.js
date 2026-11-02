@@ -64,7 +64,27 @@
     path.setAttribute("d", core.bookIconPath); svg.append(path); return svg;
   }
   function create(doc, win, actions = {}) {
-    const authorControls = createAuthorControls(doc, win, actions);
+    let profileLayout;
+    // 見た目だけでなくTab移動・読み上げも同じ順序にする。各機能は自分の領域だけを更新する。
+    function profileSlot(owner, name) {
+      if (!profileLayout || profileLayout.host !== owner.host || profileLayout.userId !== owner.userId || !profileLayout.root.isConnected) {
+        profileLayout?.root.remove();
+        const root = doc.createElement("div"); root.setAttribute(owned, ""); root.className = "hikikomori-note-profile-controls";
+        const slots = {};
+        for (const slot of ["navigation", "favorites", "author"]) {
+          const element = doc.createElement("div"); element.setAttribute("data-hikikomori-note-profile-slot", slot);
+          root.append(element); slots[slot] = element;
+        }
+        owner.host.prepend(root); profileLayout = { root, host: owner.host, userId: owner.userId, slots };
+      }
+      return profileLayout.slots[name];
+    }
+    function pruneProfileLayout() {
+      if (profileLayout && Object.values(profileLayout.slots).every(slot => !slot.children.length)) {
+        profileLayout.root.remove(); profileLayout = undefined;
+      }
+    }
+    const authorControls = createAuthorControls(doc, win, actions, profileSlot);
     let host, menu, signature;
     let articleFollowing;
     let articleAuthor, authorSignature;
@@ -160,7 +180,7 @@
           finally { context.busy = false; repaint(); }
         };
         block.append(label, button, status, refresh);
-        if (magazine) owner.host.append(block); else owner.host.prepend(block);
+        if (magazine) owner.host.append(block); else profileSlot(owner, "favorites").append(block);
         favoriteProfile = context;
       }
       const context = favoriteProfile; context.owner = owner;
@@ -996,6 +1016,11 @@
     }
     function update(settings, url) {
       if (disposed) return;
+      const profilePage = core.pageKind(url);
+      if (profileLayout && (profilePage?.type !== "profile" || profilePage.user !== profileLayout.userId ||
+          !profileLayout.root.isConnected || Object.values(profileLayout.slots).some(slot => slot.parentElement !== profileLayout.root))) {
+        profileLayout.root.remove(); profileLayout = undefined; authorControls.invalidate();
+      }
       prepareSidebar(url, settings);
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
       currentSettings = settings; currentUrl = url;
@@ -1016,13 +1041,16 @@
       syncPaidCards(settings, url);
       syncHomePaidRecommendations(settings, url);
       syncProfilePromotions(settings, url);
-      if (!settings.enabled || !page || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); return; }
+      if (!settings.enabled || !page || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); pruneProfileLayout(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
       const officialAside = common && [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky"));
       const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);
       const mobileHost = syncMobile(compact, url);
-      const nextHost = mobileHost || (page.type === "profile" ? profile(page.user) : sidebar());
-      if (!nextHost) { restore(); return; }
+      const profileHost = page.type === "profile" ? profile(page.user) : null;
+      let nextHost = mobileHost;
+      if (!nextHost && profileHost) nextHost = profileSlot(authorControls.profileOwner() || { host: profileHost, userId: page.user }, "navigation");
+      if (!nextHost && page.type !== "profile") nextHost = sidebar();
+      if (!nextHost) { restore(); pruneProfileLayout(); return; }
       if (host !== nextHost || !menu?.isConnected) restore();
       host = nextHost;
       const group = core.selectedGroup(settings);
@@ -1114,6 +1142,7 @@
         }
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
+      pruneProfileLayout();
     }
     return Object.freeze({
       update, prepareSidebar,
@@ -1131,6 +1160,7 @@
         authorControls.stop();
         disposed = true;
         favoriteProfile?.toggle.remove(); favoriteProfile?.block.remove(); favoriteProfile = undefined;
+        profileLayout?.root.remove(); profileLayout = undefined;
         syncPinnedHeader({ enabled: false }, currentUrl);
         removeMobile();
         syncHeaderSettings(false);
@@ -1160,7 +1190,7 @@
     });
   }
   // 作者設定は通常のナビゲーションと独立。重度・拡張OFFでも手動管理を残す。
-  function createAuthorControls(doc, win, actions) {
+  function createAuthorControls(doc, win, actions, profileSlot) {
     const marker = "data-hikikomori-note-author-hidden", hiddenCards = new Map();
     let settings, url, dirty = true, cardSignature, disposed = false;
     let dialog, dialogContext, previousFocus, askedArticle, profileBlock, profileContext, profileSelect, currentProfileOwner;
@@ -1344,8 +1374,9 @@
       const owner = profileOwner();
       currentProfileOwner = owner;
       if (!owner || core.isSelf(settings, owner.userId)) { profileBlock?.remove(); profileBlock = undefined; profileContext = undefined; return; }
+      const slot = profileSlot(owner, "author");
       const context = JSON.stringify([owner.userId, owner.displayName, settings.noteUserId, settings.authorWarning, core.authorRule(settings, owner.userId)]);
-      if (profileBlock?.isConnected && context === profileContext && profileBlock.parentElement === owner.host) { refreshDisabled(); return; }
+      if (profileBlock?.isConnected && context === profileContext && profileBlock.parentElement === slot) { refreshDisabled(); return; }
       profileBlock?.remove(); profileContext = context;
       profileBlock = doc.createElement("div"); profileBlock.setAttribute(owned, ""); profileBlock.className = "hikikomori-note-author-profile";
       const label = doc.createElement("label"), select = doc.createElement("select");
@@ -1358,7 +1389,7 @@
       const help = doc.createElement("p"); help.textContent = settings.authorWarning || (!settings.noteUserId ? "自分を対象外にするため、専用ホームでnoteユーザー名を設定してください。" : "非表示にすると無料記事も一覧から隠します。記事や作者ページは直接開けます。表示を許可した作者は、有料記事も表示します。");
       const status = doc.createElement("p"); status.setAttribute("role", "status");
       saveButton.onclick = () => { const result = save(owner, select.value || null, "profile", status, snapshot(owner)); refreshDisabled(); void result; };
-      profileBlock.append(label, saveButton, help, status); refreshButton(profileBlock, status); owner.host.prepend(profileBlock); refreshDisabled();
+      profileBlock.append(label, saveButton, help, status); refreshButton(profileBlock, status); slot.append(profileBlock); refreshDisabled();
     }
     function update(value, pageUrl) {
       if (disposed) return;

@@ -664,22 +664,16 @@ test('DOM再生成後の公式メニューも処理し、構造不一致なら�
  f.ui.update(settings,'https://note.com/tag/A');const later=f.doc.createElement('div');aside.append(later);f.ui.update(settings,'https://note.com/tag/A');assert.equal(later.hasAttribute('data-hikikomori-note-menu-hidden'),true);
  aside.className='changed';f.ui.update(settings,'https://note.com/tag/A');assert.equal(later.hasAttribute('data-hikikomori-note-menu-hidden'),false);assert.equal(aside.children.length,2);
 });
-test('プロフィール情報の先頭に幅を問わず追加し、非表示領域やモードでは解除',()=>{
- const f=uiFixture('<aside class="w-full lg:w-96"><div><button data-name="avatar"></button><h1></h1><a href="/ruminar/followings"></a></div></aside>'),settings=f.core.readSettings({...groups(),});const aside=f.doc.querySelector('aside');
- f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children[0].textContent,'フォロー中のTL');
- assert.equal(aside.children[0].classList.contains('hikikomori-note-profile-navigation'),true);
- f.ui.update(settings,'https://note.com/ruminar/all');assert.equal(aside.children.length,2);
- for(const page of ['followings','followers']){
-  f.ui.update(settings,`https://note.com/ruminar/${page}?page=2`);
-  assert.equal(aside.children.length,2);assert.equal(aside.children[0].textContent,'フォロー中のTL');
-  assert.equal(aside.children[0].querySelector('a').href,'https://note.com/following');
- }
- f.win.wide=false;f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,2);
- aside.width=0;f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,1);
- aside.width=180;
- f.win.wide=true;f.ui.update(settings,'https://note.com/ruminar');f.ui.update({...settings,mode:'severe'},'https://note.com/ruminar');assert.equal(aside.children.length,1);
- f.ui.update(settings,'https://note.com/ruminar/n/article');assert.equal(aside.children.length,1);
+test('プロフィール情報の先頭に幅を問わず追加し、非表示領域やモードではTLを解除',()=>{
+ const f=uiFixture('<aside class="w-full lg:w-96"><div id="official-profile"><button data-name="avatar"></button><h1></h1><a href="/ruminar/followings"></a></div></aside>'),settings=f.core.readSettings({...groups()});const aside=f.doc.querySelector('aside'),official=f.doc.getElementById('official-profile');
+ const navigation=()=>f.doc.querySelector('[class~="hikikomori-note-profile-navigation"]');
+ for(const page of ['all','all','followings','followers','']){f.ui.update(settings,`https://note.com/ruminar/${page}`);assert.equal(navigation().textContent,'フォロー中のTL');assert.equal(navigation().querySelector('a').href,'https://note.com/following');assert.equal(aside.children.length,1);assert.equal(official.children[0].className,'hikikomori-note-profile-controls');}
+ f.win.wide=false;f.ui.update(settings,'https://note.com/ruminar');assert.ok(navigation());
+ aside.width=0;f.ui.update(settings,'https://note.com/ruminar');assert.equal(navigation(),null);aside.width=180;
+ f.win.wide=true;f.ui.update(settings,'https://note.com/ruminar');f.ui.update({...settings,mode:'severe'},'https://note.com/ruminar');assert.equal(navigation(),null);
+ f.ui.update(settings,'https://note.com/ruminar/n/article');assert.equal(f.doc.querySelector('[class="hikikomori-note-profile-controls"]'),null);assert.equal(aside.children.length,1);
 });
+
 test('タグ・プロフィール判定は予約パスや記事・外部URL・壊れたエンコードを除外',()=>{
  const {core}=fixture();
  for(const url of ['https://note.com/settings','https://note.com/dashboard','https://note.com/ruminar/n/id','https://other.test/ruminar','https://note.com/tag/%xx'])assert.equal(core.pageKind(url),null);
@@ -1285,8 +1279,8 @@ test('社会復帰の設定画面はタグへ入れず、未保存モードは�
 test('社会復帰でもプロフィールのTLだけ追加し公式情報と関連商品の独立制御を維持',()=>{
  const f=uiFixture('<aside class="w-full lg:w-96"><div id="official-profile"><button data-name="avatar"></button><h1></h1><a href="/ruminar/followings"></a></div></aside><section id="product"><h2 class="sr-only"></h2><div data-aicn-thing-card="true"></div></section>');
  const settings=f.core.readSettings({...groups(),mode:'social'}),aside=f.doc.querySelector('aside'),official=f.doc.getElementById('official-profile'),product=f.doc.getElementById('product');product.querySelector('h2').textContent='関連商品';
- f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,2);assert.equal(aside.children[0].textContent,'フォロー中のTL');assert.equal(official.hasAttribute('data-hikikomori-note-menu-hidden'),false);
- f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,2);
+ f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,1);assert.equal(official.children[0].querySelector('[class~="hikikomori-note-profile-navigation"]').textContent,'フォロー中のTL');assert.equal(official.hasAttribute('data-hikikomori-note-menu-hidden'),false);
+ f.ui.update(settings,'https://note.com/ruminar');assert.equal(aside.children.length,1);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-profile-controls"]').length,1);
  f.ui.update(settings,'https://note.com/tag/AI');assert.equal(aside.children.length,1);assert.equal(product.hasAttribute('data-hikikomori-note-product-hidden'),true);assert.equal(f.doc.querySelector('[data-tag-add]'),null);
  f.ui.update({...settings,enabled:false},'https://note.com/tag/AI');assert.equal(product.hasAttribute('data-hikikomori-note-product-hidden'),false);
 });
@@ -1838,4 +1832,34 @@ test('マガジン登録メッセージは現在のタブ・保存直前・フ�
 test('旧JSON全置換はマガジンの解除も確認し、キャンセルでは現在の設定を保持する',async()=>{
  const h=homeFixture({state:{...groups([favoriteMagazine]),tagSchemaVersion:4}});await flush();const c=h.c.HikikomoriNote,d=JSON.parse(c.exportSettings(c.readSettings({...settingsData(),...groups(['old'])})));d.schemaVersion=4;for(const g of d.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}
  h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/作者・マガジンのお気に入りも解除/,h.nodes.get('transfer-validation').textContent+' '+h.nodes.get('status').textContent);assert.deepEqual(h.state.tagGroups[0].tags,[favoriteMagazine]);
+});
+const profileLayoutHtml='<aside class="w-full lg:w-96"><div id="profile-identity"><button data-name="avatar"></button><h1></h1><a id="profile-followings" href="https://note.com/creator/followings"></a></div></aside>';
+const profileRoot=f=>f.doc.querySelector('[class="hikikomori-note-profile-controls"]');
+const profilePanel=f=>f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]');
+function assertProfileOrder(f){
+ const root=profileRoot(f);assert.ok(root);assert.deepEqual(root.children.map(n=>n.getAttribute('data-hikikomori-note-profile-slot')),['navigation','favorites','author']);
+ assert.equal(root.children[0].querySelector('a').href,'https://note.com/following');assert.equal(root.children[1].querySelector('[class~="hikikomori-note-favorite-profile"]'),profilePanel(f));assert.ok(root.children[2].querySelector('button[data-author-save]'));assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-profile-controls"]').length,1);return root;
+}
+
+test('作者表示の保存・解除で欄を再生成しても、開いているお気に入りの位置・入力・フォーカスを維持',async()=>{
+ let state;const f=uiFixture(profileLayoutHtml,{async addCurrentUser(){},async setAuthor(op){state={...state,authorDisplayRevision:state.authorDisplayRevision+1,authorDisplayRules:op.action?[{userId:'creator',displayName:'作者',action:op.action}]:[]};f.ui.update(state,'https://note.com/creator');}});f.doc.querySelector('h1').textContent='作者';state=f.core.readSettings({...groups(),noteUserId:'me'});f.ui.update(state,'https://note.com/creator');const root=assertProfileOrder(f),panel=profilePanel(f),select=panel.querySelector('select');f.doc.querySelector('[class="hikikomori-note-favorite-toggle"]').onclick();select.value='group2';select.onchange();select.focus();
+ for(const action of ['allow','hide','']){const before=f.doc.querySelector('button[data-author-save]');root.children[2].querySelector('select').value=action;before.onclick();await flush();assert.equal(assertProfileOrder(f),root);assert.equal(before.isConnected,false);assert.equal(profilePanel(f),panel);assert.equal(panel.hidden,false);assert.equal(select.value,'group2');assert.equal(f.doc.activeElement,select);}
+ assert.deepEqual(state.authorDisplayRules,[]);
+});
+
+test('お気に入り保存・グループ更新・再描画でも3領域の順序と作者表示の入力を保持',async()=>{
+ let state;const f=uiFixture(profileLayoutHtml,{async addCurrentUser(groupId,userId,displayName){state={...state,tagSchemaVersion:3,tagGroups:state.tagGroups.map(g=>({...g,tags:g.id===groupId?[{type:'user',userId,displayName}]:g.tags}))};f.ui.update(state,'https://note.com/creator');}});f.doc.querySelector('h1').textContent='作者';state=f.core.readSettings({...groups(),noteUserId:'me'});f.ui.update(state,'https://note.com/creator');const root=assertProfileOrder(f),panel=profilePanel(f),authorSelect=root.children[2].querySelector('select');authorSelect.value='hide';panel.querySelector('select').value='group3';panel.querySelector('select').onchange();await panel.querySelector('button').onclick();assert.equal(panel.querySelector('button').textContent,'登録済み');assert.equal(authorSelect.value,'hide');assert.equal(assertProfileOrder(f),root);
+ state={...state,tagGroups:state.tagGroups.map(g=>({...g,name:'変更後'}))};for(let i=0;i<3;i++){f.ui.invalidatePaidCards();f.ui.update(state,'https://note.com/creator');assert.equal(assertProfileOrder(f),root);assert.equal(authorSelect.value,'hide');}f.ui.stop();assert.equal(profileRoot(f),null);assert.equal(f.doc.querySelector('h1').isConnected,true);
+});
+
+test('公式DOMと拡張親・子領域の差し替えから順序を復元し、別作者・ページ離脱で古い欄を残さない',()=>{
+ const f=uiFixture(profileLayoutHtml,{async addCurrentUser(){}}),state=f.core.readSettings({...groups(),noteUserId:'me'});f.ui.update(state,'https://note.com/creator');
+ for(const remove of [root=>root.remove(),root=>root.children[2].remove()]){const old=assertProfileOrder(f);remove(old);f.ui.update(state,'https://note.com/creator');assert.equal(old.isConnected,false);assertProfileOrder(f);assert.equal(profilePanel(f).hidden,true);}
+ const official=f.doc.getElementById('profile-identity'),replacement=f.doc.createElement('div');const avatar=f.doc.createElement('button');avatar.setAttribute('data-name','avatar');const h=f.doc.createElement('h1'),a=f.doc.createElement('a');a.href='https://note.com/other/followings';replacement.append(avatar,h,a);official.parentElement.append(replacement);official.remove();f.ui.update(state,'https://note.com/other');const root=assertProfileOrder(f);assert.equal(root.parentElement,replacement);assert.equal(profilePanel(f).hidden,true);f.ui.update(state,'https://note.com/search');assert.equal(root.isConnected,false);assert.equal(profileRoot(f),null);
+});
+
+test('社会復帰・重度・OFF・自分の例外を維持し、空になった作者用の親は撤去する',()=>{
+ const f=uiFixture(profileLayoutHtml,{async addCurrentUser(){}}),state=f.core.readSettings({...groups(),noteUserId:'me'});f.ui.update(state,'https://note.com/creator');assertProfileOrder(f);
+ for(const patch of [{mode:'social'},{mode:'severe'},{enabled:false}]){f.ui.update({...state,...patch},'https://note.com/creator');const root=profileRoot(f);assert.ok(root);assert.equal(profilePanel(f),null);assert.equal(root.children[0].children.length,patch.mode==='social'?1:0);assert.ok(root.children[2].querySelector('button[data-author-save]'));}
+ f.ui.update({...state,noteUserId:'creator',mode:'severe'},'https://note.com/creator');assert.equal(profileRoot(f),null);f.ui.update({...state,noteUserId:'creator'},'https://note.com/creator');const root=profileRoot(f);assert.ok(root.children[0].querySelector('a'));assert.ok(root.children[1].querySelector('select'));assert.equal(root.children[2].children.length,0);
 });
