@@ -1,5 +1,11 @@
 # 0.2.0のDOM確認記録
 
+## 0.2.9・メンバーシップ設定の参考事例
+
+利用者提供outerHTMLに基づく。order-2/w-full/flex-none/md:order-3のasideに、flex/flex-col/gap-y-4の外側DIV、その中に同じ縦並びとbg-background-primary/p-4/md:p-6を持つ参考事例ボックスがある。block/md:hiddenとhidden/md:blockの2つのdetailsに「参考事例」のsummary、GET /searchとhidden context=circleの検索フォーム、カテゴリ別候補がそれぞれ存在する。動的IDと具体的な候補名・価格は識別に使わない。
+
+/membership/settingsと/manageだけで、有料記事非表示またはおすすめ非表示ON時に専用属性で外枠ごと非表示にする。asideに別枠が混在すれば参考事例ボックスだけに留める。子候補の後挿入は外枠のCSSで隠し、全体の後挿入・差し替えは既存DOM通知で再判定する。確認用ブラウザではログインが必要なため、実画面のDOM読み取りと実拡張表示確認は未実施。
+
 ## 0.2.9・メンバーシップのお気に入り（2026-11-02）
 
 `https://note.com/akb428/membership`を未ログインで開くと`/membership/join`へSPA転送された。h1「AI活用実践ラボ」は`header.w-full`内の`div.min-w-0.flex-1`にあり、その兄弟に作者リンクを含む行がある。リンクは`https://note.com/akb428`、aria-labelは「秋葉原IT戦略研究所さんのクリエイターページ」でimgを含む。390px指定時も同じ構造で、タイトルのホスト幅は343px。ログイン済みホームのDOMは未取得で、利用者提示画像の見出し下配置に同じ識別条件を適用する。

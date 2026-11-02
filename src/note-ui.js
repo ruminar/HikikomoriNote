@@ -729,6 +729,9 @@
     }
     const notesPromotionRoot = "data-hikikomori-note-notes-promotions";
     let notesPromotionsDirty = true, notesPromotionsSignature;
+    const membershipExamples = new Set();
+    const membershipExamplesHidden = "data-hikikomori-note-membership-examples-hidden";
+    let membershipExamplesDirty = true, membershipExamplesSignature;
     function hasClasses(element, names) { return Boolean(element && names.every(name => element.classList.contains(name))); }
     function notesBanner(block) {
       if (block.tagName !== "DIV" || !hasClasses(block, ["hidden", "md:block"])) return false;
@@ -771,6 +774,44 @@
       }
       for (const root of notesPromotionRoots) if (!current.has(root)) root.removeAttribute(notesPromotionRoot);
       notesPromotionRoots.clear(); for (const root of current) notesPromotionRoots.add(root);
+    }
+    function syncMembershipExamples(settings, url) {
+      let active = false;
+      try {
+        const page = new URL(url);
+        active = settings.enabled && (settings.hidePaidArticles || settings.hideArticleRecommendations) &&
+          page.origin === "https://note.com" && /^\/membership\/settings(?:\/manage)?\/?$/.test(page.pathname);
+      } catch { /* 不明なURLでは解除 */ }
+      const signature = JSON.stringify([Boolean(active), url]);
+      if (!membershipExamplesDirty && membershipExamplesSignature === signature) return;
+      membershipExamplesDirty = false; membershipExamplesSignature = signature;
+      const targets = new Set();
+      if (active) {
+        for (const aside of doc.querySelectorAll("aside")) {
+          if (!hasClasses(aside, ["order-2", "w-full", "flex-none", "md:order-3"]) ||
+              aside.closest("article") || aside.closest('[id="note-body"]') || aside.closest(`[${owned}]`)) continue;
+          for (const group of aside.children) {
+            if (group.tagName !== "DIV" || !hasClasses(group, ["flex", "flex-col", "gap-y-4"])) continue;
+            for (const box of group.children) {
+              if (box.tagName !== "DIV" || !hasClasses(box, ["flex", "flex-col", "gap-y-4", "bg-background-primary", "p-4", "md:p-6"]) ||
+                  ![...box.querySelectorAll("summary")].some(title => title.textContent.trim() === "参考事例")) continue;
+              const search = [...box.querySelectorAll("form")].some(form => {
+                try {
+                  const action = new URL(form.getAttribute("action"), "https://note.com");
+                  return action.origin === "https://note.com" && action.pathname === "/search" && form.getAttribute("method")?.toLowerCase() === "get" &&
+                    [...form.querySelectorAll('input[name="context"]')].some(input => input.getAttribute("type") === "hidden" && input.getAttribute("value") === "circle");
+                } catch { return false; }
+              });
+              if (!search) continue;
+              // 参考事例だけのカラムなら余白も隠す。別の設定枠が混ざる場合は事例枠だけに留める。
+              targets.add(aside.children.length === 1 && group.children.length === 1 ? aside : box);
+            }
+          }
+        }
+      }
+      for (const target of membershipExamples) if (!targets.has(target)) target.removeAttribute(membershipExamplesHidden);
+      membershipExamples.clear();
+      for (const target of targets) { if (!target.hasAttribute(membershipExamplesHidden)) target.setAttribute(membershipExamplesHidden, ""); membershipExamples.add(target); }
     }
     function syncRecommendations(active) {
       const article = doc.querySelector('article[id="note-article"]');
@@ -1062,6 +1103,7 @@
       syncProducts(settings.enabled && core.usesFollowing(settings) && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncNotesPromotions(settings, url);
+      syncMembershipExamples(settings, url);
       syncHomeBanners(settings, url);
       syncTips(settings, url);
       syncPaidCards(settings, url);
@@ -1175,6 +1217,7 @@
       invalidatePaidCards() {
         authorControls.invalidate();
         notesPromotionsDirty = true;
+        membershipExamplesDirty = true;
         homeBannersDirty = true;
         paidDirty = true;
         tipsDirty = true;
@@ -1203,6 +1246,8 @@
         syncRecommendations(false);
         for (const root of notesPromotionRoots) root.removeAttribute(notesPromotionRoot);
         notesPromotionRoots.clear();
+        for (const target of membershipExamples) target.removeAttribute(membershipExamplesHidden);
+        membershipExamples.clear();
         for (const target of homeBanners) target.removeAttribute(homeBannerHidden);
         homeBanners.clear();
         for (const container of tips.values()) container.removeAttribute(tipHidden);
