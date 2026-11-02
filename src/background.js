@@ -34,8 +34,16 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (!["select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    if (!["select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
     operation = (async () => {
+      if (message.type === "add-current-membership") {
+        const patch = message.patch, page = await port.currentMembershipPage(sender, patch?.pageUrl);
+        if (page?.type !== "membership" || typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase()) throw Object.assign(new Error("現在のメンバーシップを確認できません。"), { code: "CONFLICT" });
+        return controller.tag({ type: "ADD_MEMBERSHIP", groupId: patch.groupId, userId: patch.userId, displayName: patch.displayName }, { requireEnabled: true, currentUser: page.user, currentMembership: true, validateCurrent: async () => {
+          const current = await port.currentMembershipPage(sender, patch.pageUrl);
+          return current?.type === "membership" && current.user.toLowerCase() === page.user.toLowerCase();
+        } });
+      }
       if (message.type === "add-current-magazine") {
         const patch = message.patch, page = await port.currentMagazinePage(sender, patch?.pageUrl);
         if (page?.type !== "magazine" || typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase() || page.magazineId !== patch.magazineId) throw Object.assign(new Error("現在のマガジンを確認できません。"), { code: "CONFLICT" });

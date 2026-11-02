@@ -481,5 +481,6 @@ test('タグメニューを使う通常画面からだけタグ管理へ直行�
   }
   for(const path of ['/ruminar/n/n123','/dashboard','/settings/account']){f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='social'?'#settings':''));}
   f.location.href='https://note.com/yeku';assert.equal(actions.settingsUrl(),f.home+'#authors');
+  for(const path of ['/akb428/membership','/akb428/membership/join']){f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='normal'?'#tags':'#authors'));}
  }
 });

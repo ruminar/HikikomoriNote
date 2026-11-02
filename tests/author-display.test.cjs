@@ -64,19 +64,19 @@ test('記事からの保存だけは拡張ON・有料非表示ON・未登録が�
  for(const patch of [{enabled:false,hidePaidArticles:true},{hidePaidArticles:false}]){const f=backend(patch);await assert.rejects(f.controller.author(operation(f),{fromArticle:true}),{code:'CONFLICT'});}
  const f=backend({hidePaidArticles:true});await f.controller.author(operation(f),{fromArticle:true});await assert.rejects(f.controller.author(operation(f,'yeku','allow'),{fromArticle:true}),{code:'CONFLICT'});
 });
-test('設定形式5は作者名・状態を往復し、形式1は確認用の空リストとして取り込む',async()=>{
- const f=backend();await f.controller.author(operation(f));const json=f.core.exportSettings(f.core.readSettings(f.state));assert.equal(JSON.parse(json).schemaVersion,5);
+test('設定形式6は作者名・状態を往復し、形式1は確認用の空リストとして取り込む',async()=>{
+ const f=backend();await f.controller.author(operation(f));const json=f.core.exportSettings(f.core.readSettings(f.state));assert.equal(JSON.parse(json).schemaVersion,6);
  assert.deepEqual(plain(f.core.parseSettingsExport(json).authorDisplayRules),f.state.authorDisplayRules);
  const old=JSON.parse(json);old.schemaVersion=1;for(const g of old.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete old.settings.keepNoteHeaderVisible;old.settings.legacyMode=old.settings.mode==='severe';delete old.settings.mode;delete old.settings.authorDisplayRules;
  assert.deepEqual(plain(f.core.parseSettingsExport(JSON.stringify(old)).authorDisplayRules),[]);
  const token=f.core.settingsToken(f.core.readSettings(f.state));await f.controller.importSettings({json:JSON.stringify(old),expectedToken:token});assert.deepEqual(f.state.authorDisplayRules,[]);assert.equal(f.state.authorDisplayRevision,2);
  const bad=JSON.parse(json);bad.settings.authorDisplayRules[0].displayName='x\ny';assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(bad)));
 });
-test('形式5は3モードを内部保存・書き出しで往復し作者名を保持',async()=>{
+test('形式6は3モードを内部保存・書き出しで往復し作者名を保持',async()=>{
  for(const mode of ['normal','severe','social']){
    const f=backend({mode,enabled:false,authorDisplayRules:[{userId:'yeku',displayName:'作者名',action:'allow'}]});
    const json=f.core.exportSettings(f.core.readSettings(f.state)),doc=JSON.parse(json);
-   assert.equal(doc.schemaVersion,5);assert.equal(doc.settings.mode,mode);assert.equal(Object.hasOwn(doc.settings,'legacyMode'),false);
+   assert.equal(doc.schemaVersion,6);assert.equal(doc.settings.mode,mode);assert.equal(Object.hasOwn(doc.settings,'legacyMode'),false);
    assert.equal(f.core.parseSettingsExport(json).mode,mode);
    await f.controller.importSettings({json,expectedToken:f.core.settingsToken(f.core.readSettings(f.state))});
    assert.equal(f.state.mode,mode);assert.equal(Object.hasOwn(f.state,'legacyMode'),false);assert.equal(f.state.authorDisplayRules[0].displayName,'作者名');assert.equal(f.state.enabled,false);
@@ -90,12 +90,12 @@ test('未知mode・旧フラグ混在は読み込み前に拒否し、保存済�
  }
  const mixed=plain(base);mixed.settings.legacyMode=false;assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(mixed)));
 });
-test('既存の形式2は明示的なインポートでsevereへ変換し、書き出しは形式5',async()=>{
+test('既存の形式2は明示的なインポートでsevereへ変換し、書き出しは形式6',async()=>{
  const f=backend(),doc=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));doc.schemaVersion=2;for(const g of doc.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete doc.settings.keepNoteHeaderVisible;doc.settings.legacyMode=true;delete doc.settings.mode;
  doc.settings.authorDisplayRules=[{userId:'yeku',displayName:'YeKu',action:'hide'}];
  const json=JSON.stringify(doc);assert.equal(f.core.parseSettingsExport(json).mode,'severe');
  await f.controller.importSettings({json,expectedToken:f.core.settingsToken(f.core.readSettings(f.state))});
- const out=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));assert.equal(out.schemaVersion,5);assert.equal(out.settings.mode,'severe');assert.deepEqual(out.settings.authorDisplayRules,doc.settings.authorDisplayRules);
+ const out=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));assert.equal(out.schemaVersion,6);assert.equal(out.settings.mode,'severe');assert.deepEqual(out.settings.authorDisplayRules,doc.settings.authorDisplayRules);
 });
 test('移行画面は社会復帰モードのJSONを読み込み、タグを保持して設定画面を利用可能',async()=>{
  const f=homeFixture();await flush();const core=f.c.HikikomoriNote,doc=JSON.parse(core.exportSettings(core.readSettings(f.state)));doc.settings.mode='social';

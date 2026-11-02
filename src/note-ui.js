@@ -56,12 +56,13 @@
       }) ? userId : null;
     } catch { return null; }
   }
-  function bookIcon(doc) {
+  function favoriteIcon(doc, type = "magazine") {
     const ns = "http://www.w3.org/2000/svg", svg = doc.createElementNS(ns, "svg"), path = doc.createElementNS(ns, "path");
     svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "20"); svg.setAttribute("height", "20");
     svg.setAttribute("fill", "none"); svg.setAttribute("stroke", "currentColor"); svg.setAttribute("stroke-width", "1.6");
-    svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false"); svg.setAttribute("class", "hikikomori-note-book-icon");
-    path.setAttribute("d", core.bookIconPath); svg.append(path); return svg;
+    svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false"); svg.setAttribute("class", type === "membership" ? "hikikomori-note-membership-icon" : "hikikomori-note-book-icon");
+    svg.setAttribute("stroke-linecap", "round"); svg.setAttribute("stroke-linejoin", "round");
+    path.setAttribute("d", type === "membership" ? core.membershipIconPath : core.bookIconPath); svg.append(path); return svg;
   }
   function create(doc, win, actions = {}) {
     let profileLayout;
@@ -90,6 +91,25 @@
     let articleAuthor, authorSignature;
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
     let favoriteProfile;
+    function membershipOwner() {
+      const page = core.membershipPage(currentUrl);
+      if (!page) return null;
+      for (const heading of doc.querySelectorAll("h1")) {
+        const header = heading.closest("header"), host = heading.parentElement;
+        if (!header || isOfficialNavbar(header) || heading.closest("article") || heading.closest(`[${owned}]`) ||
+            header.querySelectorAll("h1").length !== 1 || !hasClasses(host, ["min-w-0", "flex-1"])) continue;
+        const creator = [...host.querySelectorAll("a[href]")].some(a => {
+          try { return new URL(a.href).href.replace(/\/$/, "") === core.profileUrl(page.user) &&
+            a.getAttribute("aria-label")?.endsWith("さんのクリエイターページ") && a.querySelector("img"); } catch { return false; }
+        });
+        if (!creator) continue;
+        try {
+          const item = core.favoriteMembership({ type: "membership", userId: page.user, displayName: core.authorName(heading.textContent) });
+          if (item.displayName) return { ...item, host };
+        } catch { /* 見出しと作者を確認できない間は登録欄を出さない */ }
+      }
+      return null;
+    }
     function magazineOwner() {
       const page = core.pageKind(currentUrl);
       if (page?.type !== "magazine") return null;
@@ -128,13 +148,15 @@
     }
     function syncFavoriteProfile(settings) {
       const magazine = core.pageKind(currentUrl)?.type === "magazine";
+      const membership = Boolean(core.membershipPage(currentUrl));
       let owner = null;
       if (settings.enabled && core.usesTags(settings)) {
-        if (magazine && actions.addCurrentMagazine) owner = magazineOwner();
-        else if (!magazine && actions.addCurrentUser) owner = authorControls.profileOwner();
+        if (membership && actions.addCurrentMembership) owner = membershipOwner();
+        else if (magazine && actions.addCurrentMagazine) owner = magazineOwner();
+        else if (!magazine && !membership && actions.addCurrentUser) owner = authorControls.profileOwner();
       }
-      if (favoriteProfile && (!owner || owner.userId !== favoriteProfile.owner.userId || owner.magazineId !== favoriteProfile.owner.magazineId || owner.host !== favoriteProfile.owner.host || !favoriteProfile.block.isConnected)) {
-        favoriteProfile.toggle.remove(); favoriteProfile.block.remove(); favoriteProfile = undefined;
+      if (favoriteProfile && (!owner || owner.type !== favoriteProfile.owner.type || owner.userId !== favoriteProfile.owner.userId || owner.magazineId !== favoriteProfile.owner.magazineId || owner.host !== favoriteProfile.owner.host || !favoriteProfile.block.isConnected)) {
+        favoriteProfile.toggle.remove(); favoriteProfile.block.remove(); favoriteProfile.mount?.remove(); favoriteProfile = undefined;
       }
       if (!owner) return;
       if (!favoriteProfile) {
@@ -142,8 +164,8 @@
         block.id = "hikikomori-note-favorite-profile"; block.setAttribute("id", block.id); block.hidden = true;
         const toggle = doc.createElement("button"); toggle.type = "button"; toggle.setAttribute(owned, "");
         toggle.className = "hikikomori-note-favorite-toggle"; toggle.textContent = "＠";
-        if (magazine) { toggle.textContent = ""; toggle.append(bookIcon(doc)); toggle.classList.add("hikikomori-note-magazine-toggle"); }
-        const title = magazine ? "このマガジンをお気に入りに追加" : "この作者をお気に入りに追加";
+        if (magazine || membership) { toggle.textContent = ""; toggle.append(favoriteIcon(doc, membership ? "membership" : "magazine")); toggle.classList.add(membership ? "hikikomori-note-membership-toggle" : "hikikomori-note-magazine-toggle"); }
+        const title = membership ? "このメンバーシップをお気に入りに追加" : magazine ? "このマガジンをお気に入りに追加" : "この作者をお気に入りに追加";
         toggle.setAttribute("aria-label", title); toggle.setAttribute("title", title);
         toggle.setAttribute("aria-expanded", "false"); toggle.setAttribute("aria-controls", block.id);
         const label = doc.createElement("label"); label.textContent = "お気に入りに追加　登録先";
@@ -165,7 +187,8 @@
           if (favoriteProfile !== context || context.busy || context.uncertain || button.disabled) return;
           context.busy = true; const groupId = context.groupId, user = context.owner; status.textContent = "保存しています…"; repaint();
           try {
-            if (magazine) await actions.addCurrentMagazine(groupId, user.userId, user.magazineId, user.displayName);
+            if (membership) await actions.addCurrentMembership(groupId, user.userId, user.displayName);
+            else if (magazine) await actions.addCurrentMagazine(groupId, user.userId, user.magazineId, user.displayName);
             else await actions.addCurrentUser(groupId, user.userId, user.displayName);
             if (favoriteProfile === context) status.textContent = "お気に入りに追加しました。";
           }
@@ -180,7 +203,10 @@
           finally { context.busy = false; repaint(); }
         };
         block.append(label, button, status, refresh);
-        if (magazine) owner.host.append(block); else profileSlot(owner, "favorites").append(block);
+        if (membership) {
+          const mount = doc.createElement("div"); mount.setAttribute(owned, ""); mount.className = "hikikomori-note-membership-controls";
+          mount.append(toggle, block); owner.host.append(mount); context.mount = mount;
+        } else if (magazine) owner.host.append(block); else profileSlot(owner, "favorites").append(block);
         favoriteProfile = context;
       }
       const context = favoriteProfile; context.owner = owner;
@@ -192,9 +218,9 @@
       }
       context.select.value = context.groupId;
       const group = settings.tagGroups.find(g => g.id === context.groupId);
-      const key = core.favoriteKey(magazine ? owner : { type: "user", userId: owner.userId });
+      const key = core.favoriteKey(magazine || membership ? owner : { type: "user", userId: owner.userId });
       const registered = group?.tags.some(item => core.favoriteKey(item) === key);
-      context.button.textContent = context.busy ? "保存中…" : registered ? "登録済み" : magazine ? "このマガジンを追加" : "この作者を追加";
+      context.button.textContent = context.busy ? "保存中…" : registered ? "登録済み" : membership ? "このメンバーシップを追加" : magazine ? "このマガジンを追加" : "この作者を追加";
       context.button.disabled = !group || registered || context.busy || context.uncertain || Boolean(settings.tagWarning);
       context.select.disabled = context.busy || context.uncertain || Boolean(settings.tagWarning);
       context.refresh.disabled = context.busy || !actions.refresh;
@@ -1041,7 +1067,7 @@
       syncPaidCards(settings, url);
       syncHomePaidRecommendations(settings, url);
       syncProfilePromotions(settings, url);
-      if (!settings.enabled || !page || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); pruneProfileLayout(); return; }
+      if (!settings.enabled || !page || core.membershipPage(url) || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); pruneProfileLayout(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
       const officialAside = common && [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky"));
       const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);
@@ -1114,11 +1140,11 @@
           for (const tag of group.tags) {
             const item = doc.createElement("li"), link = doc.createElement("a");
             link.textContent = core.favoriteLabel(tag); link.href = core.favoriteUrl(tag);
-            if (tag?.type === "magazine") link.prepend(bookIcon(doc));
+            if (["magazine", "membership"].includes(tag?.type)) link.prepend(favoriteIcon(doc, tag.type));
             link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : `${tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : core.authorLabel(tag)}（新しいタブで開く）`);
             if (typeof tag !== "string") {
               link.setAttribute("target", "_blank"); link.setAttribute("rel", "noopener noreferrer");
-              link.setAttribute("aria-label", `${tag.type === "magazine" ? "マガジン：" : ""}${core.favoriteLabel(tag)}（新しいタブで開く）`);
+              link.setAttribute("aria-label", `${tag.type === "membership" ? "メンバーシップ：" : tag.type === "magazine" ? "マガジン：" : ""}${core.favoriteLabel(tag)}（新しいタブで開く）`);
             }
             if (activeTag === tag) link.setAttribute("aria-current", "page");
             item.append(link); list.append(item);
@@ -1159,7 +1185,7 @@
         sidebarRoots.clear();
         authorControls.stop();
         disposed = true;
-        favoriteProfile?.toggle.remove(); favoriteProfile?.block.remove(); favoriteProfile = undefined;
+        favoriteProfile?.toggle.remove(); favoriteProfile?.block.remove(); favoriteProfile?.mount?.remove(); favoriteProfile = undefined;
         profileLayout?.root.remove(); profileLayout = undefined;
         syncPinnedHeader({ enabled: false }, currentUrl);
         removeMobile();
@@ -1357,7 +1383,7 @@
     }
     function profileOwner() {
       const page = core.pageKind(url);
-      if (page?.type !== "profile") return null;
+      if (page?.type !== "profile" || core.membershipPage(url)) return null;
       for (const heading of doc.querySelectorAll("h1")) {
         if (heading.closest("article") || heading.closest(`[${owned}]`)) continue;
         let root = heading.parentElement;
