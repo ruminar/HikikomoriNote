@@ -732,6 +732,9 @@
     const membershipExamples = new Set();
     const membershipExamplesHidden = "data-hikikomori-note-membership-examples-hidden";
     let membershipExamplesDirty = true, membershipExamplesSignature;
+    const magazinePromotions = new Set();
+    const magazinePromotionHidden = "data-hikikomori-note-magazine-promotion-hidden";
+    let magazinePromotionsDirty = true, magazinePromotionsSignature;
     function hasClasses(element, names) { return Boolean(element && names.every(name => element.classList.contains(name))); }
     function notesBanner(block) {
       if (block.tagName !== "DIV" || !hasClasses(block, ["hidden", "md:block"])) return false;
@@ -812,6 +815,48 @@
       for (const target of membershipExamples) if (!targets.has(target)) target.removeAttribute(membershipExamplesHidden);
       membershipExamples.clear();
       for (const target of targets) { if (!target.hasAttribute(membershipExamplesHidden)) target.setAttribute(membershipExamplesHidden, ""); membershipExamples.add(target); }
+    }
+    function magazinePromotion(block) {
+      if (block.tagName !== "DIV") return false;
+      if (hasClasses(block, ["relative", "mx-2", "flex", "overflow-hidden", "rounded-lg", "md:mx-0"])) {
+        const image = [...block.children].some(node => {
+          if (node.tagName !== "IMG" || !node.getAttribute("alt")) return false;
+          try { const url = new URL(node.getAttribute("src")); return url.origin === "https://assets.st-note.com" && url.pathname.startsWith("/poc-image/manual/"); } catch { return false; }
+        });
+        return image && [...block.children].some(node => {
+          if (node.tagName !== "A" || !hasClasses(node, ["absolute", "inset-0"]) || !node.getAttribute("aria-label") || !node.getAttribute("title")) return false;
+          try { const url = new URL(node.href); return url.origin === "https://note.com" && url.pathname === "/lp/membership/start"; } catch { return false; }
+        });
+      }
+      return hasClasses(block, ["rounded-lg", "bg-background-primary", "p-6"]) &&
+        [...block.children].some(node => node.tagName === "H3" && node.textContent.trim() === "マガジンをもっと活用するには") &&
+        [...block.querySelectorAll("a[href]")].some(link => {
+          try {
+            const url = new URL(link.href);
+            return (url.origin === "https://help-note.com" && url.pathname.startsWith("/hc/ja/articles/")) ||
+              (url.origin === "https://note.com" && /^\/notemag\/n\/n[a-zA-Z0-9]+\/?$/.test(url.pathname));
+          } catch { return false; }
+        });
+    }
+    function syncMagazinePromotions(settings, url) {
+      let active = false;
+      try { const page = new URL(url); active = settings.enabled && settings.hideArticleRecommendations && page.origin === "https://note.com" && /^\/magazines\/(?:all|my|follow|editable|readable)\/?$/.test(page.pathname); } catch { /* 不明なURLでは解除 */ }
+      const signature = JSON.stringify([Boolean(active), url]);
+      if (!magazinePromotionsDirty && magazinePromotionsSignature === signature) return;
+      magazinePromotionsDirty = false; magazinePromotionsSignature = signature;
+      const targets = new Set();
+      if (active) for (const aside of doc.querySelectorAll("aside")) {
+        if (!hasClasses(aside, ["w-full", "[grid-area:aside]", "md:max-w-[17.5rem]"]) || aside.closest("article") || aside.closest('[id="note-body"]') || aside.closest(`[${owned}]`)) continue;
+        for (const group of aside.children) {
+          if (group.tagName !== "DIV" || !hasClasses(group, ["space-y-2", "md:space-y-4"])) continue;
+          const blocks = [...group.children].filter(magazinePromotion);
+          if (blocks.length && blocks.length === group.children.length && aside.children.length === 1) targets.add(aside);
+          else for (const block of blocks) targets.add(block);
+        }
+      }
+      for (const target of magazinePromotions) if (!targets.has(target)) target.removeAttribute(magazinePromotionHidden);
+      magazinePromotions.clear();
+      for (const target of targets) { if (!target.hasAttribute(magazinePromotionHidden)) target.setAttribute(magazinePromotionHidden, ""); magazinePromotions.add(target); }
     }
     function syncRecommendations(active) {
       const article = doc.querySelector('article[id="note-article"]');
@@ -1104,6 +1149,7 @@
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncNotesPromotions(settings, url);
       syncMembershipExamples(settings, url);
+      syncMagazinePromotions(settings, url);
       syncHomeBanners(settings, url);
       syncTips(settings, url);
       syncPaidCards(settings, url);
@@ -1218,6 +1264,7 @@
         authorControls.invalidate();
         notesPromotionsDirty = true;
         membershipExamplesDirty = true;
+        magazinePromotionsDirty = true;
         homeBannersDirty = true;
         paidDirty = true;
         tipsDirty = true;
@@ -1248,6 +1295,8 @@
         notesPromotionRoots.clear();
         for (const target of membershipExamples) target.removeAttribute(membershipExamplesHidden);
         membershipExamples.clear();
+        for (const target of magazinePromotions) target.removeAttribute(magazinePromotionHidden);
+        magazinePromotions.clear();
         for (const target of homeBanners) target.removeAttribute(homeBannerHidden);
         homeBanners.clear();
         for (const container of tips.values()) container.removeAttribute(tipHidden);

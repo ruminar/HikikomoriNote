@@ -49,6 +49,16 @@
 
 ## 変更ファイル・確認
 
+### マガジン一覧の運営案内
+
+対象はnote.comの`/magazines/all`・`/magazines/my`・`/magazines/follow`・`/magazines/editable`・`/magazines/readable`。末尾スラッシュ・クエリ・フラグメントを許可する。拡張ONかつhideArticleRecommendations=trueなら、メンバーシップ案内バナーと「マガジンをもっと活用するには」のボックスを隠す。全3モード共通。有料記事非表示だけでは適用しない。新設定・保存形式変更はない。
+
+利用者提示DOMの`aside.w-full.[grid-area:aside].md:max-w-[17.5rem]`と直属の`div.space-y-2.md:space-y-4`に限定する。バナーはrelative/mx-2/flex/overflow-hidden/rounded-lg/md:mx-0のDIV、assets.st-note.comの/poc-image/manual/画像、公式/lp/membership/startへのラベル付きオーバーレイリンクを確認する。活用案内はrounded-lg/bg-background-primary/p-6のDIV、直属のh3の見出し、公式ヘルプ記事またはnote運営notemagの記事へのリンクを確認する。具体的なバナー画像名や記事IDは固定しない。
+
+直属の枠がすべて既知の案内ならaside全体に専用属性を付け、余白もまとめて隠す。別の枠が混ざる場合は識別済みの案内だけを隠す。本文・拡張所有要素・未知構造・外部サイトへのリンクだけの枠は推測で隠さない。既存DOM通知とdirtyフラグを使い、後挿入・差し替え・内容変更を再評価する。おすすめ設定解除・OFF・対象外移動・停止で属性を外す。追加の監視・タイマー・通信・権限は不要。
+
+`src/note-ui.js`・`src/content.css`と関連テスト・資料を更新する。提供outerHTMLに基づく検証であり、ログイン済み実画面の表示確認は未実施。
+
 ### メンバーシップ設定の「参考事例」非表示
 
 対象は`https://note.com/membership/settings`と`/membership/settings/manage`。末尾スラッシュ・クエリ・フラグメントは許可し、未知の下位パスや別オリジンには適用しない。拡張ONかつhidePaidArticlesまたはhideArticleRecommendationsがtrueなら、参考事例をボックス全体で隠す。3モード共通で、作者の表示許可・自分のユーザー名等には依存しない。新設定・データ形式変更はない。
@@ -61,4 +71,4 @@
 
 作者の順序固定は`src/note-ui.js`を中心に変更する。メンバーシップ対応では`src/common.js`、`src/routing.js`、`src/background.js`、`src/platform/browser-api.js`、`src/content.js`、`src/note-ui.js`、`src/content.css`、`src/home.js`と関連テスト・資料を更新する。開発版番号は0.2.9を維持する。
 
-構文・自動テスト282件成功。作者表示の保存・解除、お気に入り保存、グループ更新、繰り返し再描画、親・子領域・公式DOM差し替え、別作者・離脱・停止、モード/OFF/自分の例外を確認。メンバーシップは4種類混在の順序・移動・保存失敗・重複・形式6往復／形式5読込／不正JSON拒否・送信境界・初期閉・Escape・狭幅・未知DOM・設定リンクを検証する。公式akb428ページは未ログインでjoinへ転送され、参加画面の見出し・作者リンクと390px幅のホスト（343px）を読み取り確認した。実拡張を入れたログイン済みホーム・Android実機の表示確認は未実施。未知の下位ページは本版では対象外とする。
+構文・自動テスト286件成功。作者表示の保存・解除、お気に入り保存、グループ更新、繰り返し再描画、親・子領域・公式DOM差し替え、別作者・離脱・停止、モード/OFF/自分の例外を確認。メンバーシップは4種類混在の順序・移動・保存失敗・重複・形式6往復／形式5読込／不正JSON拒否・送信境界・初期閉・Escape・狭幅・未知DOM・設定リンクを検証する。公式akb428ページは未ログインでjoinへ転送され、参加画面の見出し・作者リンクと390px幅のホスト（343px）を読み取り確認した。実拡張を入れたログイン済みホーム・Android実機の表示確認は未実施。未知の下位ページは本版では対象外とする。

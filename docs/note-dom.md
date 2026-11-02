@@ -1,5 +1,11 @@
 # 0.2.0のDOM確認記録
 
+## 0.2.9・マガジン一覧の運営案内
+
+利用者提示outerHTMLに基づく。asideのw-full/[grid-area:aside]/md:max-w-[17.5rem]内に、space-y-2/md:space-y-4のDIVがあり、その直属にメンバーシップの案内バナーと「マガジンをもっと活用するには」の案内カードが並ぶ。前者はassets.st-note.comの手動配信画像と公式/lp/membership/startのオーバーレイリンク、後者はh3と公式ヘルプ・運営notemag記事へのリンクで確認する。
+
+対象は/magazines/all・my・follow・editable・readableのみ。おすすめ非表示ONで、2枠だけのasideならasideごと、別枠が混在すれば識別済みの2枠だけを専用属性で隠す。有料記事非表示の単独ONは適用しない。既存DOM通知で後挿入・差し替えを処理し、解除・OFF・離脱・停止で復元する。実サイトをログインして操作した確認とは区別する。
+
 ## 0.2.9・メンバーシップ設定の参考事例
 
 利用者提供outerHTMLに基づく。order-2/w-full/flex-none/md:order-3のasideに、flex/flex-col/gap-y-4の外側DIV、その中に同じ縦並びとbg-background-primary/p-4/md:p-6を持つ参考事例ボックスがある。block/md:hiddenとhidden/md:blockの2つのdetailsに「参考事例」のsummary、GET /searchとhidden context=circleの検索フォーム、カテゴリ別候補がそれぞれ存在する。動的IDと具体的な候補名・価格は識別に使わない。
