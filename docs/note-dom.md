@@ -286,7 +286,7 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 
 ## 0.3.0追記：公式の作者検索
 
-作者ページの三点メニューから「きのころの記事を検索」を実行し、/search?q=from%3A%40kinokoro%20&context=note&mode=search&autofocus=1への遷移を確認。検索欄はfrom:@kinokoro、初期の並び順は人気。検索共通の左カラムとhidden lg:blockラッパーを維持している。作者指定はURLのqを空白・引用を区別して読み、引用外の正のfrom:@IDが1人に確定する場合に識別する。追加語付きの記事・マガジン検索にも対応する。独自メニューのTL直下へ作者ページのリンクを追加できる。記事カードや公式の検索入力・並び順操作は変更しない。
+作者ページの三点メニューから「きのころの記事を検索」を実行し、/search?q=from%3A%40kinokoro%20&context=note&mode=search&autofocus=1への遷移を確認。検索欄はfrom:@kinokoro、初期の並び順は人気。検索共通の左カラムとhidden lg:blockラッパーを維持している。作者指定はURLのqの先頭のfrom:@IDを読み、引用符があっても戻り先として識別する。後続の語句はリンク判定に使わない。記事・マガジン以外の検索対象も既知の共通左領域へ追加する。独自メニューのTL直下へ作者ページのリンクを追加できる。記事カードや公式の検索入力・並び順操作は変更しない。
 
 作者検索のアイコン・表示名は検索結果内のa[data-name=avatar]から取得できる。/search?q=from:@kinokoroの実DOMでhref=https://note.com/kinokoro、aria-label=「きのころのプロフィールへのリンク」、子imgのsrc=https://assets.st-note.com/...を確認。同じ作者IDと検証した情報だけを、拡張の作者ページリンクへ表示する。記事日時を含むtextContent全体は表示名として使わない。
 
@@ -306,3 +306,8 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 ### 2026-11-05：閲覧履歴の価格付きカード（利用者提供DOM）
 
 /notes/viewedはrelative/w-full/border-b-0/py-0の外枠に、flex/w-full/bg-surface-normal/[grid-row:2]/min-w-0の内枠とabsolute/inset-0の記事リンク、h3を持つ。価格はtext-text-successのSPANに¥の子SPANと金額のテキストがあり、作者はa[data-name=avatar]で照合可能。ホームと共通のカード認識を閲覧履歴にも適用するが、横スクロール用スロットの非表示はホームだけに維持する。
+
+
+### 2026-11-05：検索境界の実表示
+
+提供されたNo.52〜60の9件を未ログインで確認。引用付き先頭fromは記事約400件、後続未閉じ引用付きは約100件、マガジン＋創作は約1件。先頭が-from、先頭以外のfrom、追加のfrom付き、引用other_user＋from:kinokoroは0件。クリエイター対象では約10,000件で他の作者が出る。追加確認の引用付き先頭from・circleは0件。userとcircleにも検索共通のカテゴリnavと左カラムがある。戻りリンクは件数や結果の作者から推測せず、先頭のIDだけで決める。詳細はテストURL一覧の観察表。
