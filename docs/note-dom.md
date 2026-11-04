@@ -295,3 +295,14 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 /qa/nontsuの作者情報はmain外のdiv.mx-auto.w-full.max-w-content-small内。DIV[data-name=avatar]のimg.altは作者名、同じ領域のa[aria-label="note アカウント"]はhttps://note.com/nontsuを指す。本文はmain#main直下のdiv.mx-auto.w-full.max-w-content-small。質問詳細では本文のmax-w-content-small内に、/qa/nontsuを指すリンクの子avatarと、公式プロフィールへのnoteアカウントリンクがある。画像altには「 のアイコン」が付く。
 
 一覧・詳細とも本文の実測左端322.5px、幅620px。390px幅では本文左端16px。公式の質問箱ヘッダは既存のnote記事ヘッダとは異なるため書き換えず、余白がある場合だけ独立した作者ページリンクを固定表示する。実拡張での表示確認は利用者が行う。
+
+
+### 2026-11-05：マガジン一覧・質問箱のスキ数
+
+- /nontsu/magazines：svg[aria-label="スキの数"][role="img"][data-id="Icon"]と数値SPANがflex/items-center/justify-center/gap-1/text-text-likeのDIVに同居。親はmt-2/flex/items-center/gap-2/text-smの統計行、さらにラッパー1段外はflex/w-full/bg-surface-normal/flex-colの記事カードで公式記事リンクを含む。37件一致。操作可能な祖先・子孫はない。隣接する価格は統計行内の別要素。
+- /qa/nontsu：既存のflex/items-center/justify-center内にaria-pressed付き操作ハートと数値ボタン。数値のaria-labelは「2スキ この記事にスキをつけたユーザーを見る}」と末尾に波括弧が1個付く。質問箱URLに限ってこの既知の表記を受け入れる。ハート操作は維持。
+
+
+### 2026-11-05：閲覧履歴の価格付きカード（利用者提供DOM）
+
+/notes/viewedはrelative/w-full/border-b-0/py-0の外枠に、flex/w-full/bg-surface-normal/[grid-row:2]/min-w-0の内枠とabsolute/inset-0の記事リンク、h3を持つ。価格はtext-text-successのSPANに¥の子SPANと金額のテキストがあり、作者はa[data-name=avatar]で照合可能。ホームと共通のカード認識を閲覧履歴にも適用するが、横スクロール用スロットの非表示はホームだけに維持する。

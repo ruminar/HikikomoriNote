@@ -42,16 +42,32 @@
         [...button.querySelectorAll("svg[aria-label]")].some(svg =>
           ["スキ", "スキを取り消す"].includes(svg.getAttribute("aria-label")) && svg.getAttribute("role") === "img" && svg.getAttribute("data-id") === "Icon");
     }
-    function scan(document) {
+    function scan(document, questionBox = false) {
       const next = new Set();
       for (const count of document.querySelectorAll('button[aria-label]')) {
         if (count.closest(`[${owned}]`) || !numeric(count.textContent)) continue;
-        const label = count.getAttribute("aria-label"), suffix = "スキ この記事にスキをつけたユーザーを見る";
+        // 質問箱の公式ラベルには末尾に余分な } が付く（2026-11-05確認）。
+        const rawLabel = count.getAttribute("aria-label"), suffix = "スキ この記事にスキをつけたユーザーを見る";
+        const label = questionBox && rawLabel.endsWith("}") ? rawLabel.slice(0, -1) : rawLabel;
         if (!label.endsWith(suffix) || !numeric(label.slice(0, -suffix.length))) continue;
         const group = count.parentElement;
         if (!group || !["flex", "items-center", "justify-center"].every(c => group.classList.contains(c)) || group.children.length !== 2) continue;
         const buttons = [...group.querySelectorAll("button")].filter(likeButton);
         if (buttons.length === 1 && !count.contains(buttons[0])) next.add(count);
+      }
+      for (const icon of document.querySelectorAll('svg[aria-label="スキの数"]')) {
+        const group = icon.parentElement, stats = group?.parentElement, card = stats?.parentElement?.parentElement;
+        if (!group || group.tagName !== "DIV" || group.closest(`[${owned}]`) ||
+            icon.getAttribute("role") !== "img" || icon.getAttribute("data-id") !== "Icon" ||
+            !["flex", "items-center", "justify-center", "gap-1", "text-text-like"].every(c => group.classList.contains(c)) ||
+            group.children.length !== 2 || group.children[0] !== icon || icon.textContent.trim() ||
+            interactive.split(", ").some(selector => group.closest(selector)) || group.querySelector(interactive)) continue;
+        const label = group.children[1];
+        if (label.tagName !== "SPAN" || label.children.length || !label.classList.contains("text-sm") || !numeric(label.textContent) ||
+            !stats || !["mt-2", "flex", "items-center", "gap-2", "text-sm"].every(c => stats.classList.contains(c)) ||
+            !card || !["flex", "w-full", "bg-surface-normal", "flex-col"].every(c => card.classList.contains(c)) ||
+            ![...card.querySelectorAll("a[href]")].some(a => core.isArticle(a.href))) continue;
+        next.add(group);
       }
       for (const count of document.querySelectorAll('div[class~="p-noteEmbed__suki"]')) {
         const inner = count.parentElement, card = inner?.parentElement;
@@ -81,7 +97,7 @@
         let active = false;
         try { active = settings.enabled && settings.hideLikeCounts === true && new URL(url).origin === "https://note.com"; } catch { /* 対象外は復元 */ }
         if (!active) { if (activeBefore) clear(); return; }
-        if (dirty || !activeBefore) scan(doc);
+        if (dirty || !activeBefore) scan(doc, Boolean(core.questionPage(url)));
         dirty = false; activeBefore = true;
         const documents = new Set([doc]);
         for (const frame of doc.querySelectorAll("iframe[src]")) {
@@ -629,6 +645,13 @@
         [...card.children].some(child => child.tagName === "DIV" &&
           hasClasses(child, ["flex", "w-full", "bg-surface-normal", "[grid-row:2]", "min-w-0"]));
     }
+    function usesModernArticleCards(url) {
+      if (core.isHome(url)) return true;
+      try {
+        const page = new URL(url);
+        return page.origin === "https://note.com" && /^\/notes\/viewed\/?$/.test(page.pathname);
+      } catch { return false; }
+    }
     function isPaidMagazineCard(card, settings) {
       if (!isMagazineCard(card)) return false;
       const cover = [...card.children].find(child => child.tagName === "DIV" &&
@@ -650,7 +673,7 @@
     function isPaidCard(card, settings) {
       if (!card.isConnected || card.closest('article') || card.closest('[id="note-body"]')) return false;
       // 固定記事にも同じ内側構造がある。既知の既存カードはホーム以外でも扱う。
-      if (!card.classList.contains("grid-rows-subgrid") && isHomeArticleCard(card) && !core.isHome(currentUrl)) return false;
+      if (!card.classList.contains("grid-rows-subgrid") && isHomeArticleCard(card) && !usesModernArticleCards(currentUrl)) return false;
       if (isPaidMagazineCard(card, settings)) return true;
       return [...card.querySelectorAll('a[href]')].some(link =>
         link.parentElement?.parentElement === card && link.classList.contains("absolute") &&
@@ -708,7 +731,7 @@
         let card = indicator.parentElement;
         for (let depth = 0; card && depth < 10; depth++, card = card.parentElement) {
           if (!card.classList.contains("grid-rows-subgrid") && !isMagazineCard(card) &&
-              !(core.isHome(url) && isHomeArticleCard(card))) continue;
+              !(usesModernArticleCards(url) && isHomeArticleCard(card))) continue;
           if (isPaidCard(card, settings)) {
             const container = paidCardContainer(card);
             container.setAttribute(paidHidden, ""); paidCards.set(card, container);

@@ -109,3 +109,32 @@ test('外部・sandbox・別URLへ移動したフレームには触れない。�
  Object.defineProperty(frame,'contentDocument',{configurable:true,get(){throw new Error('SecurityError');}});assert.doesNotThrow(()=>f.update());
  Object.defineProperty(frame,'contentDocument',{value:child});child.location.href='https://note.com/embed/notes/n123';f.update();assert.ok(child.getElementById('static').hasAttribute(marker));f.control.stop();assert.equal(child.getElementById('static').hasAttribute(marker),false);assert.equal(child.head.children.length,0);
 });
+
+const magazineLikes='<div id="card" class="flex w-full rounded bg-surface-normal flex-col"><a id="article" href="https://note.com/nontsu/n/n123"></a><div class="block basis-auto overflow-visible mt-2"><div id="stats" class="mt-2 flex items-center gap-2 text-sm empty:hidden"><div id="display-likes" class="flex items-center justify-center gap-1 text-text-like"><svg id="display-heart" data-id="Icon" role="img" aria-label="スキの数"></svg><span id="display-count" class="text-sm"></span></div><span id="price"></span></div><a id="profile" href="https://note.com/nontsu"></a></div></div>';
+function magazineFixture(){const f=fixture(magazineLikes);f.doc.getElementById('display-count').textContent='19';f.doc.getElementById('price').textContent='¥450';return f;}
+test('マガジン一覧の表示専用ハートとスキ数だけ隠し、価格・記事と作者のリンクを保持',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=magazineFixture();f.settings.mode=mode;let navigated=0;f.doc.getElementById('article').addEventListener('click',()=>navigated++);f.update('https://note.com/nontsu/magazines');assert.ok(f.doc.getElementById('display-likes').hasAttribute(marker));
+  for(const id of ['card','stats','price','article','profile'])assert.equal(f.doc.getElementById(id).hasAttribute(marker),false);f.doc.getElementById('article').fire('click');assert.equal(navigated,1);assert.equal(f.doc.getElementById('price').textContent,'¥450');
+  f.settings.hideLikeCounts=false;f.update();assert.equal(f.doc.getElementById('display-likes').hasAttribute(marker),false);f.settings.hideLikeCounts=true;f.update();f.settings.enabled=false;f.update();assert.equal(f.doc.getElementById('display-likes').hasAttribute(marker),false);
+ }
+});
+test('表示専用ハートは操作可能・数字以外・未知のカードとアイコンを誤って隠さない',()=>{
+ for(const change of [f=>f.doc.getElementById('display-count').textContent='19人の感想',f=>f.doc.getElementById('display-likes').setAttribute('role','button'),f=>f.doc.getElementById('card').setAttribute('tabindex','0'),f=>f.doc.getElementById('display-heart').setAttribute('aria-label','お気に入り'),f=>f.doc.getElementById('display-heart').removeAttribute('role'),f=>f.doc.getElementById('article').href='https://example.org/n/n123',f=>f.doc.getElementById('stats').className='',f=>f.doc.getElementById('card').className='',f=>{const b=f.doc.createElement('button');f.doc.getElementById('display-likes').append(b);}]){
+  const f=magazineFixture();change(f);f.update('https://note.com/nontsu/magazines');assert.equal(f.doc.getElementById('display-likes').hasAttribute(marker),false);
+ }
+});
+test('表示専用スキ数の後挿入・数値変更・構造変更・停止に追従する',()=>{
+ const f=magazineFixture(),card=f.doc.getElementById('card'),group=f.doc.getElementById('display-likes');card.remove();f.update();f.doc.root.append(card);f.control.invalidatePaidCards();f.update();assert.ok(group.hasAttribute(marker));
+ f.doc.getElementById('display-count').textContent='1.2万';f.control.invalidatePaidCards();f.update();assert.ok(group.hasAttribute(marker));f.doc.getElementById('display-count').textContent='本文';f.control.invalidatePaidCards();f.update();assert.equal(group.hasAttribute(marker),false);f.doc.getElementById('display-count').textContent='20';f.control.invalidatePaidCards();f.update();f.control.stop();assert.equal(group.hasAttribute(marker),false);
+});
+test('質問箱の末尾波括弧付きスキ数ラベルも数値だけ隠し、ハート操作と復元を維持',()=>{
+ for(const qaUrl of ['https://note.com/qa/nontsu','https://note.com/qa/nontsu/q/abc123'])for(const mode of ['normal','social','severe']){
+  const f=fixture(counter,{mode}),count=f.doc.getElementById('count'),heart=f.doc.getElementById('heart');let clicks=0;heart.addEventListener('click',()=>clicks++);
+  count.setAttribute('aria-label','12スキ この記事にスキをつけたユーザーを見る}');f.update(qaUrl);assert.ok(count.hasAttribute(marker));assert.equal(heart.hasAttribute(marker),false);heart.fire('click');assert.equal(clicks,1);
+  heart.querySelector('svg').setAttribute('aria-label','スキを取り消す');count.textContent='13';count.setAttribute('aria-label','13スキ この記事にスキをつけたユーザーを見る}');f.control.invalidatePaidCards();f.update(qaUrl);assert.ok(count.hasAttribute(marker));
+  count.setAttribute('aria-label','13スキ この記事にスキをつけたユーザーを見る}}');f.control.invalidatePaidCards();f.update(qaUrl);assert.equal(count.hasAttribute(marker),false);
+  count.setAttribute('aria-label','13スキ この記事にスキをつけたユーザーを見る}');f.control.invalidatePaidCards();f.update(qaUrl);f.settings.hideLikeCounts=false;f.update(qaUrl);assert.equal(count.hasAttribute(marker),false);assert.equal(count.textContent,'13');
+ }
+ const f=fixture(counter);f.doc.getElementById('count').setAttribute('aria-label','12スキ この記事にスキをつけたユーザーを見る}');f.update();assert.equal(f.doc.getElementById('count').hasAttribute(marker),false);
+});
