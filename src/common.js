@@ -220,6 +220,13 @@
     } catch { /* 未知の下位ページ・外部URLは登録対象にしない */ }
     return null;
   }
+  function questionPage(url) {
+    try {
+      const parsed = new URL(url), match = /^\/qa\/([a-zA-Z0-9_]+)(?:\/q\/([a-zA-Z0-9]+))?\/?$/.exec(parsed.pathname);
+      if (parsed.origin === "https://note.com" && match) return { user: authorId(match[1]), questionId: match[2] || null };
+    } catch { /* 不明な質問箱URLは対象外 */ }
+    return null;
+  }
   function profileUrl(id) {
     const normalized = normalizeUserId(id);
     return normalized ? `https://note.com/${encodeURIComponent(normalized)}` : null;
@@ -332,6 +339,6 @@
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
     modeOf, usesTags, usesFollowing, usesLogoBack,
     exportSettings, parseSettingsExport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
-    favorite, favoriteKey, favoriteLabel, favoriteUrl, authorSearchUrl, searchedAuthor, favoriteUser, favoriteMagazine, favoriteMembership, favoriteSchema, bookIconPath, membershipIconPath, membershipPage,
+    favorite, favoriteKey, favoriteLabel, favoriteUrl, authorSearchUrl, searchedAuthor, favoriteUser, favoriteMagazine, favoriteMembership, favoriteSchema, bookIconPath, membershipIconPath, membershipPage, questionPage,
     normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

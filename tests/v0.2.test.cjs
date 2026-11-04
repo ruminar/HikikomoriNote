@@ -2163,3 +2163,37 @@ test('複合作者検索も狭幅のTL直下に置き、重度・社会復帰・
  f.ui.update({...settings,mode:'severe'},url);assert.equal(menu.children.length,1);assert.equal(menu.querySelector('a').textContent,'ruminarのページ');assert.equal(menu.querySelector('[data-hikikomori-note-author-card]'),null);
  for(const patch of [{mode:'social'},{enabled:false}]){f.ui.update({...settings,...patch},url);assert.equal(f.doc.querySelector('[class="hikikomori-note-navigation"]'),null);}
 });
+const qaRootHtml='<body><div id="qa-owner" class="mx-auto w-full max-w-content-small"><div data-name="avatar"><img id="qa-image" src="https://assets.st-note.com/profile.png" alt="古性のち | Noci Kosho"></div><ul><li><a id="qa-account" aria-label="note アカウント" href="https://note.com/nontsu"></a></li></ul></div><main id="main"><div id="qa-content" class="mx-auto w-full max-w-content-small"><h1></h1><textarea id="qa-input"></textarea><button id="qa-submit"></button></div></main></body>';
+const qaDetailHtml='<body><main id="main"><div id="qa-content" class="mx-auto max-w-content-small space-y-12"><a id="qa-owner-link" href="https://note.com/qa/nontsu"><div data-name="avatar"><img id="qa-image" src="https://assets.st-note.com/profile.png" alt="古性のち | Noci Kosho のアイコン"></div></a><h1></h1><textarea id="qa-input"></textarea><a id="qa-account" aria-label="note アカウント" href="https://note.com/nontsu"></a></div></main></body>';
+function qaFixture(html=qaRootHtml){const f=uiFixture(html);f.doc.body=f.doc.querySelector('body');for(const id of ['qa-owner','qa-content'])if(f.doc.getElementById(id))f.doc.getElementById(id).getBoundingClientRect=()=>({left:270,width:620,height:200});return f;}
+const qaAuthor=f=>f.doc.querySelector('[class="hikikomori-note-question-author"]');
+test('質問箱URLは一覧と質問詳細だけを認識し、外部・予約ID・未知の配下を除外',()=>{
+ const {core}=fixture();for(const url of ['https://note.com/qa/nontsu','https://note.com/qa/nontsu/?x=1#main','https://note.com/qa/nontsu/q/26c41bdca7726b67b54680210100ab03/'])assert.equal(core.questionPage(url).user,'nontsu');
+ assert.equal(core.questionPage('https://note.com/qa/nontsu').questionId,null);assert.equal(core.questionPage('https://note.com/qa/nontsu/q/abc123').questionId,'abc123');
+ for(const url of ['https://note.com/qa','https://note.com/qa/settings','https://note.com/qa/nontsu/admin','https://note.com/qa/nontsu/q/abc/edit','https://note.com/qa/nontsu/q/','https://evil.test/qa/nontsu','broken'])assert.equal(core.questionPage(url),null,url);
+});
+test('質問箱に全モードで作者の画像と名前のリンク1件だけを追加し、質問フォームを保持',()=>{
+ for(const mode of ['normal','severe','social']){
+  const f=qaFixture(),settings=f.core.readSettings({...groups(['AI']),mode});const form=f.doc.getElementById('qa-input');f.ui.update(settings,'https://note.com/qa/nontsu');const link=qaAuthor(f);assert.ok(link);assert.equal(link.href,'https://note.com/nontsu');assert.equal(link.textContent,'古性のち | Noci Kosho');assert.equal(link.getAttribute('target'),null);assert.equal(link.querySelector('img').getAttribute('src'),'https://assets.st-note.com/profile.png');assert.equal(link.querySelector('img').getAttribute('alt'),'');assert.equal(form.isConnected,true);
+  assert.equal(f.doc.querySelector('[class="hikikomori-note-article-following"]'),null);assert.equal(f.doc.querySelector('[class="hikikomori-note-navigation"]'),null);f.ui.update(settings,'https://note.com/qa/nontsu');assert.equal(qaAuthor(f),link);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-question-author"]').length,1);
+ }
+});
+test('質問詳細もURLと公式アカウント・作者の質問箱リンクを照合し、他作者は流用しない',()=>{
+ const f=qaFixture(qaDetailHtml),settings=f.core.readSettings(groups()),url='https://note.com/qa/nontsu/q/abc123';f.ui.update(settings,url);assert.equal(qaAuthor(f).textContent,'古性のち | Noci Kosho');assert.equal(qaAuthor(f).href,'https://note.com/nontsu');
+ f.doc.getElementById('qa-owner-link').href='https://note.com/qa/other';f.ui.update(settings,url);assert.equal(qaAuthor(f),null);f.doc.getElementById('qa-owner-link').href='https://note.com/qa/nontsu';f.doc.getElementById('qa-account').href='https://note.com/other';f.ui.update(settings,url);assert.equal(qaAuthor(f),null);
+});
+test('質問箱は狭幅または左余白不足なら撤去し、余白を確保したら再表示する',()=>{
+ const f=qaFixture(),settings=f.core.readSettings(groups()),url='https://note.com/qa/nontsu';f.ui.update(settings,url);assert.ok(qaAuthor(f));f.win.wide=false;f.ui.update(settings,url);assert.equal(qaAuthor(f),null);f.win.wide=true;
+ for(const id of ['qa-content','qa-owner']){const region=f.doc.getElementById(id);region.getBoundingClientRect=()=>({left:227,width:620});f.ui.update(settings,url);assert.equal(qaAuthor(f),null);region.getBoundingClientRect=()=>({left:228,width:620});f.ui.update(settings,url);assert.ok(qaAuthor(f));}
+ f.doc.getElementById('qa-content').remove();f.ui.update(settings,url);assert.equal(qaAuthor(f),null);
+});
+test('質問箱の作者情報更新・後挿入・DOM交換を反映し、OFF・離脱・停止で撤去',()=>{
+ const f=qaFixture(),settings=f.core.readSettings(groups()),url='https://note.com/qa/nontsu';f.ui.update(settings,url);const first=qaAuthor(f);f.doc.getElementById('qa-image').setAttribute('alt','新しい作者名');f.doc.getElementById('qa-image').setAttribute('src','https://assets.st-note.com/new.png');f.ui.update(settings,url);assert.equal(qaAuthor(f).textContent,'新しい作者名');assert.notEqual(qaAuthor(f),first);
+ const owner=f.doc.getElementById('qa-owner');owner.remove();f.ui.update(settings,url);assert.equal(qaAuthor(f),null);f.doc.body.prepend(owner);f.ui.update(settings,url);assert.ok(qaAuthor(f));qaAuthor(f).remove();f.ui.update(settings,url);assert.ok(qaAuthor(f));
+ f.ui.update({...settings,enabled:false},url);assert.equal(qaAuthor(f),null);f.ui.update(settings,url);f.ui.update(settings,'https://note.com/qa/other');assert.equal(qaAuthor(f),null);f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(qaAuthor(f),null);f.ui.update(settings,url);f.ui.stop();assert.equal(qaAuthor(f),null);
+});
+test('質問箱の未確認画像・不正名は使わず、作者確認やレイアウトを失った場合は表示しない',()=>{
+ const f=qaFixture(),settings=f.core.readSettings(groups()),url='https://note.com/qa/nontsu';for(const src of ['https://evil.test/a.png','http://assets.st-note.com/a.png','data:image/png;base64,a','https://user:pass@assets.st-note.com/a.png']){f.doc.getElementById('qa-image').setAttribute('src',src);f.ui.update(settings,url);assert.ok(qaAuthor(f));assert.equal(qaAuthor(f).querySelector('img'),null);}
+ f.doc.getElementById('qa-image').setAttribute('alt','不正\n名前');f.ui.update(settings,url);assert.equal(qaAuthor(f).textContent,'nontsuのページ');f.doc.getElementById('qa-account').remove();f.ui.update(settings,url);assert.equal(qaAuthor(f),null);
+ const unknown=qaFixture(qaRootHtml.replace('class="mx-auto w-full max-w-content-small"','class="unknown"'));unknown.ui.update(settings,url);assert.equal(qaAuthor(unknown),null);
+});

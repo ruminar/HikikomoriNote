@@ -186,6 +186,7 @@
     let host, menu, signature;
     let articleFollowing;
     let articleAuthor, authorSignature;
+    let questionAuthor, questionAuthorSignature;
     let searchAuthorInfo, searchAuthorDirty = true;
     function searchAuthor(userId, settings) {
       if (!searchAuthorDirty && searchAuthorInfo?.userId === userId.toLowerCase() && searchAuthorInfo.groups === settings.tagGroups) return searchAuthorInfo.value;
@@ -799,6 +800,57 @@
       const name = doc.createElement("span"); name.textContent = author.name; articleAuthor.append(name);
       doc.body.append(articleAuthor); authorSignature = nextSignature;
     }
+    function clearQuestionAuthor() {
+      questionAuthor?.remove(); questionAuthor = undefined; questionAuthorSignature = undefined;
+    }
+    function syncQuestionAuthor(settings, url) {
+      const page = core.questionPage(url);
+      if (!settings.enabled || !page || !doc.body || !win.matchMedia("(min-width: 1100px)").matches) { clearQuestionAuthor(); return; }
+      const main = doc.querySelector('main[id="main"]');
+      const content = [...(main?.children || [])].find(child => hasClasses(child, ["mx-auto", "max-w-content-small"]));
+      if (!content || !visible(content) || content.getBoundingClientRect().left < 228) { clearQuestionAuthor(); return; }
+      let author;
+      for (const region of doc.querySelectorAll('div[class~="max-w-content-small"]')) {
+        if (region.closest("article") || region.closest(`[${owned}]`) || !visible(region) || region.getBoundingClientRect().left < 228) continue;
+        const account = [...region.querySelectorAll('a[aria-label="note アカウント"]')].some(a => {
+          try { return core.authorId(a.href).toLowerCase() === page.user.toLowerCase(); } catch { return false; }
+        });
+        if (!account) continue;
+        for (const avatar of region.querySelectorAll('[data-name="avatar"]')) {
+          if (avatar.closest(`[${owned}]`)) continue;
+          const link = avatar.closest("a"), owner = link && core.questionPage(link.href);
+          if (link) {
+            if (!owner || owner.user.toLowerCase() !== page.user.toLowerCase() || owner.questionId) continue;
+          } else if (page.questionId || avatar.tagName !== "DIV" || avatar.closest("main")) continue;
+          const image = avatar.querySelector("img");
+          if (!image) continue;
+          let name = "", source = "";
+          try {
+            const alt = image.getAttribute("alt") || "";
+            name = core.authorName(link ? alt.replace(/ のアイコン$/, "") : alt);
+          } catch { /* IDへ縮退 */ }
+          try {
+            const url = new URL(image.getAttribute("src"));
+            if (url.protocol === "https:" && url.hostname === "assets.st-note.com" && !url.username && !url.password) source = url.href;
+          } catch { /* 名前だけ表示 */ }
+          author = { name: name || `${page.user}のページ`, image: source }; break;
+        }
+        if (author) break;
+      }
+      if (!author) { clearQuestionAuthor(); return; }
+      const signature = JSON.stringify([page.user, author]);
+      if (questionAuthor?.isConnected && questionAuthorSignature === signature) return;
+      clearQuestionAuthor();
+      questionAuthor = doc.createElement("a"); questionAuthor.setAttribute(owned, ""); questionAuthor.className = "hikikomori-note-question-author";
+      questionAuthor.href = core.profileUrl(page.user); questionAuthor.setAttribute("title", author.name);
+      questionAuthor.setAttribute("aria-label", `${author.name}のクリエーターページ`);
+      if (author.image) {
+        const image = doc.createElement("img"); image.setAttribute("src", author.image); image.setAttribute("alt", "");
+        image.setAttribute("width", "32"); image.setAttribute("height", "32"); questionAuthor.append(image);
+      }
+      const name = doc.createElement("span"); name.textContent = author.name; questionAuthor.append(name);
+      doc.body.append(questionAuthor); questionAuthorSignature = signature;
+    }
     function syncArticleFollowing(settings, url) {
       const article = doc.querySelector('article[id="note-article"]');
       const show = settings.enabled && (core.isArticle(url) || core.isPreviewArticle(url)) &&
@@ -1282,6 +1334,7 @@
       syncLogoCursor(core.usesLogoBack(settings));
       const page = core.pageKind(url);
       syncArticleFollowing(settings, url);
+      syncQuestionAuthor(settings, url);
       syncSideProfileFollow(settings, url);
       syncProducts(settings.enabled && core.usesFollowing(settings) && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
@@ -1437,6 +1490,7 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        clearQuestionAuthor();
         searchAuthorInfo = undefined;
         likeVisibility.stop();
         for (const root of sidebarRoots) root.classList.remove(rootClass);

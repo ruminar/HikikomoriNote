@@ -289,3 +289,9 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 作者ページの三点メニューから「きのころの記事を検索」を実行し、/search?q=from%3A%40kinokoro%20&context=note&mode=search&autofocus=1への遷移を確認。検索欄はfrom:@kinokoro、初期の並び順は人気。検索共通の左カラムとhidden lg:blockラッパーを維持している。作者指定はURLのqを空白・引用を区別して読み、引用外の正のfrom:@IDが1人に確定する場合に識別する。追加語付きの記事・マガジン検索にも対応する。独自メニューのTL直下へ作者ページのリンクを追加できる。記事カードや公式の検索入力・並び順操作は変更しない。
 
 作者検索のアイコン・表示名は検索結果内のa[data-name=avatar]から取得できる。/search?q=from:@kinokoroの実DOMでhref=https://note.com/kinokoro、aria-label=「きのころのプロフィールへのリンク」、子imgのsrc=https://assets.st-note.com/...を確認。同じ作者IDと検証した情報だけを、拡張の作者ページリンクへ表示する。記事日時を含むtextContent全体は表示名として使わない。
+
+## 0.3.0追記：質問箱（2026-11-05）
+
+/qa/nontsuの作者情報はmain外のdiv.mx-auto.w-full.max-w-content-small内。DIV[data-name=avatar]のimg.altは作者名、同じ領域のa[aria-label="note アカウント"]はhttps://note.com/nontsuを指す。本文はmain#main直下のdiv.mx-auto.w-full.max-w-content-small。質問詳細では本文のmax-w-content-small内に、/qa/nontsuを指すリンクの子avatarと、公式プロフィールへのnoteアカウントリンクがある。画像altには「 のアイコン」が付く。
+
+一覧・詳細とも本文の実測左端322.5px、幅620px。390px幅では本文左端16px。公式の質問箱ヘッダは既存のnote記事ヘッダとは異なるため書き換えず、余白がある場合だけ独立した作者ページリンクを固定表示する。実拡張での表示確認は利用者が行う。
