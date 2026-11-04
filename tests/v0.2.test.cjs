@@ -2080,11 +2080,11 @@ test('重度でも先行非表示・公式DOM交換に対応し、未知構造�
  f.ui.update(settings,'https://note.com/ruminar/n/n123');assert.equal(next.getElementById('category-original').hasAttribute('data-hikikomori-note-menu-hidden'),false);assert.equal(next.getElementById('category-grid').classList.contains('hikikomori-note-navigation-root'),false);
  const unknown=uiFixture('<aside class="sticky w-[11.375rem]"><nav></nav></aside>');unknown.ui.update(settings,url);assert.equal(unknown.doc.querySelector('[class="hikikomori-note-navigation"]'),null);assert.equal(unknown.doc.querySelector('nav').hasAttribute('data-hikikomori-note-menu-hidden'),false);
 });
-test('作者新着検索URLは公式from指定を生成し、前後空白以外の検索語や別対象を誤認しない',()=>{
+test('作者新着検索URLは公式from指定を生成し、引用・複数作者・別対象を誤認しない',()=>{
  const {core}=fixture(),url=core.authorSearchUrl('kinokoro'),p=new URL(url);assert.equal(p.origin,'https://note.com');assert.equal(p.pathname,'/search');assert.equal(p.searchParams.get('q'),'from:@kinokoro ');assert.equal(p.searchParams.get('context'),'note');assert.equal(p.searchParams.get('mode'),'search');assert.equal(p.searchParams.get('sort'),'new');assert.equal(p.searchParams.get('autofocus'),'1');assert.equal(core.searchedAuthor(url),'kinokoro');
  for(const target of ['https://note.com/search?q=from%3A%40kinokoro%20&context=note&mode=search&autofocus=1','https://note.com/search/?q=%20from%3A%40KINOKORO%20&context=note&sort=popular','https://note.com/search?q=from:@kinokoro'])assert.equal(core.searchedAuthor(target).toLowerCase(),'kinokoro');
- for(const q of ['from:@kinokoro 創作','文章 from:@kinokoro','"from:@kinokoro"','from:@kinokoro from:@other','from:kinokoro','from:＠kinokoro','from:@kinokoro/other','from:@kinokoro.com','from:@settings','from:@','FROM:@kinokoro'])assert.equal(core.searchedAuthor('https://note.com/search?context=note&q='+encodeURIComponent(q)),null,q);
- for(const target of ['https://other.test/search?q=from:@kinokoro','https://note.com/search/other?q=from:@kinokoro','https://note.com/search?q=from:@kinokoro&context=user','https://note.com/search?q=from:@kinokoro&context=magazine','https://note.com/search?q=from:@kinokoro&context=circle','https://note.com/search?q=from:@kinokoro&q=from:@other','https://note.com/search?q=from:@kinokoro&context=note&context=note','https://note.com/search?q=from%3A%2540kinokoro','not a URL'])assert.equal(core.searchedAuthor(target),null,target);
+ for(const q of ['"from:@kinokoro"','from:@kinokoro from:@other','from:kinokoro','from:＠kinokoro','from:@kinokoro/other','from:@kinokoro.com','from:@settings','from:@','FROM:@kinokoro'])assert.equal(core.searchedAuthor('https://note.com/search?context=note&q='+encodeURIComponent(q)),null,q);
+ for(const target of ['https://other.test/search?q=from:@kinokoro','https://note.com/search/other?q=from:@kinokoro','https://note.com/search?q=from:@kinokoro&context=user','https://note.com/search?q=from:@kinokoro&context=circle','https://note.com/search?q=from:@kinokoro&q=from:@other','https://note.com/search?q=from:@kinokoro&context=note&context=note','https://note.com/search?q=from%3A%2540kinokoro','not a URL'])assert.equal(core.searchedAuthor(target),null,target);
  for(const id of ['','settings','https://other.test/user'])assert.throws(()=>core.authorSearchUrl(id));
 });
 test('左メニューの作者お気に入りだけ同じタブの新着検索へ変更し、設定画面と保存JSONを維持',async()=>{
@@ -2097,7 +2097,7 @@ test('公式の作者検索は未登録作者でもTL直下にページリンク
  const f=uiFixture(categorySidebarHtml),settings=f.core.readSettings({...groups(['AI'])}),menu=()=>f.doc.querySelector('[class="hikikomori-note-navigation"]'),profile=()=>menu().querySelector('[class="hikikomori-note-navigation-profile"]');
  f.ui.update(settings,'https://note.com/search?q=from%3A%40kinokoro%20&context=note&mode=search&autofocus=1');assert.equal(menu().children[0].textContent,'フォロー中のTL');assert.equal(menu().children[1],profile());assert.equal(profile().textContent,'kinokoroのページ');assert.equal(profile().href,'https://note.com/kinokoro');assert.equal(profile().getAttribute('target'),null);
  f.ui.update(settings,'https://note.com/search?q=from:@other_user&context=note');assert.equal(profile().href,'https://note.com/other_user');assert.equal(profile().textContent,'other_userのページ');
- for(const url of ['https://note.com/search?q=from:@other_user+創作&context=note','https://note.com/search?q=from:@other_user&context=user','https://note.com/search?q=AI','https://note.com/following']){f.ui.update(settings,url);assert.equal(profile(),null);}
+ for(const url of ['https://note.com/search?q="from:@other_user"&context=note','https://note.com/search?q=from:@other_user&context=user','https://note.com/search?q=AI','https://note.com/following']){f.ui.update(settings,url);assert.equal(profile(),null);}
 });
 test('作者検索で一致するお気に入りだけを強調し、グループ切替・通常検索で解除',()=>{
  const other={type:'user',userId:'other_user',displayName:'他の作者'},f=uiFixture(sidebarHtml),raw={...groups([favoriteCreator,other,'AI']),tagSchemaVersion:3},settings=f.core.readSettings(raw),url='https://note.com/search?q=from:@KINOKORO&context=note';f.ui.update(settings,url);const links=()=>f.doc.querySelector('ul').children.map(e=>e.querySelector('a'));
@@ -2137,4 +2137,29 @@ test('作者カードは狭幅も同じ情報で、重度の自己リンク・�
  const f=uiFixture(logoHeaderHtml+categorySidebarHtml),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/search?q=from:@kinokoro&context=note';appendSearchAvatar(f);f.doc.getElementById('category-sidebar').width=0;f.win.wide=false;f.ui.update(settings,url);const panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');assert.equal(panel.querySelector('span').textContent,'きのころ');assert.ok(panel.querySelector('img'));
  f.ui.update({...settings,mode:'severe'},url);assert.equal(panel.querySelector('a').textContent,'ruminarのページ');assert.equal(panel.querySelector('[data-hikikomori-note-author-card]'),null);assert.equal(panel.querySelector('img'),null);
  f.ui.update(settings,'https://note.com/search?q=AI');assert.equal(f.doc.querySelector('[data-hikikomori-note-author-card]'),null);f.ui.update(settings,url);f.ui.update({...settings,enabled:false},url);assert.equal(f.doc.querySelector('[data-hikikomori-note-author-card]'),null);
+});
+test('作者指定は追加語・前置語・マガジン検索でも1人へ確定し、同じIDの重複を許容する',()=>{
+ const {core}=fixture();
+ for(const context of [null,'note','magazine'])for(const q of ['from:@kinokoro 創作','創作 from:@kinokoro','前置き\tfrom:@kinokoro\n後置き','from:@kinokoro from:@KINOKORO 創作','from:@kinokoro -from:@other_user','"from:@other_user 創作" from:@kinokoro',"'from:@other_user' from:@kinokoro",'"引用\\" from:@other_user" from:@kinokoro']){
+  const url=new URL('https://note.com/search');url.searchParams.set('q',q);if(context)url.searchParams.set('context',context);assert.equal(core.searchedAuthor(url.href)?.toLowerCase(),'kinokoro',q);
+ }
+});
+test('引用・除外・複数作者・未閉じ引用・埋め込み文字列・不完全なfromは作者へ誤認しない',()=>{
+ const {core}=fixture();
+ for(const q of ['"from:@kinokoro"','-from:@kinokoro 創作','"文章 from:@kinokoro 文章"','from:@kinokoro from:@other_user','from:@kinokoro OR from:@other_user','from:@kinokoro "未閉じ','\'from:@kinokoro','文章from:@kinokoro','"引用"from:@kinokoro','from:@kinokoro"引用"','from:@kinokoro.com 創作','from:@kinokoro from:@settings','from:@kinokoro from:@','from:@kinokoro from:other']){
+  const url=new URL('https://note.com/search');url.searchParams.set('q',q);url.searchParams.set('context','magazine');assert.equal(core.searchedAuthor(url.href),null,q);
+ }
+});
+test('追加キーワードとマガジン検索でも作者カードと強調を維持し、曖昧な検索へ移ると解除',()=>{
+ const f=uiFixture(categorySidebarHtml),settings=f.core.readSettings({...groups([favoriteCreator]),tagSchemaVersion:3});appendSearchAvatar(f);const link=()=>f.doc.querySelector('[class="hikikomori-note-navigation-profile"]'),favorite=()=>f.doc.querySelector('ul').querySelector('a');
+ for(const [q,context] of [['from:@kinokoro 創作','note'],['創作 from:@kinokoro','magazine'],['from:@kinokoro from:@KINOKORO','magazine'],['"from:@other_user" from:@kinokoro','note']]){
+  const url=new URL('https://note.com/search');url.searchParams.set('q',q);url.searchParams.set('context',context);f.ui.update(settings,url.href);assert.equal(link().textContent,'きのころ');assert.equal(link().href,'https://note.com/kinokoro');assert.ok(link().querySelector('img'));assert.equal(favorite().getAttribute('aria-current'),'page');
+ }
+ for(const q of ['from:@kinokoro from:@other_user','-from:@kinokoro','"from:@kinokoro"']){const url=new URL('https://note.com/search');url.searchParams.set('q',q);url.searchParams.set('context','magazine');f.ui.update(settings,url.href);assert.equal(link(),null);assert.equal(favorite().getAttribute('aria-current'),null);}
+});
+test('複合作者検索も狭幅のTL直下に置き、重度・社会復帰・OFFのモード差を維持',()=>{
+ const f=uiFixture(logoHeaderHtml+categorySidebarHtml),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/search?q=from%3A%40kinokoro+%E5%89%B5%E4%BD%9C&context=magazine';appendSearchAvatar(f);f.doc.getElementById('category-sidebar').width=0;f.win.wide=false;f.ui.update(settings,url);
+ const panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]'),menu=panel.querySelector('[class="hikikomori-note-navigation"]');assert.equal(menu.children[0].textContent,'フォロー中のTL');assert.equal(menu.children[1].textContent,'きのころ');
+ f.ui.update({...settings,mode:'severe'},url);assert.equal(menu.children.length,1);assert.equal(menu.querySelector('a').textContent,'ruminarのページ');assert.equal(menu.querySelector('[data-hikikomori-note-author-card]'),null);
+ for(const patch of [{mode:'social'},{enabled:false}]){f.ui.update({...settings,...patch},url);assert.equal(f.doc.querySelector('[class="hikikomori-note-navigation"]'),null);}
 });

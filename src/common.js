@@ -127,9 +127,31 @@
     try {
       const page = new URL(url), params = page.searchParams;
       if (page.origin !== "https://note.com" || !/^\/search\/?$/.test(page.pathname) || params.getAll("q").length !== 1 ||
-          params.getAll("context").length > 1 || (params.has("context") && params.get("context") !== "note")) return null;
-      const match = /^from:@([a-zA-Z0-9_]+)$/.exec(params.get("q").trim());
-      return match ? authorId(match[1]) : null;
+          params.getAll("context").length > 1 || (params.has("context") && !["note", "magazine"].includes(params.get("context")))) return null;
+      // 空白で区切られた作者指定だけを読む。引用内の文字列や除外指定は作者の入口にしない。
+      const tokens = [], query = params.get("q");
+      let token = "", quote = "", quoted = false;
+      const finish = () => { if (token && !quoted) tokens.push(token); token = ""; quoted = false; };
+      for (let i = 0; i < query.length; i++) {
+        const char = query[i];
+        if (quote) {
+          if (char === "\\") i++;
+          else if (char === quote) quote = "";
+        } else if (char === '"' || char === "'") { quote = char; quoted = true; }
+        else if (/\s/.test(char)) finish();
+        else token += char;
+      }
+      if (quote) return null;
+      finish();
+      const authors = new Map();
+      for (const token of tokens) {
+        if (!token.startsWith("from:")) continue;
+        const match = /^from:@([a-zA-Z0-9_]+)$/.exec(token);
+        if (!match) return null;
+        const id = authorId(match[1]);
+        if (!authors.has(id.toLowerCase())) authors.set(id.toLowerCase(), id);
+      }
+      return authors.size === 1 ? authors.values().next().value : null;
     } catch { return null; }
   }
   function favoriteSchema(groups, minimum = 2) { return Math.max(minimum, groups.some(g => g.tags.some(t => t?.type === "membership")) ? 5 : groups.some(g => g.tags.some(t => t?.type === "magazine")) ? 4 : groups.some(g => g.tags.some(t => t?.type === "user")) ? 3 : 2); }
