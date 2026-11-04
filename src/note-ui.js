@@ -186,6 +186,28 @@
     let host, menu, signature;
     let articleFollowing;
     let articleAuthor, authorSignature;
+    let searchAuthorInfo, searchAuthorDirty = true;
+    function searchAuthor(userId, settings) {
+      if (!searchAuthorDirty && searchAuthorInfo?.userId === userId.toLowerCase() && searchAuthorInfo.groups === settings.tagGroups) return searchAuthorInfo.value;
+      const favorite = settings.tagGroups.flatMap(group => group.tags).find(item => item?.type === "user" && item.userId.toLowerCase() === userId.toLowerCase());
+      let name = favorite?.displayName || "", image = "";
+      for (const avatar of doc.querySelectorAll('a[data-name="avatar"]')) {
+        if (avatar.closest(`[${owned}]`) || avatar.closest('[id="note-body"]')) continue;
+        try { if (core.authorId(avatar.href).toLowerCase() !== userId.toLowerCase()) continue; } catch { continue; }
+        const label = avatar.getAttribute("aria-label") || "", suffix = "のプロフィールへのリンク";
+        if (label.endsWith(suffix)) {
+          try { name = core.authorName(label.slice(0, -suffix.length)) || name; } catch { /* 不明な表示名は保存済み名へ */ }
+        }
+        try {
+          const source = new URL(avatar.querySelector("img")?.getAttribute("src"));
+          if (source.protocol === "https:" && source.hostname === "assets.st-note.com" && !source.username && !source.password) image = source.href;
+        } catch { /* 確認できない画像は使わない */ }
+        if (name || image) break;
+      }
+      const value = { name, image };
+      searchAuthorInfo = { userId: userId.toLowerCase(), groups: settings.tagGroups, value }; searchAuthorDirty = false;
+      return value;
+    }
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
     let favoriteProfile;
     function membershipOwner() {
@@ -1286,7 +1308,9 @@
       const severe = core.modeOf(settings) === "severe";
       const group = severe ? null : core.selectedGroup(settings);
       const activeTag = selectedTag(page, url);
-      const nextSignature = JSON.stringify([page, activeTag, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.selectedTagGroupId, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
+      const activeAuthor = core.searchedAuthor(url);
+      const authorCard = !severe && activeAuthor ? searchAuthor(activeAuthor, settings) : null;
+      const nextSignature = JSON.stringify([page, activeTag, activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.selectedTagGroupId, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
         menu.setAttribute(owned, "");
@@ -1313,6 +1337,18 @@
             const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
             row.append(favoriteProfile.toggle, following); menu.append(row);
           } else menu.append(following);
+          if (activeAuthor) {
+            const profile = doc.createElement("a"); profile.className = "hikikomori-note-navigation-profile";
+            profile.setAttribute("data-hikikomori-note-author-card", ""); profile.href = core.profileUrl(activeAuthor);
+            profile.setAttribute("title", authorCard.name || activeAuthor);
+            profile.setAttribute("aria-label", `${authorCard.name || activeAuthor}のクリエーターページ`);
+            if (authorCard.image) {
+              const image = doc.createElement("img"); image.setAttribute("src", authorCard.image); image.setAttribute("alt", "");
+              image.setAttribute("width", "32"); image.setAttribute("height", "32"); profile.append(image);
+            }
+            const name = doc.createElement("span"); name.textContent = authorCard.name || `${activeAuthor}のページ`; profile.append(name);
+            menu.append(profile);
+          }
           if (page.type !== "profile") {
             let registered = false;
             if (page.type === "tag") {
@@ -1351,14 +1387,17 @@
             const list = doc.createElement("ul"); menu.append(list);
             for (const tag of group.tags) {
               const item = doc.createElement("li"), link = doc.createElement("a");
-              link.textContent = core.favoriteLabel(tag); link.href = core.favoriteUrl(tag);
+              const user = tag?.type === "user";
+              link.textContent = core.favoriteLabel(tag); link.href = user ? core.authorSearchUrl(tag.userId) : core.favoriteUrl(tag);
               if (["magazine", "membership"].includes(tag?.type)) link.prepend(favoriteIcon(doc, tag.type));
-              link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : `${tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : core.authorLabel(tag)}（新しいタブで開く）`);
-              if (typeof tag !== "string") {
+              link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : user ? `${core.authorLabel(tag)}（新着記事を検索）` : `${tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : core.authorLabel(tag)}（新しいタブで開く）`);
+              if (user) {
+                link.setAttribute("target", "_self"); link.setAttribute("aria-label", `${core.favoriteLabel(tag)}（新着記事を検索）`);
+              } else if (typeof tag !== "string") {
                 link.setAttribute("target", "_blank"); link.setAttribute("rel", "noopener noreferrer");
                 link.setAttribute("aria-label", `${tag.type === "membership" ? "メンバーシップ：" : tag.type === "magazine" ? "マガジン：" : ""}${core.favoriteLabel(tag)}（新しいタブで開く）`);
               }
-              if (activeTag === tag) link.setAttribute("aria-current", "page");
+              if (activeTag === tag || (user && activeAuthor?.toLowerCase() === tag.userId.toLowerCase())) link.setAttribute("aria-current", "page");
               item.append(link); list.append(item);
             }
           }
@@ -1386,6 +1425,7 @@
     return Object.freeze({
       update, prepareSidebar,
       invalidatePaidCards() {
+        searchAuthorDirty = true;
         likeVisibility.invalidate();
         authorControls.invalidate();
         notesPromotionsDirty = true;
@@ -1397,6 +1437,7 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        searchAuthorInfo = undefined;
         likeVisibility.stop();
         for (const root of sidebarRoots) root.classList.remove(rootClass);
         sidebarRoots.clear();

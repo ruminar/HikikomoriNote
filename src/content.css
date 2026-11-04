@@ -132,6 +132,10 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
   box-sizing: border-box; width: 100%; min-height: 36px; padding: 8px 12px;
   border: 1px solid rgba(128,128,128,.35); font-size: 14px; text-align: center;
 }
+.hikikomori-note-navigation > .hikikomori-note-navigation-following + .hikikomori-note-navigation-profile { margin-top: 8px; }
+.hikikomori-note-navigation [data-hikikomori-note-author-card] { display: flex; align-items: center; gap: 8px; text-align: left; }
+.hikikomori-note-navigation [data-hikikomori-note-author-card] img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.hikikomori-note-navigation [data-hikikomori-note-author-card] span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hikikomori-note-navigation button {
   box-sizing: border-box; width: 100%; margin-top: 8px; padding: 8px;
   border: 1px solid rgba(128,128,128,.35); border-radius: 8px;

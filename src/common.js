@@ -118,6 +118,20 @@
   function favoriteKey(value) { return typeof value === "string" ? `tag:${value}` : value.type === "magazine" ? `magazine:${value.userId.toLowerCase()}:${value.magazineId}` : `${value.type}:${value.userId.toLowerCase()}`; }
   function favoriteLabel(value) { return typeof value === "string" ? `# ${value}` : value.type === "membership" ? value.displayName || `${value.userId}のメンバーシップ` : value.type === "magazine" ? value.displayName || value.magazineId : `＠${value.displayName || value.userId}`; }
   function favoriteUrl(value) { return typeof value === "string" ? tagUrl(value) : value.type === "membership" ? `${profileUrl(value.userId)}/membership` : value.type === "magazine" ? `${profileUrl(value.userId)}/m/${value.magazineId}` : profileUrl(value.userId); }
+  function authorSearchUrl(userId) {
+    const url = new URL("https://note.com/search");
+    for (const [key, value] of [["q", `from:@${authorId(userId)} `], ["context", "note"], ["mode", "search"], ["autofocus", "1"], ["sort", "new"]]) url.searchParams.set(key, value);
+    return url.href;
+  }
+  function searchedAuthor(url) {
+    try {
+      const page = new URL(url), params = page.searchParams;
+      if (page.origin !== "https://note.com" || !/^\/search\/?$/.test(page.pathname) || params.getAll("q").length !== 1 ||
+          params.getAll("context").length > 1 || (params.has("context") && params.get("context") !== "note")) return null;
+      const match = /^from:@([a-zA-Z0-9_]+)$/.exec(params.get("q").trim());
+      return match ? authorId(match[1]) : null;
+    } catch { return null; }
+  }
   function favoriteSchema(groups, minimum = 2) { return Math.max(minimum, groups.some(g => g.tags.some(t => t?.type === "membership")) ? 5 : groups.some(g => g.tags.some(t => t?.type === "magazine")) ? 4 : groups.some(g => g.tags.some(t => t?.type === "user")) ? 3 : 2); }
   // 自前の輪郭SVG。絵文字の字体や外部アイコン配信には依存しない。
   const bookIconPath = "M12 5.5C9 3.5 5 3.5 2 4.5v14c3-1 7-1 10 1 3-2 7-2 10-1v-14c-3-1-7-1-10 1Zm0 0v14";
@@ -296,6 +310,6 @@
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
     modeOf, usesTags, usesFollowing, usesLogoBack,
     exportSettings, parseSettingsExport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
-    favorite, favoriteKey, favoriteLabel, favoriteUrl, favoriteUser, favoriteMagazine, favoriteMembership, favoriteSchema, bookIconPath, membershipIconPath, membershipPage,
+    favorite, favoriteKey, favoriteLabel, favoriteUrl, authorSearchUrl, searchedAuthor, favoriteUser, favoriteMagazine, favoriteMembership, favoriteSchema, bookIconPath, membershipIconPath, membershipPage,
     normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

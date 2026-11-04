@@ -283,3 +283,9 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 一覧・記事のスキ操作はaria-pressedを持つbuttonと「Nスキ この記事にスキをつけたユーザーを見る」の独立した数字button。ハートのSVGだけでは判定せず、同じ小さな操作グループ内で役割と数値を照合する。数字buttonだけに専用属性を付ける。
 
 本文の公式noteカードは同一オリジンの`/embed/notes/n...` iframe。確認済みの`p-noteEmbed__suki`は`p-noteEmbed__sukiIcon > i.c-icon--heart`と`p-noteEmbed__sukiLabel`で構成され、記事遷移のoverlayリンクは兄弟にある。操作部品が混在しない数値表示だけを、ハートと一緒に隠す。親のCSSは届かないため、参照可能な公式埋め込み文書に専用スタイルを追加し、OFF・停止・差し替え時に撤去する。詳しくは[0.3.0仕様](../spec/hikikomori-note_SPEC_v0.3.0.md)を参照。
+
+## 0.3.0追記：公式の作者検索
+
+作者ページの三点メニューから「きのころの記事を検索」を実行し、/search?q=from%3A%40kinokoro%20&context=note&mode=search&autofocus=1への遷移を確認。検索欄はfrom:@kinokoro、初期の並び順は人気。検索共通の左カラムとhidden lg:blockラッパーを維持している。作者指定はDOMの本文から抽出せず、URLのq全体と対象検索contextを厳密に検証して識別する。独自メニューのTL直下へ作者ページのリンクを追加できる。記事カードや公式の検索入力・並び順操作は変更しない。
+
+作者検索のアイコン・表示名は検索結果内のa[data-name=avatar]から取得できる。/search?q=from:@kinokoroの実DOMでhref=https://note.com/kinokoro、aria-label=「きのころのプロフィールへのリンク」、子imgのsrc=https://assets.st-note.com/...を確認。同じ作者IDと検証した情報だけを、拡張の作者ページリンクへ表示する。記事日時を含むtextContent全体は表示名として使わない。
