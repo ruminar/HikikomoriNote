@@ -2197,3 +2197,25 @@ test('質問箱の未確認画像・不正名は使わず、作者確認やレ�
  f.doc.getElementById('qa-image').setAttribute('alt','不正\n名前');f.ui.update(settings,url);assert.equal(qaAuthor(f).textContent,'nontsuのページ');f.doc.getElementById('qa-account').remove();f.ui.update(settings,url);assert.equal(qaAuthor(f),null);
  const unknown=qaFixture(qaRootHtml.replace('class="mx-auto w-full max-w-content-small"','class="unknown"'));unknown.ui.update(settings,url);assert.equal(qaAuthor(unknown),null);
 });
+
+const qaSelf=f=>f.doc.querySelector('[class="hikikomori-note-question-self"]');
+test('質問箱の作者リンクの次に自分のクリエーターページを全モードで追加する',()=>{
+ for(const mode of ['normal','social','severe'])for(const html of [qaRootHtml,qaDetailHtml]){
+  const f=qaFixture(html),settings=f.core.readSettings({...groups(),mode,noteUserId:'ruminar'}),url=html===qaRootHtml?'https://note.com/qa/nontsu':'https://note.com/qa/nontsu/q/abc123';f.ui.update(settings,url);
+  const author=qaAuthor(f),self=qaSelf(f);assert.ok(author);assert.ok(self);assert.equal(self.href,'https://note.com/ruminar');assert.equal(self.textContent,'自分のクリエーターページ');assert.equal(self.getAttribute('target'),null);assert.equal(f.doc.body.children.indexOf(self),f.doc.body.children.indexOf(author)+1);
+  f.ui.update(settings,url);assert.equal(qaSelf(f),self);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-question-self"]').length,1);
+ }
+});
+test('質問箱の自分リンクはユーザー名設定の追加・変更・解除と切断に追従する',()=>{
+ const f=qaFixture(),settings=f.core.readSettings(groups()),url='https://note.com/qa/nontsu';f.ui.update(settings,url);assert.equal(qaSelf(f),null);assert.ok(qaAuthor(f));
+ for(const noteUserId of ['ruminar','other_user','nontsu']){f.ui.update({...settings,noteUserId},url);assert.equal(qaSelf(f).href,'https://note.com/'+noteUserId);qaSelf(f).remove();f.ui.update({...settings,noteUserId},url);assert.ok(qaSelf(f));}
+ f.ui.update(settings,url);assert.equal(qaSelf(f),null);assert.ok(qaAuthor(f));
+});
+test('質問箱の自分リンクも狭幅・余白不足・作者未確認・OFF・離脱・停止で撤去する',()=>{
+ const f=qaFixture(),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/qa/nontsu';
+ const absent=()=>{assert.equal(qaSelf(f),null);assert.equal(qaAuthor(f),null);};
+ f.ui.update(settings,url);f.win.wide=false;f.ui.update(settings,url);absent();f.win.wide=true;f.ui.update(settings,url);assert.ok(qaSelf(f));
+ const content=f.doc.getElementById('qa-content');content.getBoundingClientRect=()=>({left:227,width:620});f.ui.update(settings,url);absent();content.getBoundingClientRect=()=>({left:270,width:620});
+ const account=f.doc.getElementById('qa-account');account.href='https://note.com/other';f.ui.update(settings,url);absent();account.href='https://note.com/nontsu';
+ f.ui.update(settings,url);f.ui.update({...settings,enabled:false},url);absent();f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');absent();f.ui.update(settings,url);f.ui.stop();absent();
+});

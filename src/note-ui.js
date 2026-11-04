@@ -186,7 +186,7 @@
     let host, menu, signature;
     let articleFollowing;
     let articleAuthor, authorSignature;
-    let questionAuthor, questionAuthorSignature;
+    let questionAuthor, questionSelf, questionAuthorSignature;
     let searchAuthorInfo, searchAuthorDirty = true;
     function searchAuthor(userId, settings) {
       if (!searchAuthorDirty && searchAuthorInfo?.userId === userId.toLowerCase() && searchAuthorInfo.groups === settings.tagGroups) return searchAuthorInfo.value;
@@ -802,6 +802,7 @@
     }
     function clearQuestionAuthor() {
       questionAuthor?.remove(); questionAuthor = undefined; questionAuthorSignature = undefined;
+      questionSelf?.remove(); questionSelf = undefined;
     }
     function syncQuestionAuthor(settings, url) {
       const page = core.questionPage(url);
@@ -838,8 +839,9 @@
         if (author) break;
       }
       if (!author) { clearQuestionAuthor(); return; }
-      const signature = JSON.stringify([page.user, author]);
-      if (questionAuthor?.isConnected && questionAuthorSignature === signature) return;
+      const selfUrl = core.profileUrl(settings.noteUserId);
+      const signature = JSON.stringify([page.user, author, selfUrl]);
+      if (questionAuthor?.isConnected && (!selfUrl || questionSelf?.isConnected) && questionAuthorSignature === signature) return;
       clearQuestionAuthor();
       questionAuthor = doc.createElement("a"); questionAuthor.setAttribute(owned, ""); questionAuthor.className = "hikikomori-note-question-author";
       questionAuthor.href = core.profileUrl(page.user); questionAuthor.setAttribute("title", author.name);
@@ -850,6 +852,12 @@
       }
       const name = doc.createElement("span"); name.textContent = author.name; questionAuthor.append(name);
       doc.body.append(questionAuthor); questionAuthorSignature = signature;
+      if (selfUrl) {
+        questionSelf = doc.createElement("a"); questionSelf.setAttribute(owned, "");
+        questionSelf.className = "hikikomori-note-question-self";
+        questionSelf.href = selfUrl; questionSelf.textContent = "自分のクリエーターページ";
+        doc.body.append(questionSelf);
+      }
     }
     function syncArticleFollowing(settings, url) {
       const article = doc.querySelector('article[id="note-article"]');
