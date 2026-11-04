@@ -127,7 +127,8 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-navigation a:hover { background: rgba(128,128,128,.12); }
 .hikikomori-note-navigation a[aria-current="page"] { background: rgba(128,128,128,.18); font-weight: bold; }
 .hikikomori-note-navigation a:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
-.hikikomori-note-navigation .hikikomori-note-navigation-following {
+.hikikomori-note-navigation .hikikomori-note-navigation-following,
+.hikikomori-note-navigation .hikikomori-note-navigation-profile {
   box-sizing: border-box; width: 100%; min-height: 36px; padding: 8px 12px;
   border: 1px solid rgba(128,128,128,.35); font-size: 14px; text-align: center;
 }

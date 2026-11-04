@@ -7,7 +7,7 @@
   const fields = { hideLikeCounts: "hide-like-counts", hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", keepNoteHeaderVisible: "keep-note-header-visible", mode: "operation-mode" };
   const modeNames = { normal: "通常モード（ひとみしりモード）", severe: "重度ひきこもりモード", social: "社会復帰モード" };
   function updateModeHelp() {
-    byId("operation-mode-help").textContent = { normal: "専用ホームとお気に入りから、見たい記事を選んで閲覧します。", severe: "公式ホームを開かず、タグやTLの独自メニューも停止します。作者ページへの導線は残します。", social: "note公式ホームと左メニューを使用し、記事の非表示設定や追加導線は使います。" }[byId("operation-mode").value] || "";
+    byId("operation-mode-help").textContent = { normal: "専用ホームとお気に入りから、見たい記事を選んで閲覧します。", severe: "公式ホームを開かず、左メニューには自分のページだけを表示します。お気に入りグループやTLへのリンクは表示しません。", social: "note公式ホームと左メニューを使用し、記事の非表示設定や追加導線は使います。" }[byId("operation-mode").value] || "";
   }
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }

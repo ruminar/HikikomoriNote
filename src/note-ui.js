@@ -427,7 +427,7 @@
     const isSidebarGrid = root => sidebarGridClasses.some(name => root.classList.contains(name));
     function prepareSidebar(url, settings) {
       if (disposed) return;
-      const active = (settings?.enabled && core.usesTags(settings)) &&
+      const active = (settings?.enabled && core.modeOf(settings) !== "social") &&
         ["following", "tag", "search", "topic"].includes(core.pageKind(url)?.type);
       for (const root of sidebarRoots) {
         if (!active || !root.isConnected || !isSidebarGrid(root)) {
@@ -1100,7 +1100,7 @@
       }
       const header = mobile.logo.closest("header");
       const officialSearch = [...header.querySelectorAll('input[name="q"]')].some(input => !input.closest(`[${owned}]`) && visible(input));
-      const needsSearch = ["following", "tag"].includes(core.pageKind(url)?.type) && !officialSearch;
+      const needsSearch = core.usesTags(currentSettings) && ["following", "tag"].includes(core.pageKind(url)?.type) && !officialSearch;
       if (!needsSearch && mobile.form) { mobile.form.remove(); mobile.form = undefined; }
       if (needsSearch && !mobile.form) {
         const form = doc.createElement("form"); form.setAttribute("action", "https://note.com/search");
@@ -1271,7 +1271,7 @@
       syncPaidCards(settings, url);
       syncHomePaidRecommendations(settings, url);
       syncProfilePromotions(settings, url);
-      if (!settings.enabled || !page || core.membershipPage(url) || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); pruneProfileLayout(); return; }
+      if (!settings.enabled || !page || core.membershipPage(url) || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.modeOf(settings) !== "social")) { removeMobile(); restore(); pruneProfileLayout(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
       const officialAside = common && (navigationSidebars(doc)[0] || [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky")));
       const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);
@@ -1283,9 +1283,10 @@
       if (!nextHost) { restore(); pruneProfileLayout(); return; }
       if (host !== nextHost || !menu?.isConnected) restore();
       host = nextHost;
-      const group = core.selectedGroup(settings);
+      const severe = core.modeOf(settings) === "severe";
+      const group = severe ? null : core.selectedGroup(settings);
       const activeTag = selectedTag(page, url);
-      const nextSignature = JSON.stringify([page, activeTag, settings.tagGroups, settings.selectedTagGroupId, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
+      const nextSignature = JSON.stringify([page, activeTag, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.selectedTagGroupId, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
         menu.setAttribute(owned, "");
@@ -1297,61 +1298,69 @@
       }
       if (signature !== nextSignature) {
         menu.replaceChildren();
-        const following = doc.createElement("a"); following.href = "https://note.com/following";
-        following.className = "hikikomori-note-navigation-following";
-        following.textContent = "フォロー中のTL";
-        if (page.type === "following") following.setAttribute("aria-current", "page");
-        if (page.type === "profile" && favoriteProfile) {
-          const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
-          row.append(favoriteProfile.toggle, following); menu.append(row);
-        } else menu.append(following);
-        if (page.type !== "profile") {
-          let registered = false;
-          if (page.type === "tag") {
-            let normalized;
-            try { normalized = core.normalizeTag(page.tag); } catch { /* 空タグ等は登録不可 */ }
-            registered = group.tags.includes(normalized);
-            if (!registered) {
-              const button = doc.createElement("button"); button.type = "button";
-              button.textContent = adding ? "保存中…" : "タグをお気に入りに追加";
-              button.setAttribute("aria-label", `# ${page.tag}：${button.textContent}`);
-              button.disabled = !normalized || adding || uncertain || Boolean(settings.tagWarning) || settings.groupSelectionInvalid || !actions.addCurrentTag;
-              button.setAttribute("data-tag-add", "");
-              button.onclick = () => { void addTag(page.tag); }; menu.append(button);
+        if (severe) {
+          const profile = doc.createElement("a"), destination = core.profileUrl(settings.noteUserId);
+          profile.className = "hikikomori-note-navigation-profile";
+          profile.textContent = destination ? `${settings.noteUserId}のページ` : "自分のページ（未設定）";
+          profile.href = destination || `${(actions.settingsUrl?.() || "").split("#")[0]}#settings`;
+          menu.append(profile);
+        } else {
+          const following = doc.createElement("a"); following.href = "https://note.com/following";
+          following.className = "hikikomori-note-navigation-following";
+          following.textContent = "フォロー中のTL";
+          if (page.type === "following") following.setAttribute("aria-current", "page");
+          if (page.type === "profile" && favoriteProfile) {
+            const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
+            row.append(favoriteProfile.toggle, following); menu.append(row);
+          } else menu.append(following);
+          if (page.type !== "profile") {
+            let registered = false;
+            if (page.type === "tag") {
+              let normalized;
+              try { normalized = core.normalizeTag(page.tag); } catch { /* 空タグ等は登録不可 */ }
+              registered = group.tags.includes(normalized);
+              if (!registered) {
+                const button = doc.createElement("button"); button.type = "button";
+                button.textContent = adding ? "保存中…" : "タグをお気に入りに追加";
+                button.setAttribute("aria-label", `# ${page.tag}：${button.textContent}`);
+                button.disabled = !normalized || adding || uncertain || Boolean(settings.tagWarning) || settings.groupSelectionInvalid || !actions.addCurrentTag;
+                button.setAttribute("data-tag-add", "");
+                button.onclick = () => { void addTag(page.tag); }; menu.append(button);
+              }
             }
-          }
-          const status = doc.createElement("span"); status.className = "hikikomori-note-tag-status";
-          status.setAttribute("role", "status"); status.textContent = settings.tagWarning || (settings.groupSelectionInvalid ? "グループを選び直してください。" : actionMessage);
-          menu.append(status);
-          if (actionMessage && (!registered || uncertain) && actions.refresh) {
-            const refresh = doc.createElement("button"); refresh.type = "button"; refresh.textContent = "状態を再確認";
-            refresh.disabled = adding; refresh.onclick = () => { void refreshTags(); }; menu.append(refresh);
-          }
-          const title = doc.createElement("p"); title.textContent = "お気に入り"; menu.append(title);
-          const selector = doc.createElement("div"); selector.className = "hikikomori-note-group-selector";
-          selector.setAttribute("role", "group"); selector.setAttribute("aria-label", "お気に入りのグループ");
-          settings.tagGroups.forEach((item, index) => {
-            const button = doc.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
-            button.setAttribute("data-group-id", item.id); button.setAttribute("title", core.groupName(item));
-            button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
-            button.setAttribute("aria-pressed", String(item.id === group.id));
-            button.disabled = adding || uncertain || Boolean(settings.tagWarning) || !actions.selectGroup;
-            button.onclick = () => { void selectGroup(item.id); }; selector.append(button);
-          });
-          menu.append(selector);
-          const name = doc.createElement("div"); name.className = "hikikomori-note-group-name"; name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); menu.append(name);
-          const list = doc.createElement("ul"); menu.append(list);
-          for (const tag of group.tags) {
-            const item = doc.createElement("li"), link = doc.createElement("a");
-            link.textContent = core.favoriteLabel(tag); link.href = core.favoriteUrl(tag);
-            if (["magazine", "membership"].includes(tag?.type)) link.prepend(favoriteIcon(doc, tag.type));
-            link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : `${tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : core.authorLabel(tag)}（新しいタブで開く）`);
-            if (typeof tag !== "string") {
-              link.setAttribute("target", "_blank"); link.setAttribute("rel", "noopener noreferrer");
-              link.setAttribute("aria-label", `${tag.type === "membership" ? "メンバーシップ：" : tag.type === "magazine" ? "マガジン：" : ""}${core.favoriteLabel(tag)}（新しいタブで開く）`);
+            const status = doc.createElement("span"); status.className = "hikikomori-note-tag-status";
+            status.setAttribute("role", "status"); status.textContent = settings.tagWarning || (settings.groupSelectionInvalid ? "グループを選び直してください。" : actionMessage);
+            menu.append(status);
+            if (actionMessage && (!registered || uncertain) && actions.refresh) {
+              const refresh = doc.createElement("button"); refresh.type = "button"; refresh.textContent = "状態を再確認";
+              refresh.disabled = adding; refresh.onclick = () => { void refreshTags(); }; menu.append(refresh);
             }
-            if (activeTag === tag) link.setAttribute("aria-current", "page");
-            item.append(link); list.append(item);
+            const title = doc.createElement("p"); title.textContent = "お気に入り"; menu.append(title);
+            const selector = doc.createElement("div"); selector.className = "hikikomori-note-group-selector";
+            selector.setAttribute("role", "group"); selector.setAttribute("aria-label", "お気に入りのグループ");
+            settings.tagGroups.forEach((item, index) => {
+              const button = doc.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
+              button.setAttribute("data-group-id", item.id); button.setAttribute("title", core.groupName(item));
+              button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
+              button.setAttribute("aria-pressed", String(item.id === group.id));
+              button.disabled = adding || uncertain || Boolean(settings.tagWarning) || !actions.selectGroup;
+              button.onclick = () => { void selectGroup(item.id); }; selector.append(button);
+            });
+            menu.append(selector);
+            const name = doc.createElement("div"); name.className = "hikikomori-note-group-name"; name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); menu.append(name);
+            const list = doc.createElement("ul"); menu.append(list);
+            for (const tag of group.tags) {
+              const item = doc.createElement("li"), link = doc.createElement("a");
+              link.textContent = core.favoriteLabel(tag); link.href = core.favoriteUrl(tag);
+              if (["magazine", "membership"].includes(tag?.type)) link.prepend(favoriteIcon(doc, tag.type));
+              link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : `${tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : core.authorLabel(tag)}（新しいタブで開く）`);
+              if (typeof tag !== "string") {
+                link.setAttribute("target", "_blank"); link.setAttribute("rel", "noopener noreferrer");
+                link.setAttribute("aria-label", `${tag.type === "membership" ? "メンバーシップ：" : tag.type === "magazine" ? "マガジン：" : ""}${core.favoriteLabel(tag)}（新しいタブで開く）`);
+              }
+              if (activeTag === tag) link.setAttribute("aria-current", "page");
+              item.append(link); list.append(item);
+            }
           }
         }
         signature = nextSignature;
