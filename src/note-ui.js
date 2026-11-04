@@ -39,7 +39,8 @@
     function likeButton(button) {
       return button?.tagName === "BUTTON" && button.getAttribute("type") === "button" &&
         ["true", "false"].includes(button.getAttribute("aria-pressed")) &&
-        [...button.querySelectorAll('svg[aria-label="スキ"]')].some(svg => svg.getAttribute("role") === "img" && svg.getAttribute("data-id") === "Icon");
+        [...button.querySelectorAll("svg[aria-label]")].some(svg =>
+          ["スキ", "スキを取り消す"].includes(svg.getAttribute("aria-label")) && svg.getAttribute("role") === "img" && svg.getAttribute("data-id") === "Icon");
     }
     function scan(document) {
       const next = new Set();

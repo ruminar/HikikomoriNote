@@ -55,10 +55,20 @@ test('操作ハートとイベントを保持し、ユーザー一覧を開く�
   const f=fixture(counter,{mode}),count=f.doc.getElementById('count'),button=f.doc.getElementById('heart');let clicks=0;button.addEventListener('click',()=>clicks++);
   f.update();assert.ok(count.hasAttribute(marker));assert.equal(button.hasAttribute(marker),false);assert.equal(button.parentElement.hasAttribute(marker),false);
   assert.equal(button.fire('click').defaultPrevented,undefined);assert.equal(clicks,1);
-  button.setAttribute('aria-pressed','true');count.textContent='13';count.setAttribute('aria-label','13スキ この記事にスキをつけたユーザーを見る');f.control.invalidatePaidCards();f.update();assert.ok(count.hasAttribute(marker));
+  button.setAttribute('aria-pressed','true');button.querySelector('svg').setAttribute('aria-label','スキを取り消す');count.textContent='13';count.setAttribute('aria-label','13スキ この記事にスキをつけたユーザーを見る');f.control.invalidatePaidCards();f.update();assert.ok(count.hasAttribute(marker));
   f.settings.hideLikeCounts=false;f.update();assert.equal(count.hasAttribute(marker),false);assert.equal(count.textContent,'13');
   f.settings.hideLikeCounts=true;f.update();assert.ok(count.hasAttribute(marker));f.settings.enabled=false;f.update();assert.equal(count.hasAttribute(marker),false);
  }
+});
+test('既にスキ済みのカードも数字を隠し、押下と取り消しのラベル・状態更新順に依存しない',()=>{
+ const f=fixture(counter.replace('aria-pressed="false"','aria-pressed="true"').replace('aria-label="スキ"','aria-label="スキを取り消す"'));
+ const button=f.doc.getElementById('heart'),icon=button.querySelector('svg'),count=f.doc.getElementById('count');let clicks=0;button.addEventListener('click',()=>clicks++);
+ count.textContent='531';count.setAttribute('aria-label','531スキ この記事にスキをつけたユーザーを見る');f.update();assert.ok(count.hasAttribute(marker));
+ for(const [pressed,label,number] of [['false','スキを取り消す','531'],['false','スキ','530'],['false','スキを取り消す','530'],['true','スキ','531'],['true','スキを取り消す','531']]){
+  button.setAttribute('aria-pressed',pressed);icon.setAttribute('aria-label',label);count.textContent=number;count.setAttribute('aria-label',number+'スキ この記事にスキをつけたユーザーを見る');
+  f.control.invalidatePaidCards();f.update();assert.ok(count.hasAttribute(marker));assert.equal(button.hasAttribute(marker),false);assert.equal(button.fire('click').defaultPrevented,undefined);
+ }
+ assert.equal(clicks,5);f.settings.hideLikeCounts=false;f.update();assert.equal(count.hasAttribute(marker),false);assert.equal(count.textContent,'531');assert.equal(icon.getAttribute('aria-label'),'スキを取り消す');
 });
 test('数字以外・別操作・役割不明のハート・未知の構造は変更しない',()=>{
  for(const change of [f=>f.doc.getElementById('count').textContent='12人の感想',f=>f.doc.getElementById('count').setAttribute('aria-label','12コメント'),f=>f.doc.getElementById('heart').removeAttribute('aria-pressed'),f=>f.doc.getElementById('reaction').className='',f=>f.doc.getElementById('heart').querySelector('svg').setAttribute('aria-label','お気に入り')]) {

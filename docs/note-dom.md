@@ -274,6 +274,8 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 名前はh1のtextContentを既存規則で検証する。公式リンク・見出し・操作列が一致しなければ登録UIは出さない。追加監視・記事取得はなく、既存の更新経路で差し替えと幅変更へ追従する。これは公式DOMの読み取り確認であり、実拡張を入れた全ブラウザ・Android実機の受け入れ確認とは区別する。
 # 0.3.0追記：スキ数と埋め込み（2026-11-04）
 
+スキ済みカードの利用者提供DOMでは、ハートbuttonはaria-pressed=true、SVGはaria-label=「スキを取り消す」に変化する。数字buttonのaria-labelは「531スキ この記事にスキをつけたユーザーを見る」のまま。両ラベルを操作ハートの判定に含め、数字buttonだけを隠す。
+
 新しいDIVの左カラムでは先行非表示CSSも更新が必要。専用ルートクラスから、直下・hidden lg:block・hidden lg:contentsの既知経路で幅とstickyを持つ左カラムへ限定し、カテゴリナビゲーションを直接含む公式の縦並び枠だけを非表示にする。独自navやmainを隠さないこと、後挿入直後と復元をローカル実ブラウザで27項目検証済み。
 
 同日の/following実DOMでは左カラムがasideからdiv、縦並びナビのaria-labelが急上昇からカテゴリナビゲーションへ変更。sticky・top-3・hidden・h-full・max-h-screen・w-[11.375rem]・overflow-y-auto・pr-4・lg:block、既知のグリッド直下と兄弟main（検索はhidden lg:block、タグはhidden lg:contentsを1段挟む）、縦並びnavの公式/trendリンクを照合して既存の差し替え処理へ渡す。横並びカテゴリナビ、本文、未知構造は除外。狭幅切替とヘッダ固定もDIVへ対応する。実拡張での再確認は利用者が行う。
