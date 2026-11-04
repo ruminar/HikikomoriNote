@@ -4,7 +4,10 @@
 .hikikomori-note-navigation-root > div[class~="hidden"][class~="lg:block"] > div.py-4,
 .hikikomori-note-navigation-root > aside > div > div.flex.flex-col.gap-4,
 .hikikomori-note-navigation-root > div[class~="lg:contents"] > aside > div > div.flex.flex-col.gap-4,
-.hikikomori-note-navigation-root > div[class~="hidden"][class~="lg:block"] > aside > div > div.flex.flex-col.gap-4 {
+.hikikomori-note-navigation-root > div[class~="hidden"][class~="lg:block"] > aside > div > div.flex.flex-col.gap-4,
+.hikikomori-note-navigation-root > div[class~="sticky"][class~="w-[11.375rem]"] > div > div.flex.flex-col.gap-4:has(> nav[aria-label="カテゴリナビゲーション"]),
+.hikikomori-note-navigation-root > div[class~="hidden"][class~="lg:block"] > div[class~="sticky"][class~="w-[11.375rem]"] > div > div.flex.flex-col.gap-4:has(> nav[aria-label="カテゴリナビゲーション"]),
+.hikikomori-note-navigation-root > div[class~="hidden"][class~="lg:contents"] > div[class~="sticky"][class~="w-[11.375rem]"] > div > div.flex.flex-col.gap-4:has(> nav[aria-label="カテゴリナビゲーション"]) {
   display: none !important;
 }
 a[data-hikikomori-note-dashboard-hidden] {
@@ -204,8 +207,9 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
   div[data-hikikomori-note-profile-fixed-bar-hidden] {
     display: none !important;
   }
-  aside[data-hikikomori-note-header-sidebar] {
+  [data-hikikomori-note-header-sidebar] {
     top: var(--hikikomori-note-sidebar-top) !important;
     max-height: calc(100vh - var(--hikikomori-note-sidebar-top)) !important;
   }
 }
+[data-hikikomori-note-like-hidden] { display: none !important; }

@@ -8,6 +8,101 @@
   const recommendationsHidden = "data-hikikomori-note-recommendations-hidden";
   const tipHidden = "data-hikikomori-note-tip-hidden";
   const productCard = '[data-aicn-thing-card="true"], [data-testid="aicn-thing-card"]';
+  const likeHidden = "data-hikikomori-note-like-hidden";
+  const likeCss = `[${likeHidden}] { display: none !important; }`;
+  const sidebarGridClasses = ["lg:grid-cols-[202px_minmax(0,1fr)]", "lg:grid-cols-[12.625rem_minmax(0,1fr)]"];
+  function navigationSidebars(doc) {
+    return [...doc.querySelectorAll('aside[class~="w-[11.375rem]"], div[class~="w-[11.375rem]"]')].filter(element => {
+      if (!element.classList.contains("sticky") || element.closest("article") || element.closest('[id="note-body"]') || element.closest(`[${owned}]`)) return false;
+      if (element.tagName === "ASIDE" && element.querySelector('nav[aria-label="急上昇"]')) return true;
+      // 2026-11-04の公式左メニューはasideではなくdiv。横並びのカテゴリナビと区別する。
+      let grid = element.parentElement;
+      // 検索はhidden lg:block、タグはhidden lg:contentsを1段挟む。
+      // 任意の祖先まで探すと本文中の似たDIVを拾うため、確認済みの1段だけを許可する。
+      if (grid?.tagName === "DIV" && grid.classList.contains("hidden") &&
+          (grid.classList.contains("lg:block") || grid.classList.contains("lg:contents"))) grid = grid.parentElement;
+      if (!["top-3", "hidden", "h-full", "max-h-screen", "overflow-y-auto", "pr-4", "lg:block"].every(c => element.classList.contains(c)) ||
+          !grid?.classList.contains("lg:grid") || !grid.classList.contains("min-h-screen") ||
+          !sidebarGridClasses.some(c => grid.classList.contains(c)) || ![...grid.children].some(e => e.tagName === "MAIN")) return false;
+      return [...element.querySelectorAll('nav[aria-label="カテゴリナビゲーション"]')].some(nav =>
+        ["flex", "flex-col", "gap-4"].every(c => nav.classList.contains(c)) && [...nav.querySelectorAll("a[href]")].some(a => {
+          try { const url = new URL(a.href); return url.origin === "https://note.com" && url.pathname === "/trend"; } catch { return false; }
+        }));
+    });
+  }
+  // 数字・ハートの外見だけで判定せず、確認済みの操作部品／埋め込みカードを照合する。
+  function createLikeVisibility(doc) {
+    let dirty = true, activeBefore = false;
+    const targets = new Map(), frameStyles = new Map();
+    const numeric = value => /^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?(?:万|億|[kKmM])?$/.test(value.trim());
+    const interactive = 'button, a, input, select, textarea, [role="button"], [role="link"], [tabindex], [onclick], [contenteditable]';
+    function likeButton(button) {
+      return button?.tagName === "BUTTON" && button.getAttribute("type") === "button" &&
+        ["true", "false"].includes(button.getAttribute("aria-pressed")) &&
+        [...button.querySelectorAll('svg[aria-label="スキ"]')].some(svg => svg.getAttribute("role") === "img" && svg.getAttribute("data-id") === "Icon");
+    }
+    function scan(document) {
+      const next = new Set();
+      for (const count of document.querySelectorAll('button[aria-label]')) {
+        if (count.closest(`[${owned}]`) || !numeric(count.textContent)) continue;
+        const label = count.getAttribute("aria-label"), suffix = "スキ この記事にスキをつけたユーザーを見る";
+        if (!label.endsWith(suffix) || !numeric(label.slice(0, -suffix.length))) continue;
+        const group = count.parentElement;
+        if (!group || !["flex", "items-center", "justify-center"].every(c => group.classList.contains(c)) || group.children.length !== 2) continue;
+        const buttons = [...group.querySelectorAll("button")].filter(likeButton);
+        if (buttons.length === 1 && !count.contains(buttons[0])) next.add(count);
+      }
+      for (const count of document.querySelectorAll('div[class~="p-noteEmbed__suki"]')) {
+        const inner = count.parentElement, card = inner?.parentElement;
+        if (count.closest(`[${owned}]`) || !inner?.classList.contains("p-noteEmbed__inner") || !card?.classList.contains("p-noteEmbed") ||
+            interactive.split(", ").some(selector => count.closest(selector)) || count.querySelector(interactive) || count.children.length !== 2) continue;
+        const [icon, label] = count.children;
+        if (!icon.classList.contains("p-noteEmbed__sukiIcon") || !label.classList.contains("p-noteEmbed__sukiLabel") || !numeric(label.textContent)) continue;
+        const hearts = icon.querySelectorAll('i[class~="c-icon--heart"]');
+        if (hearts.length !== 1 || !hearts[0].classList.contains("c-icon") || icon.textContent.trim()) continue;
+        const links = [...inner.children].filter(e => e.tagName === "A" && e.classList.contains("p-noteEmbed__link") && core.isArticle(e.href));
+        if (links.length !== 1 || !inner.querySelector('div[class~="p-noteEmbed__body"]')) continue;
+        next.add(count);
+      }
+      for (const target of targets.get(document) ?? []) if (!next.has(target)) target.removeAttribute(likeHidden);
+      for (const target of next) if (!target.hasAttribute(likeHidden)) target.setAttribute(likeHidden, "");
+      targets.set(document, next);
+    }
+    function release(document) {
+      for (const target of targets.get(document) ?? []) target.removeAttribute(likeHidden);
+      targets.delete(document); frameStyles.get(document)?.remove(); frameStyles.delete(document);
+    }
+    function clear() { for (const document of targets.keys()) release(document); activeBefore = false; dirty = true; }
+    return {
+      invalidate() { dirty = true; },
+      stop: clear,
+      update(settings, url) {
+        let active = false;
+        try { active = settings.enabled && settings.hideLikeCounts === true && new URL(url).origin === "https://note.com"; } catch { /* 対象外は復元 */ }
+        if (!active) { if (activeBefore) clear(); return; }
+        if (dirty || !activeBefore) scan(doc);
+        dirty = false; activeBefore = true;
+        const documents = new Set([doc]);
+        for (const frame of doc.querySelectorAll("iframe[src]")) {
+          try {
+            const src = new URL(frame.getAttribute("src"), url);
+            if (src.origin !== "https://note.com" || !/^\/embed\/notes\/n[a-zA-Z0-9]+\/?$/.test(src.pathname)) continue;
+            const child = frame.contentDocument;
+            if (!child?.head || new URL(child.location.href).origin !== src.origin || new URL(child.location.href).pathname !== src.pathname) continue;
+            documents.add(child);
+            let style = frameStyles.get(child);
+            if (!style?.isConnected) {
+              style = child.createElement("style"); style.setAttribute(owned, ""); style.textContent = likeCss;
+              child.head.append(style); frameStyles.set(child, style);
+            }
+            // 親のMutationObserverはiframe内を観測しない。既存の再同期で遅延読込・数字変更も確認する。
+            scan(child);
+          } catch { /* 外部・sandbox・読込途中のフレームには触れない */ }
+        }
+        for (const document of targets.keys()) if (!documents.has(document)) release(document);
+      }
+    };
+  }
   function isManagementPage(url) {
     try {
       const parsed = new URL(url);
@@ -65,6 +160,7 @@
     path.setAttribute("d", type === "membership" ? core.membershipIconPath : core.bookIconPath); svg.append(path); return svg;
   }
   function create(doc, win, actions = {}) {
+    const likeVisibility = createLikeVisibility(doc);
     let profileLayout;
     // 見た目だけでなくTab移動・読み上げも同じ順序にする。各機能は自分の領域だけを更新する。
     function profileSlot(owner, name) {
@@ -235,7 +331,7 @@
       const height = Math.max(0, ...[...headers].map(header => header.getBoundingClientRect().height));
       if (headers.size && Number.isFinite(height) && height > 0 &&
           (core.isHome(url) || ["following", "tag", "search", "topic"].includes(page?.type))) {
-        for (const aside of doc.querySelectorAll('aside[class~="w-[11.375rem]"]')) {
+        for (const aside of new Set([...doc.querySelectorAll('aside[class~="w-[11.375rem]"]'), ...navigationSidebars(doc)])) {
           if (hasClasses(aside, ["sticky", "top-3", "max-h-screen", "overflow-y-auto"]) &&
               !aside.closest("article") && !aside.closest(`[${owned}]`)) targets.add(aside);
         }
@@ -251,7 +347,7 @@
         headerSidebarStyle = doc.createElement("style"); headerSidebarStyle.setAttribute(owned, "");
         (doc.head || doc.documentElement || doc.root).append(headerSidebarStyle);
       }
-      const css = `aside[${headerSidebar}] { --hikikomori-note-sidebar-top: ${Math.ceil(height) + 12}px; }`;
+      const css = `[${headerSidebar}] { --hikikomori-note-sidebar-top: ${Math.ceil(height) + 12}px; }`;
       if (headerSidebarStyle.textContent !== css) headerSidebarStyle.textContent = css;
     }
     const profileFixedBars = new Set();
@@ -327,8 +423,7 @@
     const recommendations = new Set();
     const sidebarRoots = new Set();
     const rootClass = "hikikomori-note-navigation-root";
-    const gridClasses = ["lg:grid-cols-[202px_minmax(0,1fr)]", "lg:grid-cols-[12.625rem_minmax(0,1fr)]"];
-    const isSidebarGrid = root => gridClasses.some(name => root.classList.contains(name));
+    const isSidebarGrid = root => sidebarGridClasses.some(name => root.classList.contains(name));
     function prepareSidebar(url, settings) {
       if (disposed) return;
       const active = (settings?.enabled && core.usesTags(settings)) &&
@@ -1022,9 +1117,7 @@
       return mobile.panel;
     }
     function sidebar() {
-      return [...doc.querySelectorAll("aside")].find(element =>
-        element.classList.contains("w-[11.375rem]") && element.classList.contains("sticky") &&
-        element.querySelector('nav[aria-label="急上昇"]') && visible(element));
+      return navigationSidebars(doc).find(visible);
     }
     function profile(user) {
       return [...doc.querySelectorAll("aside")].find(element =>
@@ -1148,6 +1241,7 @@
     }
     function update(settings, url) {
       if (disposed) return;
+      likeVisibility.update(settings, url);
       const profilePage = core.pageKind(url);
       if (profileLayout && (profilePage?.type !== "profile" || profilePage.user !== profileLayout.userId ||
           !profileLayout.root.isConnected || Object.values(profileLayout.slots).some(slot => slot.parentElement !== profileLayout.root))) {
@@ -1178,7 +1272,7 @@
       syncProfilePromotions(settings, url);
       if (!settings.enabled || !page || core.membershipPage(url) || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.usesTags(settings))) { removeMobile(); restore(); pruneProfileLayout(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
-      const officialAside = common && [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky"));
+      const officialAside = common && (navigationSidebars(doc)[0] || [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky")));
       const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);
       const mobileHost = syncMobile(compact, url);
       const profileHost = page.type === "profile" ? profile(page.user) : null;
@@ -1269,7 +1363,7 @@
         }
         if (favoriteProfile.toggle.parentElement !== row) row.prepend(favoriteProfile.toggle);
       }
-      // 独自メニューを挿入できてから、aside直下の公式メニューだけを隠す。
+      // 独自メニューを挿入できてから、確認済み左カラム直下の公式メニューだけを隠す。
       if (page.type !== "profile" && host !== mobileHost) {
         for (const element of host.children) {
           if (element === menu) continue;
@@ -1282,6 +1376,7 @@
     return Object.freeze({
       update, prepareSidebar,
       invalidatePaidCards() {
+        likeVisibility.invalidate();
         authorControls.invalidate();
         notesPromotionsDirty = true;
         membershipExamplesDirty = true;
@@ -1292,6 +1387,7 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        likeVisibility.stop();
         for (const root of sidebarRoots) root.classList.remove(rootClass);
         sidebarRoots.clear();
         authorControls.stop();

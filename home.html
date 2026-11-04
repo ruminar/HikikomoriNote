@@ -11,7 +11,7 @@
 </head>
 <body>
   <main>
-    <header><h1>ひきこもりnote</h1><span id="version" class="muted">0.2.9</span></header>
+    <header><h1>ひきこもりnote</h1><span id="version" class="muted">0.3.0</span></header>
     <p id="mode" class="muted">設定とホームの転送状態を確認しています…</p>
     <p id="status" role="status" aria-live="polite"></p>
     <p id="tag-warning" class="warning" role="alert" hidden></p>
@@ -63,6 +63,8 @@
             <p class="muted" id="paid-help">ONのとき有料記事を開くと、未設定の作者の表示方法を確認します。価格が表示される記事・マガジンカードと、タイトルに鍵アイコンがあるメンバーシップ限定記事を隠します。購入済み記事一覧は対象外です。ほかの一覧では購入済み・参加済みでも価格や鍵アイコンがあれば対象になります。記事内の「チップで応援する」枠も隠します。作者ホームのAmazon商品カード・ストア商品枠・有料メンバーシップ参加プランも隠します（自分と表示許可した作者は対象外）。社会復帰モードの公式ホームでは「おすすめメンバーシップ」を行全体で隠します。記事への直接アクセスは制限しません。</p>
             <label class="check-option" for="hide-article-recommendations"><input id="hide-article-recommendations" type="checkbox" aria-describedby="recommendations-help" disabled>記事の「あなたへのおすすめ」を非表示にする</label>
             <p class="muted" id="recommendations-help">記事下のおすすめ欄、公式ホーム中央の運営バナー、自分の記事一覧の運営バナー・「あなたへの提案」を隠します。すべてのモードで有効です。チェックを外すか、拡張をOFFにすると元の表示に戻ります。</p>
+            <label class="check-option" for="hide-like-counts"><input id="hide-like-counts" type="checkbox" aria-describedby="like-counts-help" disabled>スキ数を非表示にする</label>
+            <p class="muted" id="like-counts-help">スキを押せるハートは残し、数字を隠します。表示専用のハートは数字と一緒に隠します。記事内のnoteリンクカードも対象です。すべてのモードで有効です。</p>
             <label class="check-option" for="keep-note-header-visible"><input id="keep-note-header-visible" type="checkbox" disabled>noteのヘッダを常に表示する</label>
             <p class="muted">スクロール中も公式ヘッダを画面上部に表示します。すべてのモードで有効です。チェックを外すか、拡張をOFFにすると公式の動作へ戻ります。</p>
             <label class="check-option" for="note-logo-browser-back"><input id="note-logo-browser-back" type="checkbox" disabled>noteアイコンをブラウザバックに差し替える</label>

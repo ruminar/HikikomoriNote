@@ -5,7 +5,7 @@
   const groupIds = ["group1", "group2", "group3", "group4"];
   function defaultSettings() {
     return { enabled: true, noteUserId: "", dashboardDisabled: false, mode: "normal",
-      hideArticleRecommendations: false, hidePaidArticles: false, noteLogoBrowserBack: false, keepNoteHeaderVisible: false, tagSchemaVersion: 2,
+      hideArticleRecommendations: false, hidePaidArticles: false, hideLikeCounts: false, noteLogoBrowserBack: false, keepNoteHeaderVisible: false, tagSchemaVersion: 2,
       tagGroups: groupIds.map(id => ({ id, name: "", tags: [] })), selectedTagGroupId: "group1",
       groupSelectionRevision: 0, tagGroupsRevision: 0, authorDisplayRules: [], authorDisplayRevision: 0 };
   }
@@ -82,7 +82,7 @@
     try { noteUserId = normalizeUserId(value?.noteUserId); } catch { /* 破損値は空欄へ */ }
     const groups = inspectGroups(value);
     return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
-      mode: modeOf(value), hideArticleRecommendations: value?.hideArticleRecommendations === true, hidePaidArticles: value?.hidePaidArticles === true,
+      mode: modeOf(value), hideArticleRecommendations: value?.hideArticleRecommendations === true, hidePaidArticles: value?.hidePaidArticles === true, hideLikeCounts: value?.hideLikeCounts === true,
       noteLogoBrowserBack: value?.noteLogoBrowserBack === true, keepNoteHeaderVisible: value?.keepNoteHeaderVisible === true, ...groups, ...inspectAuthors(value) };
   }
   function normalizeTag(value) {
@@ -241,7 +241,7 @@
       Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
   }
   function validateTransferSettings(value, version = 2) {
-    const flags = version >= 3 ? [...transferFlags.filter(key => key !== "legacyMode"), ...(version >= 4 ? ["keepNoteHeaderVisible"] : [])] : transferFlags;
+    const flags = version >= 3 ? [...transferFlags.filter(key => key !== "legacyMode"), ...(version >= 4 ? ["keepNoteHeaderVisible"] : []), ...(version >= 7 ? ["hideLikeCounts"] : [])] : transferFlags;
     if (!exactKeys(value, [...flags, "noteUserId", "tagGroups", "selectedTagGroupId", ...(version >= 2 ? ["authorDisplayRules"] : []), ...(version >= 3 ? ["mode"] : [])])) throw new Error("設定の項目に不足または未対応の項目があります。");
     for (const key of flags) if (typeof value[key] !== "boolean") throw new Error(`${key}はtrueまたはfalseを指定してください。`);
     let mode = value.legacyMode === true ? "severe" : "normal";
@@ -265,19 +265,19 @@
       if (inspectTags(tags, version >= 5, version >= 5, version >= 6).warning) throw new Error("お気に入りの内容または重複を確認してください。");
       return { id: group.id, name: group.name, tags: [...tags] };
     });
-    return { ...Object.fromEntries(transferFlags.filter(key => key !== "legacyMode").map(key => [key, value[key]])), keepNoteHeaderVisible: version >= 4 ? value.keepNoteHeaderVisible : false, mode, noteUserId: value.noteUserId,
+    return { ...Object.fromEntries(transferFlags.filter(key => key !== "legacyMode").map(key => [key, value[key]])), keepNoteHeaderVisible: version >= 4 ? value.keepNoteHeaderVisible : false, hideLikeCounts: version >= 7 ? value.hideLikeCounts : false, mode, noteUserId: value.noteUserId,
       tagGroups: groups, selectedTagGroupId: value.selectedTagGroupId, authorDisplayRules: version >= 2 ? validateAuthors(value.authorDisplayRules) : [] };
   }
   function transferSettings(settings) {
     if (settings.tagWarning || settings.groupSelectionInvalid || settings.authorWarning) throw new Error("保存データに異常があります。状態を再確認してください。");
-    const value = Object.fromEntries([...transferFlags.filter(key => key !== "legacyMode"), "keepNoteHeaderVisible", "mode", "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "mode" ? modeOf(settings) : key === "keepNoteHeaderVisible" ? settings[key] ?? false : key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]]));
+    const value = Object.fromEntries([...transferFlags.filter(key => key !== "legacyMode"), "keepNoteHeaderVisible", "hideLikeCounts", "mode", "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "mode" ? modeOf(settings) : ["keepNoteHeaderVisible", "hideLikeCounts"].includes(key) ? settings[key] ?? false : key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]]));
     value.tagGroups = value.tagGroups.map(group => ({ id: group.id, name: group.name, items: group.tags.map(item => typeof item === "string" ? { type: "tag", tag: item } : item) }));
-    return validateTransferSettings(value, 6);
+    return validateTransferSettings(value, 7);
   }
   function exportSettings(settings) {
     const value = transferSettings(settings);
     value.tagGroups = value.tagGroups.map(group => ({ id: group.id, name: group.name, items: group.tags.map(item => typeof item === "string" ? { type: "tag", tag: item } : item) }));
-    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 6, settings: value }, null, 2);
+    const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion: 7, settings: value }, null, 2);
     if (json.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     return json;
   }
@@ -285,8 +285,8 @@
     if (typeof text !== "string" || text.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     let document;
     try { document = JSON.parse(text); } catch { throw new Error("JSONの書式が正しくありません。"); }
-    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || ![1, 2, 3, 4, 5, 6].includes(document.schemaVersion)) {
-      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1～6）を入力してください。");
+    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || ![1, 2, 3, 4, 5, 6, 7].includes(document.schemaVersion)) {
+      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1～7）を入力してください。");
     }
     return validateTransferSettings(document.settings, document.schemaVersion);
   }
