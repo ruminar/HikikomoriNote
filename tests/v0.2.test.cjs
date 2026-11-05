@@ -328,7 +328,7 @@ test('公式の固定作者プロフィールを追加ボタンの下へずら�
  const profile=f.doc.createElement('div');profile.setAttribute('data-testid','side-creator-profile');profile.setAttribute('aria-hidden','false');
  const follow=f.doc.createElement('button');profile.append(follow);container.append(profile);
  f.ui.update(settings,url);f.doc.body.append(container);f.ui.update(settings,url);
- const marker='data-hikikomori-note-side-profile-offset';assert.equal(container.getAttribute(marker),'author');assert.equal(follow.isConnected,true);assert.equal(profile.parentElement,container);assert.equal(container.getAttribute('style'),'padding: 0');
+ const marker='data-hikikomori-note-side-profile-offset';assert.equal(container.getAttribute(marker),'author-search');assert.equal(follow.isConnected,true);assert.equal(profile.parentElement,container);assert.equal(container.getAttribute('style'),'padding: 0');
  f.doc.getElementById('author-header').remove();f.ui.update(settings,url);assert.equal(container.getAttribute(marker),'following');
  for(const patch of [{enabled:false},{mode:'severe'}]){f.ui.update({...settings,...patch},url);assert.equal(container.hasAttribute(marker),false);f.ui.update(settings,url);}
  f.win.wide=false;f.ui.update(settings,url);assert.equal(container.hasAttribute(marker),false);f.win.wide=true;
@@ -539,8 +539,8 @@ test('ロゴ戻り先がない・API未対応なら矢印用属性を付け、�
 test('記事のTL・作者に設定リンクを追加せず、ロゴ設定ONでも固定位置をずらさない',()=>{
  const f=authorFixture(),settings=f.core.readSettings({...groups(),noteLogoBrowserBack:true}),url='https://note.com/ruminar/n/n123';
  f.ui.update(settings,url);assert.equal(f.doc.querySelector('[class="hikikomori-note-article-settings"]'),null);
- for(const name of ['following','author'])assert.equal(f.doc.querySelector(`[class="hikikomori-note-article-${name}"]`).hasAttribute('data-hikikomori-note-settings-offset'),false);
- assert.equal(f.doc.querySelectorAll('[data-hikikomori-note-owned]').length,2);
+ for(const name of ['following','author','author-search'])assert.equal(f.doc.querySelector(`[class="hikikomori-note-article-${name}"]`).hasAttribute('data-hikikomori-note-settings-offset'),false);
+ assert.equal(f.doc.querySelectorAll('[data-hikikomori-note-owned]').length,3);
 });
 
 test('公式ロゴが差し替われば歯車も付け直し、未確認のロゴ親構造には挿入しない',()=>{
@@ -1261,7 +1261,7 @@ test('3モードの記事・プレビューで作者とTLを分離し重度で�
   const f=authorFixture(),settings=f.core.readSettings(groups()),author=()=>f.doc.querySelector('[class~="hikikomori-note-article-author"]'),following=()=>f.doc.querySelector('[class="hikikomori-note-article-following"]');
   const container=f.doc.createElement('div');container.className='fixed top-24 left-8';const official=f.doc.createElement('div');official.setAttribute('data-testid','side-creator-profile');container.append(official);f.doc.body.append(container);
   for(const mode of ['normal','severe','social','normal']){
-   f.ui.update({...settings,mode},url);assert.ok(author());assert.equal(Boolean(following()),mode!=='severe');assert.equal(author().classList.contains('hikikomori-note-article-author-only'),mode==='severe');assert.equal(container.getAttribute('data-hikikomori-note-side-profile-offset'),mode==='severe'?'following':'author');
+   f.ui.update({...settings,mode},url);assert.ok(author());assert.equal(Boolean(following()),mode!=='severe');assert.equal(author().classList.contains('hikikomori-note-article-author-only'),mode==='severe');assert.equal(container.getAttribute('data-hikikomori-note-side-profile-offset'),mode==='severe'?'author-search-only':'author-search');
    f.ui.update({...settings,mode},url);assert.equal(f.doc.querySelectorAll('[class~="hikikomori-note-article-author"]').length,1);
   }
   f.ui.update({...settings,enabled:false},url);assert.equal(author(),null);assert.equal(following(),null);assert.equal(container.hasAttribute('data-hikikomori-note-side-profile-offset'),false);
@@ -2257,4 +2257,23 @@ test('クリエイター・メンバーシップ検索も狭幅で作者カー�
   f.ui.update({...settings,mode:'severe'},url);assert.equal(menu.children.length,1);assert.equal(menu.querySelector('a').href,'https://note.com/ruminar');for(const patch of [{mode:'social'},{enabled:false}]){f.ui.update({...settings,...patch},url);assert.equal(f.doc.querySelector('[class="hikikomori-note-navigation"]'),null);}
   const unknown=uiFixture('<main><h1></h1></main><aside><nav></nav></aside>');unknown.ui.update(settings,url);assert.equal(unknown.doc.querySelector('[data-hikikomori-note-author-card]'),null);
  }
+});
+
+const articleSearch=f=>f.doc.querySelector('[class~="hikikomori-note-article-author-search"]');
+test('記事とプレビューの作者ボタン直下に＠作者名の新着検索リンクを全モードで追加する',()=>{
+ for(const mode of ['normal','social','severe'])for(const url of ['https://note.com/dreamy_bear8625/n/nfa64d1911cd6','https://note.com/preview/n123?prev_access_key=test']){
+  const f=authorFixture(),settings=f.core.readSettings({...groups(),mode});for(const a of f.doc.getElementById('author-header').querySelectorAll('a'))a.href='https://note.com/dreamy_bear8625';f.doc.getElementById('author-name').textContent='カピバラさん';f.ui.update(settings,url);
+  const link=articleSearch(f),author=f.doc.querySelector('[class~="hikikomori-note-article-author"]');assert.ok(link);assert.equal(link.textContent,'＠カピバラさん');assert.equal(link.getAttribute('aria-label'),'カピバラさんの新着記事を検索');assert.equal(link.href,f.core.authorSearchUrl('dreamy_bear8625'));assert.equal(link.getAttribute('target'),null);assert.equal(author.href,'https://note.com/dreamy_bear8625');assert.equal(f.doc.body.children.indexOf(link),f.doc.body.children.indexOf(author)+1);assert.equal(link.classList.contains('hikikomori-note-article-author-search-only'),mode==='severe');
+  const params=new URL(link.href).searchParams;assert.equal(params.get('q'),'from:@dreamy_bear8625 ');assert.equal(params.get('context'),'note');assert.equal(params.get('sort'),'new');assert.equal(params.has('prev_access_key'),false);f.ui.update(settings,url);assert.equal(articleSearch(f),link);assert.equal(f.doc.querySelectorAll('[class~="hikikomori-note-article-author-search"]').length,1);
+ }
+});
+test('記事の作者検索ボタンは表示名変更・要素切断・作者変更に追従し、未確認の作者では撤去する',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/ruminar/n/n123';f.ui.update(settings,url);const first=articleSearch(f);f.doc.getElementById('author-name').textContent='新しい名前';f.ui.update(settings,url);assert.equal(articleSearch(f).textContent,'＠新しい名前');assert.notEqual(articleSearch(f),first);articleSearch(f).remove();f.ui.update(settings,url);assert.ok(articleSearch(f));
+ for(const a of f.doc.getElementById('author-header').querySelectorAll('a'))a.href='https://note.com/other_user';f.doc.getElementById('author-name').textContent='別の作者';f.ui.update(settings,'https://note.com/other_user/n/n456');assert.equal(articleSearch(f).href,f.core.authorSearchUrl('other_user'));assert.equal(articleSearch(f).textContent,'＠別の作者');
+ f.ui.update(settings,url);assert.equal(articleSearch(f),null);f.ui.update(settings,'https://note.com/other_user/n/n456');f.doc.getElementById('author-header').remove();f.ui.update(settings,'https://note.com/other_user/n/n456');assert.equal(articleSearch(f),null);
+});
+test('記事の作者検索ボタンも狭幅・余白不足・OFF・離脱・停止で撤去して復元できる',()=>{
+ const f=authorFixture(),settings=f.core.readSettings(groups()),url='https://note.com/ruminar/n/n123';f.ui.update(settings,url);assert.ok(articleSearch(f));f.win.wide=false;f.ui.update(settings,url);assert.equal(articleSearch(f),null);f.win.wide=true;
+ f.doc.getElementById('note-article').getBoundingClientRect=()=>({left:227,width:620});f.ui.update(settings,url);assert.equal(articleSearch(f),null);f.doc.getElementById('note-article').getBoundingClientRect=()=>({left:270,width:620});f.ui.update(settings,url);assert.ok(articleSearch(f));
+ f.ui.update({...settings,enabled:false},url);assert.equal(articleSearch(f),null);f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(articleSearch(f),null);f.ui.update(settings,url);f.ui.stop();assert.equal(articleSearch(f),null);
 });

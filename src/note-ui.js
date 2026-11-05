@@ -201,7 +201,7 @@
     const authorControls = createAuthorControls(doc, win, actions, profileSlot);
     let host, menu, signature;
     let articleFollowing;
-    let articleAuthor, authorSignature;
+    let articleAuthor, articleAuthorSearch, authorSignature;
     let questionAuthor, questionSelf, questionAuthorSignature;
     let searchAuthorInfo, searchAuthorDirty = true;
     function searchAuthor(userId, settings) {
@@ -742,6 +742,7 @@
     }
     function clearArticleAuthor() {
       articleAuthor?.remove(); articleAuthor = undefined; authorSignature = undefined;
+      articleAuthorSearch?.remove(); articleAuthorSearch = undefined;
     }
     const sideProfiles = new Set();
     const sideProfileOffset = "data-hikikomori-note-side-profile-offset";
@@ -768,7 +769,9 @@
           const container = profile.parentElement;
           if (profile.closest("article") || profile.closest('[id="note-body"]') ||
               container?.tagName !== "DIV" || !["fixed", "top-24", "left-8"].every(name => container.classList.contains(name))) continue;
-          const offset = articleAuthor?.isConnected && articleFollowing?.isConnected ? "author" : "following";
+          const offset = articleAuthorSearch?.isConnected
+            ? articleFollowing?.isConnected ? "author-search" : "author-search-only"
+            : articleAuthor?.isConnected && articleFollowing?.isConnected ? "author" : "following";
           if (container.getAttribute(sideProfileOffset) !== offset) container.setAttribute(sideProfileOffset, offset);
           current.add(container);
         }
@@ -808,7 +811,7 @@
       }
       if (!author) { clearArticleAuthor(); return; }
       const nextSignature = JSON.stringify([profileUrl, author]);
-      if (authorSignature === nextSignature && articleAuthor?.isConnected) return;
+      if (authorSignature === nextSignature && articleAuthor?.isConnected && articleAuthorSearch?.isConnected) return;
       clearArticleAuthor();
       articleAuthor = doc.createElement("a"); articleAuthor.setAttribute(owned, "");
       articleAuthor.className = "hikikomori-note-article-author";
@@ -822,6 +825,13 @@
       }
       const name = doc.createElement("span"); name.textContent = author.name; articleAuthor.append(name);
       doc.body.append(articleAuthor); authorSignature = nextSignature;
+      articleAuthorSearch = doc.createElement("a"); articleAuthorSearch.setAttribute(owned, "");
+      articleAuthorSearch.className = "hikikomori-note-article-author-search";
+      articleAuthorSearch.href = core.authorSearchUrl(core.normalizeUserId(profileUrl));
+      articleAuthorSearch.textContent = `＠${author.name}`;
+      articleAuthorSearch.setAttribute("title", `${author.name}の新着記事を検索`);
+      articleAuthorSearch.setAttribute("aria-label", `${author.name}の新着記事を検索`);
+      doc.body.append(articleAuthorSearch);
     }
     function clearQuestionAuthor() {
       questionAuthor?.remove(); questionAuthor = undefined; questionAuthorSignature = undefined;
@@ -901,6 +911,10 @@
       if (articleAuthor) {
         if (articleFollowing?.isConnected) articleAuthor.classList.remove("hikikomori-note-article-author-only");
         else articleAuthor.classList.add("hikikomori-note-article-author-only");
+      }
+      if (articleAuthorSearch) {
+        if (articleFollowing?.isConnected) articleAuthorSearch.classList.remove("hikikomori-note-article-author-search-only");
+        else articleAuthorSearch.classList.add("hikikomori-note-article-author-search-only");
       }
       syncSideProfiles(Boolean(articleFollowing?.isConnected || articleAuthor?.isConnected));
     }
