@@ -321,3 +321,13 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 ### 2026-11-05：note埋め込み内の先行CSS
 
 /ruminar/n/na68901f3be0bの本文内にiframe.note-embedがあり、loading=lazy、src=https://note.com/embed/notes/n7cb755a96b56?theme=auto等を持つ。同URLを開いて.p-noteEmbed.note-embed > .p-noteEmbed__inner > .p-noteEmbed__sukiの直下が.p-noteEmbed__sukiIcon > i.c-icon.c-icon--heartと.p-noteEmbed__sukiLabel（9）の2件であることを確認。innerには別要素として記事リンク・本文・作者フッターがある。専用document_start CSSで既知スキ欄だけを待機し、埋め込み自身の設定読込・厳密判定に引き継ぐ。親ページCSSではiframe内を指定できない。実DOMで:has等のセレクタがスキ欄にのみ一致することを読み取り確認。実拡張の描画タイミングは別途実機確認する。
+
+
+### 2026-11-05：質問箱のTL導線
+
+質問箱の確認済み作者領域・本文余白を共用し、通常・社会復帰でTLリンクを左上72pxへ追加。既存作者リンクを120px、自己リンクを178pxへ移す。重度は作者72px・自己130pxを維持し、狭幅は従来どおり非表示。
+
+
+### 2026-11-05：メンバーシップ参加画面
+
+/nontsu/membership/joinでh1「古性のちの頭の中」と画像付き作者リンク（古性のち | Noci Koshoさんのクリエイターページ）を確認。ヘッダのmx-auto/max-w-[30rem]/lg:flex/lg:max-w-screen-lg枠と、main#main-content > div.w-full > div.mx-auto.my-4.max-w-[30rem].lg:max-w-[58.75rem]が既知のコンテンツ枠。1280px幅ではヘッダ枠左端162pxで、固定メニューの左余白条件を満たさないため非表示。両枠左端228px以上・幅1100px以上で質問箱と同じ導線を追加する。申込欄は変更しない。

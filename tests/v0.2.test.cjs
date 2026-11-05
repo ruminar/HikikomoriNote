@@ -2277,3 +2277,41 @@ test('記事の作者検索ボタンも狭幅・余白不足・OFF・離脱・�
  f.doc.getElementById('note-article').getBoundingClientRect=()=>({left:227,width:620});f.ui.update(settings,url);assert.equal(articleSearch(f),null);f.doc.getElementById('note-article').getBoundingClientRect=()=>({left:270,width:620});f.ui.update(settings,url);assert.ok(articleSearch(f));
  f.ui.update({...settings,enabled:false},url);assert.equal(articleSearch(f),null);f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(articleSearch(f),null);f.ui.update(settings,url);f.ui.stop();assert.equal(articleSearch(f),null);
 });
+
+const qaFollowing=f=>f.doc.querySelector('[class="hikikomori-note-question-following"]');
+test('質問箱の通常・社会復帰はTL→作者→自己の順、重度はTLなしで作者と自己を上詰めする',()=>{
+ for(const html of [qaRootHtml,qaDetailHtml]){
+  const f=qaFixture(html),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),url=html===qaRootHtml?'https://note.com/qa/nontsu':'https://note.com/qa/nontsu/q/abc123';
+  for(const mode of ['normal','social','severe','normal']){
+   f.ui.update({...settings,mode},url);const following=qaFollowing(f),author=qaAuthor(f),self=qaSelf(f);assert.equal(Boolean(following),mode!=='severe');assert.equal(author.hasAttribute('data-hikikomori-note-question-following'),mode!=='severe');assert.equal(self.hasAttribute('data-hikikomori-note-question-following'),mode!=='severe');
+   if(following){assert.equal(following.href,'https://note.com/following');assert.equal(following.textContent,'フォロー中のTL');assert.equal(following.getAttribute('target'),null);assert.equal(f.doc.body.children.indexOf(following)+1,f.doc.body.children.indexOf(author));f.ui.update({...settings,mode},url);assert.equal(qaFollowing(f),following);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-question-following"]').length,1);}
+   assert.equal(f.doc.body.children.indexOf(author)+1,f.doc.body.children.indexOf(self));
+  }
+ }
+});
+test('質問箱のTLは自己ID未設定でも表示し、切断・狭幅・余白不足・OFF・離脱・停止に追従',()=>{
+ const f=qaFixture(),settings=f.core.readSettings(groups()),url='https://note.com/qa/nontsu';f.ui.update(settings,url);assert.ok(qaFollowing(f));assert.equal(qaSelf(f),null);qaFollowing(f).remove();f.ui.update(settings,url);assert.ok(qaFollowing(f));f.win.wide=false;f.ui.update(settings,url);assert.equal(qaFollowing(f),null);f.win.wide=true;
+ f.doc.getElementById('qa-content').getBoundingClientRect=()=>({left:227,width:620});f.ui.update(settings,url);assert.equal(qaFollowing(f),null);f.doc.getElementById('qa-content').getBoundingClientRect=()=>({left:270,width:620});f.ui.update(settings,url);assert.ok(qaFollowing(f));
+ f.ui.update({...settings,enabled:false},url);assert.equal(qaFollowing(f),null);f.ui.update(settings,url);f.ui.update(settings,'https://note.com/search');assert.equal(qaFollowing(f),null);f.ui.update(settings,url);f.doc.getElementById('qa-account').remove();f.ui.update(settings,url);assert.equal(qaFollowing(f),null);
+ const stopped=qaFixture();stopped.ui.update(settings,url);stopped.ui.stop();assert.equal(qaFollowing(stopped),null);
+});
+
+const joinNavigationHtml='<body><header class="w-full"><div id="join-header-layout" class="mx-auto max-w-[30rem] lg:flex lg:max-w-screen-lg lg:items-start lg:gap-4 lg:px-4 lg:pt-8"><div></div><div><div class="min-w-0 flex-1"><h1 id="join-title"></h1><div><a id="join-creator" href="https://note.com/nontsu" aria-label="古性のち | Noci Koshoさんのクリエイターページ"><div><img id="join-avatar" src="https://assets.st-note.com/profile.png"></div><span></span></a></div></div></div></div></header><main id="main-content"><div class="w-full"><h2></h2><div id="join-content" class="mx-auto my-4 max-w-[30rem] lg:my-6 lg:max-w-[58.75rem]"><section><form><input id="join-input"><button id="join-submit"></button></form></section></div></div></main></body>';
+function joinNavigationFixture(){const f=uiFixture(joinNavigationHtml);f.doc.body=f.doc.querySelector('body');f.doc.getElementById('join-title').textContent='古性のちの頭の中';for(const id of ['join-header-layout','join-content'])f.doc.getElementById(id).getBoundingClientRect=()=>({left:270,width:940,height:200});return f;}
+test('メンバーシップ参加画面に質問箱と同じTL・作者・自己リンクを追加し、申込DOMを維持',()=>{
+ for(const mode of ['normal','social','severe'])for(const url of ['https://note.com/nontsu/membership/join','https://note.com/nontsu/membership/join/?plan=123#top']){
+  const f=joinNavigationFixture(),settings=f.core.readSettings({...groups(),mode,noteUserId:'ruminar'}),input=f.doc.getElementById('join-input'),submit=f.doc.getElementById('join-submit');let clicks=0;submit.addEventListener('click',()=>clicks++);input.value='保持する';f.ui.update(settings,url);
+  assert.equal(Boolean(qaFollowing(f)),mode!=='severe');assert.equal(qaAuthor(f).href,'https://note.com/nontsu');assert.equal(qaAuthor(f).textContent,'古性のち | Noci Kosho');assert.equal(qaAuthor(f).querySelector('img').getAttribute('src'),'https://assets.st-note.com/profile.png');assert.equal(qaSelf(f).href,'https://note.com/ruminar');assert.equal(qaAuthor(f).getAttribute('target'),null);assert.equal(qaSelf(f).hasAttribute('data-hikikomori-note-question-following'),mode!=='severe');
+  if(mode!=='severe'){assert.equal(qaFollowing(f).href,'https://note.com/following');assert.equal(f.doc.body.children.indexOf(qaFollowing(f))+1,f.doc.body.children.indexOf(qaAuthor(f)));}assert.equal(f.doc.body.children.indexOf(qaAuthor(f))+1,f.doc.body.children.indexOf(qaSelf(f)));const author=qaAuthor(f);f.ui.update(settings,url);assert.equal(qaAuthor(f),author);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-question-author"]').length,1);assert.equal(input.isConnected,true);assert.equal(input.value,'保持する');submit.fire('click');assert.equal(clicks,1);
+ }
+});
+test('参加画面の左メニューはヘッダと本文の余白・狭幅・作者照合・既知DOMを確認する',()=>{
+ const settings=fixture().core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/nontsu/membership/join';
+ for(const id of ['join-header-layout','join-content']){const f=joinNavigationFixture();f.doc.getElementById(id).getBoundingClientRect=()=>({left:227,width:940});f.ui.update(settings,url);assert.equal(qaAuthor(f),null);assert.equal(qaFollowing(f),null);f.doc.getElementById(id).getBoundingClientRect=()=>({left:228,width:940});f.ui.update(settings,url);assert.ok(qaAuthor(f));}
+ for(const change of [f=>f.win.wide=false,f=>f.doc.getElementById('join-creator').href='https://note.com/other',f=>f.doc.getElementById('join-header-layout').className='unknown',f=>f.doc.getElementById('join-content').className='unknown',f=>f.doc.getElementById('join-title').remove()]){const f=joinNavigationFixture();change(f);f.ui.update(settings,url);assert.equal(qaAuthor(f),null);assert.equal(qaSelf(f),null);assert.equal(qaFollowing(f),null);}
+ for(const url of ['https://note.com/nontsu/membership','https://note.com/nontsu/membership/join/admin','https://evil.test/nontsu/membership/join']){const f=joinNavigationFixture();f.ui.update(settings,url);assert.equal(qaAuthor(f),null);}
+});
+test('参加画面の作者変更・切断・OFF・画面移動・停止を反映し、未確認画像は使用しない',()=>{
+ const f=joinNavigationFixture(),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/nontsu/membership/join';f.ui.update(settings,url);f.doc.getElementById('join-avatar').setAttribute('src','https://user:pass@assets.st-note.com/profile.png');f.doc.getElementById('join-creator').setAttribute('aria-label','新しい作者名さんのクリエイターページ');f.ui.update(settings,url);assert.equal(qaAuthor(f).textContent,'新しい作者名');assert.equal(qaAuthor(f).querySelector('img'),null);qaAuthor(f).remove();f.ui.update(settings,url);assert.ok(qaAuthor(f));f.ui.update({...settings,noteUserId:''},url);assert.equal(qaSelf(f),null);
+ f.ui.update({...settings,enabled:false},url);assert.equal(qaAuthor(f),null);assert.equal(qaFollowing(f),null);f.ui.update(settings,url);f.ui.update(settings,'https://note.com/nontsu/membership');assert.equal(qaAuthor(f),null);f.ui.update(settings,url);f.ui.stop();assert.equal(qaAuthor(f),null);assert.equal(qaSelf(f),null);assert.equal(qaFollowing(f),null);
+});

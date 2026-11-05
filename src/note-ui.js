@@ -208,7 +208,7 @@
     let host, menu, signature;
     let articleFollowing;
     let articleAuthor, articleAuthorSearch, authorSignature;
-    let questionAuthor, questionSelf, questionAuthorSignature;
+    let questionFollowing, questionAuthor, questionSelf, questionAuthorSignature;
     let searchAuthorInfo, searchAuthorDirty = true;
     function searchAuthor(userId, settings) {
       if (!searchAuthorDirty && searchAuthorInfo?.userId === userId.toLowerCase() && searchAuthorInfo.groups === settings.tagGroups) return searchAuthorInfo.value;
@@ -840,49 +840,84 @@
       doc.body.append(articleAuthorSearch);
     }
     function clearQuestionAuthor() {
+      questionFollowing?.remove(); questionFollowing = undefined;
       questionAuthor?.remove(); questionAuthor = undefined; questionAuthorSignature = undefined;
       questionSelf?.remove(); questionSelf = undefined;
     }
+    function membershipJoinAuthor(page) {
+      const owner = membershipOwner(), header = owner?.host.closest("header");
+      const layout = [...(header?.children || [])].find(child => hasClasses(child, ["mx-auto", "max-w-[30rem]", "lg:flex", "lg:max-w-screen-lg"]));
+      const main = doc.querySelector('main[id="main-content"]');
+      const wrapper = [...(main?.children || [])].find(child => child.tagName === "DIV" && child.classList.contains("w-full"));
+      const content = [...(wrapper?.children || [])].find(child => hasClasses(child, ["mx-auto", "my-4", "max-w-[30rem]", "lg:max-w-[58.75rem]"]));
+      if (!owner || ![layout, content].every(element => element && visible(element) &&
+          Number.isFinite(element.getBoundingClientRect().left) && element.getBoundingClientRect().left >= 228)) return null;
+      const suffix = "さんのクリエイターページ";
+      const creator = [...owner.host.querySelectorAll("a[href]")].find(a =>
+        a.href.replace(/\/$/, "") === core.profileUrl(page.user) && a.getAttribute("aria-label")?.endsWith(suffix) && a.querySelector("img"));
+      if (!creator) return null;
+      let name = "", image = "";
+      try { name = core.authorName(creator.getAttribute("aria-label").slice(0, -suffix.length)); } catch { /* IDへ縮退 */ }
+      try {
+        const source = new URL(creator.querySelector("img").getAttribute("src"));
+        if (source.protocol === "https:" && source.hostname === "assets.st-note.com" && !source.username && !source.password) image = source.href;
+      } catch { /* 名前だけ表示 */ }
+      return { name: name || `${page.user}のページ`, image };
+    }
     function syncQuestionAuthor(settings, url) {
-      const page = core.questionPage(url);
+      const membership = core.membershipPage(url);
+      const join = membership && /^\/[a-zA-Z0-9_]+\/membership\/join\/?$/.test(new URL(url).pathname);
+      const page = core.questionPage(url) || (join ? membership : null);
       if (!settings.enabled || !page || !doc.body || !win.matchMedia("(min-width: 1100px)").matches) { clearQuestionAuthor(); return; }
-      const main = doc.querySelector('main[id="main"]');
-      const content = [...(main?.children || [])].find(child => hasClasses(child, ["mx-auto", "max-w-content-small"]));
-      if (!content || !visible(content) || content.getBoundingClientRect().left < 228) { clearQuestionAuthor(); return; }
       let author;
-      for (const region of doc.querySelectorAll('div[class~="max-w-content-small"]')) {
-        if (region.closest("article") || region.closest(`[${owned}]`) || !visible(region) || region.getBoundingClientRect().left < 228) continue;
-        const account = [...region.querySelectorAll('a[aria-label="note アカウント"]')].some(a => {
-          try { return core.authorId(a.href).toLowerCase() === page.user.toLowerCase(); } catch { return false; }
-        });
-        if (!account) continue;
-        for (const avatar of region.querySelectorAll('[data-name="avatar"]')) {
-          if (avatar.closest(`[${owned}]`)) continue;
-          const link = avatar.closest("a"), owner = link && core.questionPage(link.href);
-          if (link) {
-            if (!owner || owner.user.toLowerCase() !== page.user.toLowerCase() || owner.questionId) continue;
-          } else if (page.questionId || avatar.tagName !== "DIV" || avatar.closest("main")) continue;
-          const image = avatar.querySelector("img");
-          if (!image) continue;
-          let name = "", source = "";
-          try {
-            const alt = image.getAttribute("alt") || "";
-            name = core.authorName(link ? alt.replace(/ のアイコン$/, "") : alt);
-          } catch { /* IDへ縮退 */ }
-          try {
-            const url = new URL(image.getAttribute("src"));
-            if (url.protocol === "https:" && url.hostname === "assets.st-note.com" && !url.username && !url.password) source = url.href;
-          } catch { /* 名前だけ表示 */ }
-          author = { name: name || `${page.user}のページ`, image: source }; break;
+      if (join) author = membershipJoinAuthor(page);
+      else {
+        const main = doc.querySelector('main[id="main"]');
+        const content = [...(main?.children || [])].find(child => hasClasses(child, ["mx-auto", "max-w-content-small"]));
+        if (!content || !visible(content) || content.getBoundingClientRect().left < 228) { clearQuestionAuthor(); return; }
+        for (const region of doc.querySelectorAll('div[class~="max-w-content-small"]')) {
+          if (region.closest("article") || region.closest(`[${owned}]`) || !visible(region) || region.getBoundingClientRect().left < 228) continue;
+          const account = [...region.querySelectorAll('a[aria-label="note アカウント"]')].some(a => {
+            try { return core.authorId(a.href).toLowerCase() === page.user.toLowerCase(); } catch { return false; }
+          });
+          if (!account) continue;
+          for (const avatar of region.querySelectorAll('[data-name="avatar"]')) {
+            if (avatar.closest(`[${owned}]`)) continue;
+            const link = avatar.closest("a"), owner = link && core.questionPage(link.href);
+            if (link) {
+              if (!owner || owner.user.toLowerCase() !== page.user.toLowerCase() || owner.questionId) continue;
+            } else if (page.questionId || avatar.tagName !== "DIV" || avatar.closest("main")) continue;
+            const image = avatar.querySelector("img");
+            if (!image) continue;
+            let name = "", source = "";
+            try {
+              const alt = image.getAttribute("alt") || "";
+              name = core.authorName(link ? alt.replace(/ のアイコン$/, "") : alt);
+            } catch { /* IDへ縮退 */ }
+            try {
+              const url = new URL(image.getAttribute("src"));
+              if (url.protocol === "https:" && url.hostname === "assets.st-note.com" && !url.username && !url.password) source = url.href;
+            } catch { /* 名前だけ表示 */ }
+            author = { name: name || `${page.user}のページ`, image: source }; break;
+          }
+          if (author) break;
         }
-        if (author) break;
       }
       if (!author) { clearQuestionAuthor(); return; }
       const selfUrl = core.profileUrl(settings.noteUserId);
-      const signature = JSON.stringify([page.user, author, selfUrl]);
-      if (questionAuthor?.isConnected && (!selfUrl || questionSelf?.isConnected) && questionAuthorSignature === signature) return;
+      const showFollowing = core.usesFollowing(settings);
+      const signature = JSON.stringify([join ? "membership-join" : "question", page.user, author, selfUrl, showFollowing]);
+      if (questionAuthor?.isConnected && (!selfUrl || questionSelf?.isConnected) &&
+          (!showFollowing || questionFollowing?.isConnected) && questionAuthorSignature === signature) return;
       clearQuestionAuthor();
+      if (showFollowing) {
+        questionFollowing = doc.createElement("a"); questionFollowing.setAttribute(owned, "");
+        questionFollowing.className = "hikikomori-note-question-following";
+        questionFollowing.href = "https://note.com/following"; questionFollowing.textContent = "フォロー中のTL";
+        doc.body.append(questionFollowing);
+      }
       questionAuthor = doc.createElement("a"); questionAuthor.setAttribute(owned, ""); questionAuthor.className = "hikikomori-note-question-author";
+      if (showFollowing) questionAuthor.setAttribute("data-hikikomori-note-question-following", "");
       questionAuthor.href = core.profileUrl(page.user); questionAuthor.setAttribute("title", author.name);
       questionAuthor.setAttribute("aria-label", `${author.name}のクリエーターページ`);
       if (author.image) {
@@ -894,6 +929,7 @@
       if (selfUrl) {
         questionSelf = doc.createElement("a"); questionSelf.setAttribute(owned, "");
         questionSelf.className = "hikikomori-note-question-self";
+        if (showFollowing) questionSelf.setAttribute("data-hikikomori-note-question-following", "");
         questionSelf.href = selfUrl; questionSelf.textContent = "自分のクリエーターページ";
         doc.body.append(questionSelf);
       }
