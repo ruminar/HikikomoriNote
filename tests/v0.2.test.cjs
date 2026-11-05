@@ -2309,9 +2309,79 @@ test('参加画面の左メニューはヘッダと本文の余白・狭幅・�
  const settings=fixture().core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/nontsu/membership/join';
  for(const id of ['join-header-layout','join-content']){const f=joinNavigationFixture();f.doc.getElementById(id).getBoundingClientRect=()=>({left:227,width:940});f.ui.update(settings,url);assert.equal(qaAuthor(f),null);assert.equal(qaFollowing(f),null);f.doc.getElementById(id).getBoundingClientRect=()=>({left:228,width:940});f.ui.update(settings,url);assert.ok(qaAuthor(f));}
  for(const change of [f=>f.win.wide=false,f=>f.doc.getElementById('join-creator').href='https://note.com/other',f=>f.doc.getElementById('join-header-layout').className='unknown',f=>f.doc.getElementById('join-content').className='unknown',f=>f.doc.getElementById('join-title').remove()]){const f=joinNavigationFixture();change(f);f.ui.update(settings,url);assert.equal(qaAuthor(f),null);assert.equal(qaSelf(f),null);assert.equal(qaFollowing(f),null);}
- for(const url of ['https://note.com/nontsu/membership','https://note.com/nontsu/membership/join/admin','https://evil.test/nontsu/membership/join']){const f=joinNavigationFixture();f.ui.update(settings,url);assert.equal(qaAuthor(f),null);}
+ for(const url of ['https://note.com/nontsu/membership/unknown','https://note.com/nontsu/membership/join/admin','https://evil.test/nontsu/membership/join']){const f=joinNavigationFixture();f.ui.update(settings,url);assert.equal(qaAuthor(f),null);}
 });
 test('参加画面の作者変更・切断・OFF・画面移動・停止を反映し、未確認画像は使用しない',()=>{
  const f=joinNavigationFixture(),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/nontsu/membership/join';f.ui.update(settings,url);f.doc.getElementById('join-avatar').setAttribute('src','https://user:pass@assets.st-note.com/profile.png');f.doc.getElementById('join-creator').setAttribute('aria-label','新しい作者名さんのクリエイターページ');f.ui.update(settings,url);assert.equal(qaAuthor(f).textContent,'新しい作者名');assert.equal(qaAuthor(f).querySelector('img'),null);qaAuthor(f).remove();f.ui.update(settings,url);assert.ok(qaAuthor(f));f.ui.update({...settings,noteUserId:''},url);assert.equal(qaSelf(f),null);
- f.ui.update({...settings,enabled:false},url);assert.equal(qaAuthor(f),null);assert.equal(qaFollowing(f),null);f.ui.update(settings,url);f.ui.update(settings,'https://note.com/nontsu/membership');assert.equal(qaAuthor(f),null);f.ui.update(settings,url);f.ui.stop();assert.equal(qaAuthor(f),null);assert.equal(qaSelf(f),null);assert.equal(qaFollowing(f),null);
+ f.ui.update({...settings,enabled:false},url);assert.equal(qaAuthor(f),null);assert.equal(qaFollowing(f),null);f.ui.update(settings,url);f.ui.update(settings,'https://note.com/nontsu/membership/unknown');assert.equal(qaAuthor(f),null);f.ui.update(settings,url);f.ui.stop();assert.equal(qaAuthor(f),null);assert.equal(qaSelf(f),null);assert.equal(qaFollowing(f),null);
+});
+
+function magazineNavigationFixture(actions={}){
+ const f=favoriteMagazineUiFixture(actions),main=f.doc.querySelector('main'),root=f.doc.getElementById('magazine-root'),layout=f.doc.createElement('div'),content=f.doc.createElement('div'),body=f.doc.createElement('body');
+ layout.id='magazine-layout';layout.setAttribute('id',layout.id);layout.className='mx-auto box-content max-w-[58.75rem] md:px-4 md:py-6';root.className='box-border flex flex-col gap-y-4 md:grid md:grid-cols-[27rem_1fr] md:grid-rows-[14.125rem_1fr] md:gap-x-9';root.remove();layout.append(root);main.prepend(layout);content.id='magazine-content';content.setAttribute('id',content.id);content.className='mx-auto max-w-[58.75rem]';main.append(content);main.remove();body.append(main);f.doc.root.append(body);f.doc.body=body;
+ const creator=root.querySelector('a');creator.setAttribute('id','magazine-nav-creator');creator.setAttribute('data-name','avatar');const image=f.doc.createElement('img');image.setAttribute('src','https://assets.st-note.com/kinokoro.png');creator.append(image);
+ for(const e of [layout,content])e.getBoundingClientRect=()=>({left:270,width:940,height:200});return f;
+}
+test('マガジン本体・月別・タグへ質問箱と同じTL・作者・自己リンクを全モードで追加',()=>{
+ for(const mode of ['normal','social','severe'])for(const suffix of ['','/archive','/hashtag/?sort=new#top']){
+  const f=magazineNavigationFixture({async addCurrentMagazine(){}}),settings=f.core.readSettings({...groups(),mode,noteUserId:'ruminar'}),url=magazineUrl+suffix,button=f.doc.getElementById('official-follow');let clicks=0;button.addEventListener('click',()=>clicks++);f.ui.update(settings,url);
+  assert.equal(Boolean(qaFollowing(f)),mode!=='severe');assert.equal(qaAuthor(f).href,'https://note.com/kinokoro');assert.equal(qaAuthor(f).textContent,'きのころ');assert.equal(qaAuthor(f).querySelector('img').getAttribute('src'),'https://assets.st-note.com/kinokoro.png');assert.equal(qaSelf(f).href,'https://note.com/ruminar');assert.equal(qaAuthor(f).getAttribute('target'),null);assert.equal(qaAuthor(f).hasAttribute('data-hikikomori-note-question-following'),mode!=='severe');
+  if(mode!=='severe')assert.equal(f.doc.body.children.indexOf(qaFollowing(f))+1,f.doc.body.children.indexOf(qaAuthor(f)));assert.equal(f.doc.body.children.indexOf(qaAuthor(f))+1,f.doc.body.children.indexOf(qaSelf(f)));const author=qaAuthor(f);f.ui.update(settings,url);assert.equal(qaAuthor(f),author);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-question-author"]').length,1);assert.equal(button.isConnected,true);button.fire('click');assert.equal(clicks,1);assert.equal(Boolean(f.doc.querySelector('[class~="hikikomori-note-magazine-toggle"]')),mode==='normal');
+ }
+});
+test('マガジンの左側導線は見出し・作者・公式タブと左右余白を照合し、未知構造では表示しない',()=>{
+ const settings=fixture().core.readSettings({...groups(),noteUserId:'ruminar'});
+ for(const id of ['magazine-layout','magazine-content']){const f=magazineNavigationFixture();f.doc.getElementById(id).getBoundingClientRect=()=>({left:227,width:940});f.ui.update(settings,magazineUrl);assert.equal(qaAuthor(f),null);f.doc.getElementById(id).getBoundingClientRect=()=>({left:228,width:940});f.ui.update(settings,magazineUrl);assert.ok(qaAuthor(f));}
+ for(const change of [f=>f.win.wide=false,f=>f.doc.getElementById('magazine-layout').className='unknown',f=>f.doc.getElementById('magazine-content').className='unknown',f=>f.doc.getElementById('magazine-root').className='unknown',f=>f.doc.getElementById('magazine-nav-creator').href='https://note.com/other',f=>f.doc.querySelector('h1').remove(),f=>f.doc.querySelector('nav').remove()]){const f=magazineNavigationFixture();change(f);f.ui.update(settings,magazineUrl);assert.equal(qaAuthor(f),null);assert.equal(qaFollowing(f),null);assert.equal(qaSelf(f),null);}
+ for(const url of ['https://note.com/kinokoro/m/mOther','https://note.com/kinokoro/m/m95cee8dfaa5e/edit','https://evil.test/kinokoro/m/m95cee8dfaa5e']){const f=magazineNavigationFixture();f.ui.update(settings,url);assert.equal(qaAuthor(f),null);}
+});
+test('マガジンの作者名更新・画像縮退・自己ID未設定・切断・モード変更・OFF・離脱・停止に追従',()=>{
+ const f=magazineNavigationFixture(),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),creator=f.doc.getElementById('magazine-nav-creator');f.ui.update(settings,magazineUrl);creator.setAttribute('aria-label','新しい作者名のクリエイターページへ');creator.querySelector('img').setAttribute('src','https://example.org/avatar.png');f.ui.update(settings,magazineUrl);assert.equal(qaAuthor(f).textContent,'新しい作者名');assert.equal(qaAuthor(f).querySelector('img'),null);qaFollowing(f).remove();f.ui.update(settings,magazineUrl);assert.ok(qaFollowing(f));
+ f.ui.update({...settings,noteUserId:''},magazineUrl);assert.equal(qaSelf(f),null);f.ui.update({...settings,mode:'severe'},magazineUrl);assert.equal(qaFollowing(f),null);assert.equal(qaAuthor(f).hasAttribute('data-hikikomori-note-question-following'),false);f.ui.update(settings,magazineUrl);assert.ok(qaFollowing(f));f.ui.update({...settings,enabled:false},magazineUrl);assert.equal(qaAuthor(f),null);f.ui.update(settings,magazineUrl);f.ui.update(settings,'https://note.com/kinokoro');assert.equal(qaAuthor(f),null);f.ui.update(settings,magazineUrl);f.ui.stop();assert.equal(qaAuthor(f),null);assert.equal(qaFollowing(f),null);assert.equal(qaSelf(f),null);
+});
+
+function memberHomeNavigationFixture(actions={}){
+ const f=joinNavigationFixture();f.doc.getElementById('join-title').textContent='AI活用実践ラボ';const creator=f.doc.getElementById('join-creator');creator.href='https://note.com/akb428';creator.setAttribute('aria-label','秋葉原IT戦略研究所さんのクリエイターページ');f.doc.getElementById('join-content').className='mx-auto mt-5 max-w-[30rem] lg:max-w-[58.75rem]';return f;
+}
+test('メンバーシップ本体にも質問箱と同じ作者メニューを追加し、参加画面との移動で重複しない',()=>{
+ for(const mode of ['normal','social','severe'])for(const url of ['https://note.com/akb428/membership','https://note.com/akb428/membership/?x=1#top']){
+  const f=memberHomeNavigationFixture(),settings=f.core.readSettings({...groups(),mode,noteUserId:'ruminar'});f.ui.update(settings,url);assert.equal(qaAuthor(f).textContent,'秋葉原IT戦略研究所');assert.equal(qaAuthor(f).href,'https://note.com/akb428');assert.equal(Boolean(qaFollowing(f)),mode!=='severe');assert.equal(qaSelf(f).href,'https://note.com/ruminar');const author=qaAuthor(f);
+  f.ui.update(settings,'https://note.com/akb428/membership/join');assert.equal(qaAuthor(f),author);f.ui.update(settings,url);assert.equal(qaAuthor(f),author);assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-question-author"]').length,1);assert.equal(f.doc.getElementById('join-input').isConnected,true);f.ui.update({...settings,enabled:false},url);assert.equal(qaAuthor(f),null);assert.equal(qaFollowing(f),null);assert.equal(qaSelf(f),null);
+ }
+});
+test('メンバーシップ本体の可視コンテンツは全枠の左余白を確認し、非表示枠は巻き込まない',()=>{
+ const f=memberHomeNavigationFixture(),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/akb428/membership',wrapper=f.doc.getElementById('join-content').parentElement,extra=f.doc.createElement('div');extra.className='mx-auto mt-10 max-w-[30rem] lg:max-w-[58.75rem]';extra.getBoundingClientRect=()=>({left:227,width:940});wrapper.append(extra);f.ui.update(settings,url);assert.equal(qaAuthor(f),null);extra.hidden=true;f.ui.update(settings,url);assert.ok(qaAuthor(f));extra.hidden=false;extra.getBoundingClientRect=()=>({left:270,width:940});f.ui.update(settings,url);assert.ok(qaAuthor(f));f.win.wide=false;f.ui.update(settings,url);assert.equal(qaAuthor(f),null);f.win.wide=true;f.doc.getElementById('join-creator').href='https://note.com/other';f.ui.update(settings,url);assert.equal(qaAuthor(f),null);
+});
+
+function authenticatedMembershipFixture(){
+ const f=memberHomeNavigationFixture(),header=f.doc.querySelector('header'),main=f.doc.getElementById('main-content'),body=f.doc.body;
+ const root=f.doc.createElement('div');root.className='min-h-screen';body.append(root);root.append(header);
+ const nav=f.doc.createElement('nav');nav.setAttribute('aria-label','メンバーシップページメニュー');const link=f.doc.createElement('a');link.href='https://note.com/akb428/membership';nav.append(link);root.append(nav);
+ const content=f.doc.getElementById('join-content');content.className='space-y-6 md:space-y-10';
+ const frame=f.doc.createElement('div');frame.className='mx-auto mt-4 max-w-screen-lg px-4';frame.setAttribute('id','authenticated-frame');frame.getBoundingClientRect=()=>({left:270,width:1024});
+ const grid=f.doc.createElement('div');grid.className='grid grid-cols-1 gap-8';const inner=f.doc.createElement('div');inner.append(main);grid.append(inner);frame.append(grid);root.append(frame);return f;
+}
+test('提供されたログイン済み本体のmain外側の幅枠で固定メニューを表示する',()=>{
+ for(const mode of ['normal','social','severe']){
+  const f=authenticatedMembershipFixture(),settings=f.core.readSettings({...groups(),mode,noteUserId:'ruminar'}),url='https://note.com/akb428/membership';f.ui.update(settings,url);
+  assert.equal(Boolean(qaAuthor(f)),true);assert.equal(qaAuthor(f).href,'https://note.com/akb428');assert.equal(qaAuthor(f).textContent,'秋葉原IT戦略研究所');assert.equal(Boolean(qaFollowing(f)),mode!=='severe');assert.equal(qaSelf(f).href,'https://note.com/ruminar');
+  qaAuthor(f).remove();f.ui.update(settings,url);assert.equal(Boolean(qaAuthor(f)),true);assert.equal(f.doc.getElementById('join-input').isConnected,true);
+  f.ui.update({...settings,enabled:false},url);assert.equal(Boolean(qaAuthor(f)),false);assert.equal(Boolean(qaSelf(f)),false);assert.equal(Boolean(qaFollowing(f)),false);
+ }
+});
+test('ログイン済み本体も余白不足・狭幅・別枠・未知構造では撤去し再表示できる',()=>{
+ const f=authenticatedMembershipFixture(),settings=f.core.readSettings({...groups(),noteUserId:'ruminar'}),url='https://note.com/akb428/membership',frame=f.doc.getElementById('authenticated-frame');
+ const update=()=>f.ui.update(settings,url);update();assert.equal(Boolean(qaAuthor(f)),true);
+ frame.getBoundingClientRect=()=>({left:227,width:1024});update();assert.equal(Boolean(qaAuthor(f)),false);frame.getBoundingClientRect=()=>({left:270,width:1024});update();assert.equal(Boolean(qaAuthor(f)),true);
+ f.win.wide=false;update();assert.equal(Boolean(qaAuthor(f)),false);f.win.wide=true;
+ frame.children[0].className='unknown';update();assert.equal(Boolean(qaAuthor(f)),false);frame.children[0].className='grid grid-cols-1 gap-8';update();assert.equal(Boolean(qaAuthor(f)),true);
+ f.doc.body.append(frame);update();assert.equal(Boolean(qaAuthor(f)),false);
+});
+
+test('ログイン済み本体は対応する公式メニューを確認し、joinや別作者に流用しない',()=>{
+ const f=authenticatedMembershipFixture(),settings=f.core.readSettings({...groups()}),url='https://note.com/akb428/membership',nav=f.doc.querySelector('nav[aria-label="メンバーシップページメニュー"]'),link=nav.querySelector('a');
+ link.href='https://note.com/other/membership';f.ui.update(settings,url);assert.equal(Boolean(qaAuthor(f)),false);
+ link.href=url;f.ui.update(settings,url);assert.equal(Boolean(qaAuthor(f)),true);
+ f.ui.update(settings,url+'/join');assert.equal(Boolean(qaAuthor(f)),false);
+ f.ui.update(settings,url);assert.equal(Boolean(qaAuthor(f)),true);f.ui.stop();assert.equal(Boolean(qaAuthor(f)),false);
 });

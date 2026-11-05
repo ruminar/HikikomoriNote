@@ -331,3 +331,15 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 ### 2026-11-05：メンバーシップ参加画面
 
 /nontsu/membership/joinでh1「古性のちの頭の中」と画像付き作者リンク（古性のち | Noci Koshoさんのクリエイターページ）を確認。ヘッダのmx-auto/max-w-[30rem]/lg:flex/lg:max-w-screen-lg枠と、main#main-content > div.w-full > div.mx-auto.my-4.max-w-[30rem].lg:max-w-[58.75rem]が既知のコンテンツ枠。1280px幅ではヘッダ枠左端162pxで、固定メニューの左余白条件を満たさないため非表示。両枠左端228px以上・幅1100px以上で質問箱と同じ導線を追加する。申込欄は変更しない。
+
+
+### 2026-11-05：マガジン本体の固定メニュー
+
+/kinokoro/m/m95cee8dfaa5eの見出し・公式NavigationItem（本体／archive／hashtag）・a[data-name=avatar]（きのころのクリエイターページへ）を確認。見出しのmd:row-span-2領域の親がbox-border/md:grid/md:grid-cols-[27rem_1fr]で、さらにmx-auto/box-content/max-w-[58.75rem]/md:px-4/md:py-6外枠。main直下に別のmx-auto/max-w-[58.75rem]本文枠がある。1280px幅では外枠左146.5px・本文162.5px。両方228px以上の広幅でのみ質問箱と同じ導線を追加する。
+
+
+### 2026-11-05：メンバーシップ本体URL
+
+/akb428/membershipを開くと未ログイン環境では/joinへ転送された。h1「AI活用実践ラボ」と作者リンク「秋葉原IT戦略研究所さんのクリエイターページ」を確認。main#main-content > div.w-fullの直下に、my-4／mt-10／mt-5など余白が異なるmx-auto/max-w-[30rem]/lg:max-w-[58.75rem]枠が複数ある。表示中の全幅枠とヘッダの余白を確認し、固定導線を本体URLにも適用する。これはjoin転送先の構造であり、ログイン済み本体の構造とは異なる。
+
+利用者提供のログイン済み本体では、幅枠はmainの祖先にある：同じmin-h-screen親の下に作者header、公式nav（aria-label=メンバーシップページメニュー）、div.mx-auto.mt-4.max-w-screen-lg.px-4があり、幅枠 > div.grid.grid-cols-1.gap-8 > div > main#main-content > div.w-fullとなる。既知の親子関係、作者一致の公式本体リンク、ヘッダと外側幅枠の余白を確認して固定導線を表示する。本文や認証・追跡データはテストに保存せず、必要な構造だけを再現。実拡張の外観は利用者確認。

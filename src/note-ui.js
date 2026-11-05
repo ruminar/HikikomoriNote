@@ -844,13 +844,25 @@
       questionAuthor?.remove(); questionAuthor = undefined; questionAuthorSignature = undefined;
       questionSelf?.remove(); questionSelf = undefined;
     }
-    function membershipJoinAuthor(page) {
+    function membershipNavigationAuthor(page) {
       const owner = membershipOwner(), header = owner?.host.closest("header");
       const layout = [...(header?.children || [])].find(child => hasClasses(child, ["mx-auto", "max-w-[30rem]", "lg:flex", "lg:max-w-screen-lg"]));
       const main = doc.querySelector('main[id="main-content"]');
       const wrapper = [...(main?.children || [])].find(child => child.tagName === "DIV" && child.classList.contains("w-full"));
-      const content = [...(wrapper?.children || [])].find(child => hasClasses(child, ["mx-auto", "my-4", "max-w-[30rem]", "lg:max-w-[58.75rem]"]));
-      if (!owner || ![layout, content].every(element => element && visible(element) &&
+      const contents = [...(wrapper?.children || [])].filter(child => visible(child) &&
+        hasClasses(child, ["mx-auto", "max-w-[30rem]", "lg:max-w-[58.75rem]"]));
+      // ログイン後の本体では、本文の幅枠が main の祖先にある。
+      if (!contents.length && wrapper && new URL(currentUrl).pathname.replace(/\/$/, "") === `/${page.user}/membership`) {
+        const inner = main.parentElement, grid = inner?.parentElement, frame = grid?.parentElement;
+        const pageRoot = header?.parentElement;
+        const menu = pageRoot?.querySelector('nav[aria-label="メンバーシップページメニュー"]');
+        const hasHomeLink = [...(menu?.querySelectorAll("a[href]") || [])].some(a =>
+          a.href.replace(/\/$/, "") === `${core.profileUrl(page.user)}/membership`);
+        if (inner?.tagName === "DIV" && hasClasses(grid, ["grid", "grid-cols-1", "gap-8"]) &&
+            hasClasses(frame, ["mx-auto", "mt-4", "max-w-screen-lg", "px-4"]) &&
+            frame.parentElement === pageRoot && hasHomeLink) contents.push(frame);
+      }
+      if (!owner || !contents.length || ![layout, ...contents].every(element => element && visible(element) &&
           Number.isFinite(element.getBoundingClientRect().left) && element.getBoundingClientRect().left >= 228)) return null;
       const suffix = "さんのクリエイターページ";
       const creator = [...owner.host.querySelectorAll("a[href]")].find(a =>
@@ -864,13 +876,35 @@
       } catch { /* 名前だけ表示 */ }
       return { name: name || `${page.user}のページ`, image };
     }
+    function magazineNavigationAuthor(page) {
+      const owner = magazineOwner(), root = owner?.host.parentElement, layout = root?.parentElement;
+      const main = root?.closest("main");
+      const content = [...(main?.children || [])].find(child => child !== layout &&
+        !child.classList.contains("box-content") && hasClasses(child, ["mx-auto", "max-w-[58.75rem]"]));
+      if (!owner || !hasClasses(root, ["box-border", "md:grid", "md:grid-cols-[27rem_1fr]"]) ||
+          !hasClasses(layout, ["mx-auto", "box-content", "max-w-[58.75rem]", "md:px-4", "md:py-6"]) ||
+          ![layout, content].every(element => element && visible(element) &&
+            Number.isFinite(element.getBoundingClientRect().left) && element.getBoundingClientRect().left >= 228)) return null;
+      const suffix = "のクリエイターページへ";
+      const creator = [...root.querySelectorAll('a[data-name="avatar"]')].find(a =>
+        a.href.replace(/\/$/, "") === core.profileUrl(page.user) && a.getAttribute("aria-label")?.endsWith(suffix));
+      if (!creator) return null;
+      let name = "", image = "";
+      try { name = core.authorName(creator.getAttribute("aria-label").slice(0, -suffix.length)); } catch { /* IDへ縮退 */ }
+      try {
+        const source = new URL(creator.querySelector("img")?.getAttribute("src"));
+        if (source.protocol === "https:" && source.hostname === "assets.st-note.com" && !source.username && !source.password) image = source.href;
+      } catch { /* 名前だけ表示 */ }
+      return { name: name || `${page.user}のページ`, image };
+    }
     function syncQuestionAuthor(settings, url) {
       const membership = core.membershipPage(url);
-      const join = membership && /^\/[a-zA-Z0-9_]+\/membership\/join\/?$/.test(new URL(url).pathname);
-      const page = core.questionPage(url) || (join ? membership : null);
+      const kind = core.pageKind(url), magazine = kind?.type === "magazine" ? kind : null;
+      const page = core.questionPage(url) || membership || magazine;
       if (!settings.enabled || !page || !doc.body || !win.matchMedia("(min-width: 1100px)").matches) { clearQuestionAuthor(); return; }
       let author;
-      if (join) author = membershipJoinAuthor(page);
+      if (membership) author = membershipNavigationAuthor(page);
+      else if (magazine) author = magazineNavigationAuthor(page);
       else {
         const main = doc.querySelector('main[id="main"]');
         const content = [...(main?.children || [])].find(child => hasClasses(child, ["mx-auto", "max-w-content-small"]));
@@ -906,7 +940,7 @@
       if (!author) { clearQuestionAuthor(); return; }
       const selfUrl = core.profileUrl(settings.noteUserId);
       const showFollowing = core.usesFollowing(settings);
-      const signature = JSON.stringify([join ? "membership-join" : "question", page.user, author, selfUrl, showFollowing]);
+      const signature = JSON.stringify([membership ? "membership" : magazine ? "magazine" : "question", page.user, page.magazineId, author, selfUrl, showFollowing]);
       if (questionAuthor?.isConnected && (!selfUrl || questionSelf?.isConnected) &&
           (!showFollowing || questionFollowing?.isConnected) && questionAuthorSignature === signature) return;
       clearQuestionAuthor();
