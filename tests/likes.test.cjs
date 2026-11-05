@@ -138,3 +138,42 @@ test('質問箱の末尾波括弧付きスキ数ラベルも数値だけ隠し�
  }
  const f=fixture(counter);f.doc.getElementById('count').setAttribute('aria-label','12スキ この記事にスキをつけたユーザーを見る}');f.update();assert.equal(f.doc.getElementById('count').hasAttribute(marker),false);
 });
+
+function embedScriptFixture(patch={}) {
+ const doc=embeddedDocument();doc.documentElement=doc.root;const docEvents={},winEvents={};doc.addEventListener=(name,fn)=>docEvents[name]=fn;doc.removeEventListener=(name,fn)=>{if(docEvents[name]===fn)delete docEvents[name];};
+ let resolveLoad,rejectLoad,listener,disconnected=false,unsubscribed=false,observed,notify;
+ const c=vm.createContext({URL,document:doc,location:doc.location,window:{addEventListener:(name,fn)=>winEvents[name]=fn},MutationObserver:class {constructor(fn){notify=fn;}observe(target,options){observed={target,options};}disconnect(){disconnected=true;}}});
+ for(const file of ['src/common.js','src/note-ui.js'])vm.runInContext(source(file),c);
+ c.HikikomoriNotePlatform={subscribe(fn){listener=fn;return ()=>unsubscribed=true;},load:()=>new Promise((resolve,reject)=>{resolveLoad=resolve;rejectLoad=reject;})};
+ if(patch.url)doc.location.href=patch.url;
+ vm.runInContext(source('src/embed-likes.js'),c);
+ return {doc,c,notify:()=>notify?.(),change:value=>listener?.(value),resolve:value=>resolveLoad?.(value),reject:()=>rejectLoad?.(new Error('storage unavailable')),show:()=>winEvents.pageshow?.(),hide:persisted=>winEvents.pagehide?.({persisted}),loaded:()=>docEvents.DOMContentLoaded?.(),get disconnected(){return disconnected;},get unsubscribed(){return unsubscribed;},get observed(){return observed;}};
+}
+const embedReady='data-hikikomori-note-embed-ready',flushEmbed=()=>new Promise(resolve=>setImmediate(resolve));
+test('埋め込み専用スクリプトは設定と厳密判定の後に先行CSSを解除し、ON・OFFを復元',async()=>{
+ const f=embedScriptFixture();assert.equal(f.doc.documentElement.hasAttribute(embedReady),false);assert.equal(f.observed.target,f.doc);assert.equal(f.observed.options.characterData,true);assert.equal(f.observed.options.attributeFilter.includes(marker),false);
+ f.resolve({enabled:true,hideLikeCounts:true});await flushEmbed();assert.equal(f.doc.documentElement.hasAttribute(embedReady),true);assert.ok(f.doc.getElementById('static').hasAttribute(marker));
+ f.change({enabled:true,hideLikeCounts:false});assert.equal(f.doc.getElementById('static').hasAttribute(marker),false);f.change({enabled:true,hideLikeCounts:true});assert.ok(f.doc.getElementById('static').hasAttribute(marker));f.change({enabled:false,hideLikeCounts:true});assert.equal(f.doc.getElementById('static').hasAttribute(marker),false);
+});
+test('埋め込み自身の変更監視で後挿入・数値と役割変更を反映し、本文・リンク・操作を維持',async()=>{
+ const f=embedScriptFixture(),count=f.doc.getElementById('static');f.resolve({enabled:true,hideLikeCounts:true});await flushEmbed();assert.ok(count.hasAttribute(marker));
+ for(const id of ['link','title','description','author'])assert.equal(f.doc.getElementById(id).hasAttribute(marker),false);
+ f.doc.getElementById('static-count').textContent='9つの作品';f.notify();assert.equal(count.hasAttribute(marker),false);f.doc.getElementById('static-count').textContent='12';f.notify();assert.ok(count.hasAttribute(marker));count.setAttribute('role','button');f.notify();assert.equal(count.hasAttribute(marker),false);count.removeAttribute('role');f.notify();assert.ok(count.hasAttribute(marker));
+ const parent=count.parentElement;count.remove();f.notify();parent.append(count);f.notify();assert.ok(count.hasAttribute(marker));f.hide(true);assert.equal(f.disconnected,false);f.show();assert.ok(count.hasAttribute(marker));f.hide(false);assert.equal(count.hasAttribute(marker),false);assert.equal(f.disconnected,true);assert.equal(f.unsubscribed,true);f.change({enabled:true,hideLikeCounts:true});assert.equal(count.hasAttribute(marker),false);
+});
+test('埋め込みの古い設定読込は新しい通知や停止を上書きせず、エラー・対象外URLは表示を戻す',async()=>{
+ const f=embedScriptFixture();f.change({enabled:false,hideLikeCounts:true});f.resolve({enabled:true,hideLikeCounts:true});await flushEmbed();assert.equal(f.doc.getElementById('static').hasAttribute(marker),false);
+ const stopped=embedScriptFixture();stopped.hide(false);stopped.resolve({enabled:true,hideLikeCounts:true});await flushEmbed();assert.equal(stopped.doc.getElementById('static').hasAttribute(marker),false);
+ const error=embedScriptFixture();error.reject();await flushEmbed();assert.equal(error.doc.documentElement.hasAttribute(embedReady),true);assert.equal(error.doc.getElementById('static').hasAttribute(marker),false);
+ for(const url of ['https://example.org/embed/notes/n123','https://note.com/embed/notes/unknown','https://note.com/embed/notes/n123/admin']){const other=embedScriptFixture({url});assert.equal(other.doc.documentElement.hasAttribute(embedReady),true);assert.equal(other.observed,undefined);}
+});
+test('親文書は専用スクリプトが準備済みの埋め込みを定期走査せず、未準備の互換処理は維持',()=>{
+ const f=fixture('<iframe id="frame" src="https://note.com/embed/notes/n123?theme=auto"></iframe>'),child=embeddedDocument();child.documentElement=child.root;child.documentElement.setAttribute(embedReady,'');f.doc.getElementById('frame').contentDocument=child;f.update();assert.equal(child.head.children.length,0);assert.equal(child.getElementById('static').hasAttribute(marker),false);
+ child.documentElement.removeAttribute(embedReady);f.update();assert.equal(child.head.children.length,1);assert.ok(child.getElementById('static').hasAttribute(marker));
+ child.documentElement.setAttribute(embedReady,'');f.update();assert.equal(child.head.children.length,0);assert.ok(child.getElementById('static').hasAttribute(marker));f.control.stop();assert.ok(child.getElementById('static').hasAttribute(marker));
+});
+test('埋め込み専用登録はdocument_start・note埋め込みURL・全フレームだけに限定する',()=>{
+ const manifest=JSON.parse(source('manifest.json')),registration=manifest.content_scripts[1];assert.deepEqual(registration.matches,['https://note.com/embed/notes/*']);assert.equal(registration.all_frames,true);assert.equal(registration.run_at,'document_start');assert.deepEqual(registration.css,['src/embed-likes.css']);assert.deepEqual(manifest.content_scripts[0].exclude_matches,registration.matches);
+ for(const file of [...registration.js,...registration.css])assert.ok(source(file).length);
+ assert.equal(registration.js.includes('src/content.js'),false);assert.equal(manifest.permissions.includes('scripting'),false);
+});

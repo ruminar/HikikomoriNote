@@ -316,3 +316,8 @@ followingの左メニュー追加調査（2026-11-01）：公式asideはsticky/t
 ### 2026-11-05：記事の作者新着検索ボタン
 
 /dreamy_bear8625/n/nfa64d1911cd6で記事上部のtime周辺に既知のavatarとプロフィールリンク、表示名「カピバラさん」があることを確認。article左端322.5px、公式side-creator-profileの親はfixed/top-24/left-8。追加の＠作者検索は既存の作者情報を共用し、作者ページボタンの下へ同じタブの新着検索リンクを作る。公式作者欄は追加ボタンの下へ移す。
+
+
+### 2026-11-05：note埋め込み内の先行CSS
+
+/ruminar/n/na68901f3be0bの本文内にiframe.note-embedがあり、loading=lazy、src=https://note.com/embed/notes/n7cb755a96b56?theme=auto等を持つ。同URLを開いて.p-noteEmbed.note-embed > .p-noteEmbed__inner > .p-noteEmbed__sukiの直下が.p-noteEmbed__sukiIcon > i.c-icon.c-icon--heartと.p-noteEmbed__sukiLabel（9）の2件であることを確認。innerには別要素として記事リンク・本文・作者フッターがある。専用document_start CSSで既知スキ欄だけを待機し、埋め込み自身の設定読込・厳密判定に引き継ぐ。親ページCSSではiframe内を指定できない。実DOMで:has等のセレクタがスキ欄にのみ一致することを読み取り確認。実拡張の描画タイミングは別途実機確認する。

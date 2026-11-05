@@ -106,6 +106,12 @@
             if (src.origin !== "https://note.com" || !/^\/embed\/notes\/n[a-zA-Z0-9]+\/?$/.test(src.pathname)) continue;
             const child = frame.contentDocument;
             if (!child?.head || new URL(child.location.href).origin !== src.origin || new URL(child.location.href).pathname !== src.pathname) continue;
+            // 専用document_startスクリプトが処理済みなら、親の定期走査に依存しない。
+            if (child.documentElement?.hasAttribute("data-hikikomori-note-embed-ready")) {
+              // 引継ぎ後の印は子側の所有物。親が復元して再表示させない。
+              targets.delete(child); frameStyles.get(child)?.remove(); frameStyles.delete(child);
+              continue;
+            }
             documents.add(child);
             let style = frameStyles.get(child);
             if (!style?.isConnected) {
@@ -1805,5 +1811,5 @@
       hiddenCards.clear(); doc.removeEventListener?.("visibilitychange", onVisibility);
     } };
   }
-  globalThis.HikikomoriNoteUi = Object.freeze({ create, isOfficialHeaderLogo });
+  globalThis.HikikomoriNoteUi = Object.freeze({ create, createLikeVisibility, isOfficialHeaderLogo });
 })();

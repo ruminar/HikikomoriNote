@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 Push-Location (Join-Path $PSScriptRoot '..')
 try {
-    foreach ($file in @('src/common.js', 'src/platform/browser-api.js', 'src/content.js', 'src/note-ui.js', 'src/routing.js', 'src/background.js', 'src/home.js')) {
+    foreach ($file in @('src/common.js', 'src/platform/browser-api.js', 'src/content.js', 'src/note-ui.js', 'src/embed-likes.js', 'src/routing.js', 'src/background.js', 'src/home.js')) {
         & node --check $file
         if ($LASTEXITCODE -ne 0) { throw "構文検証失敗: $file" }
     }

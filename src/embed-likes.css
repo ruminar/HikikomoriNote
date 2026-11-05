@@ -1,0 +1,5 @@
+/* 設定読込・厳密判定より先の描画だけを防ぐ。iframe外のCSSはここへ届かない。 */
+:root:not([data-hikikomori-note-embed-ready]) .p-noteEmbed.note-embed > .p-noteEmbed__inner:has(> a.p-noteEmbed__link[href^="https://note.com/"][href*="/n/"]):has(> .p-noteEmbed__body) > .p-noteEmbed__suki:has(> .p-noteEmbed__sukiIcon:first-child > i.c-icon.c-icon--heart):has(> .p-noteEmbed__sukiIcon + .p-noteEmbed__sukiLabel:last-child):not(button, a, input, select, textarea, [role="button"], [role="link"], [tabindex], [onclick], [contenteditable]):not(:has(button, a, input, select, textarea, [role="button"], [role="link"], [tabindex], [onclick], [contenteditable])):not(:is(button, a, input, select, textarea, [role="button"], [role="link"], [tabindex], [onclick], [contenteditable]) *) {
+  visibility: hidden !important;
+}
+[data-hikikomori-note-like-hidden] { display: none !important; }

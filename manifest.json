@@ -23,8 +23,16 @@
   "content_scripts": [
     {
       "matches": ["https://note.com/*"],
+      "exclude_matches": ["https://note.com/embed/notes/*"],
       "js": ["src/common.js", "src/platform/browser-api.js", "src/note-ui.js", "src/content.js"],
       "css": ["src/content.css"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://note.com/embed/notes/*"],
+      "all_frames": true,
+      "js": ["src/common.js", "src/platform/browser-api.js", "src/note-ui.js", "src/embed-likes.js"],
+      "css": ["src/embed-likes.css"],
       "run_at": "document_start"
     }
   ]
