@@ -42,8 +42,8 @@ test('スキ数設定は初期OFF、旧保存は読取だけでOFF。形式7の�
   assert.equal(f.core.parseSettingsExport(JSON.stringify(old)).hideLikeCounts,false);
  }
  const before=JSON.stringify(raw);for(const v of ['true',1,null])await assert.rejects(controller.save({hideLikeCounts:v}));assert.equal(JSON.stringify(raw),before);
- delete d.settings.hideLikeCounts;assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(d)));
- d.settings.hideLikeCounts='true';assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(d)));
+ delete d.settings.hideLikeCounts;assert.equal(f.core.parseSettingsExport(JSON.stringify(d),raw).hideLikeCounts,true);
+ d.settings.hideLikeCounts='true';assert.ok(f.core.inspectSettingsImport(JSON.stringify(d),raw).ignored.some(x=>x.path==='hideLikeCounts'));
 });
 test('設定画面のスキ数チェックを保存し、JSON書き出しにも反映する',async()=>{
  const f=homeFixture();await new Promise(r=>setImmediate(r));const checkbox=f.nodes.get('hide-like-counts');assert.equal(checkbox.disabled,false);assert.equal(checkbox.checked,false);

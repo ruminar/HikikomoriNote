@@ -50,7 +50,7 @@
       }),
       save: patch => run(async () => {
         if (!patch || typeof patch !== "object" || Array.isArray(patch) ||
-            Object.keys(patch).some(key => !["enabled", "noteUserId", "dashboardDisabled", "mode", "hideArticleRecommendations", "hidePaidArticles", "hideLikeCounts", "noteLogoBrowserBack", "keepNoteHeaderVisible"].includes(key))) {
+            Object.keys(patch).some(key => !["enabled", "theme", "noteUserId", "dashboardDisabled", "mode", "hideArticleRecommendations", "hidePaidArticles", "hideLikeCounts", "noteLogoBrowserBack", "keepNoteHeaderVisible"].includes(key))) {
           throw new Error("設定の形式が正しくありません。");
         }
         if (Object.hasOwn(patch, "enabled") && typeof patch.enabled !== "boolean") {
@@ -67,6 +67,7 @@
         if (Object.hasOwn(patch, "hideArticleRecommendations") && typeof patch.hideArticleRecommendations !== "boolean") throw new Error("おすすめ表示設定の値が正しくありません。");
         if (Object.hasOwn(patch, "noteLogoBrowserBack") && typeof patch.noteLogoBrowserBack !== "boolean") throw new Error("ロゴのブラウザバック設定の値が正しくありません。");
         if (Object.hasOwn(patch, "keepNoteHeaderVisible") && typeof patch.keepNoteHeaderVisible !== "boolean") throw new Error("ヘッダ表示設定の値が正しくありません。");
+        if (Object.hasOwn(patch, "theme") && !["system", "dark", "light"].includes(patch.theme)) throw new Error("テーマの値が正しくありません。");
         const next = { ...previous, ...patch };
         next.noteUserId = core.normalizeUserId(next.noteUserId);
         await port.setRules(rules(next.enabled, next.dashboardDisabled, core.modeOf(next)));
@@ -80,9 +81,10 @@
       }),
       importSettings: patch => run(async () => {
         if (!patch || Object.keys(patch).length !== 2 || typeof patch.expectedToken !== "string" || !Object.hasOwn(patch, "json")) throw new Error("読み込み要求が正しくありません。");
-        const imported = core.parseSettingsExport(patch.json);
         const previous = core.readSettings(await port.load());
+        const report = core.inspectSettingsImport(patch.json, previous), imported = report.settings;
         if (core.settingsToken(previous) !== patch.expectedToken) throw failure("別の画面で設定が変更されました。状態を再確認し、もう一度読み込んでください。", "CONFLICT");
+        if (!report.applied.length) return { ...previous, importReport: { applied: [], ignored: report.ignored } };
         const next = { ...imported, tagSchemaVersion: core.favoriteSchema(imported.tagGroups),
           groupSelectionRevision: increment(previous.groupSelectionRevision), tagGroupsRevision: increment(previous.tagGroupsRevision), authorDisplayRevision: increment(previous.authorDisplayRevision) };
         await port.setRules(rules(next.enabled, next.dashboardDisabled, core.modeOf(next)));
@@ -92,7 +94,7 @@
           catch { throw failure("保存と転送設定の復旧に失敗しました。状態を再確認してください。", "UNCONFIRMED"); }
           throw error;
         }
-        return core.readSettings(next);
+        return { ...core.readSettings(next), importReport: { applied: report.applied, ignored: report.ignored } };
       }),
       author: (operation, options = {}) => run(async () => {
         if (!operation || typeof operation !== "object" || Object.keys(operation).length !== 6 ||

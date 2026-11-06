@@ -69,8 +69,8 @@ test('設定形式7は作者名・状態を往復し、形式1は確認用の空
  assert.deepEqual(plain(f.core.parseSettingsExport(json).authorDisplayRules),f.state.authorDisplayRules);
  const old=JSON.parse(json);old.schemaVersion=1;delete old.settings.hideLikeCounts;for(const g of old.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete old.settings.keepNoteHeaderVisible;old.settings.legacyMode=old.settings.mode==='severe';delete old.settings.mode;delete old.settings.authorDisplayRules;
  assert.deepEqual(plain(f.core.parseSettingsExport(JSON.stringify(old)).authorDisplayRules),[]);
- const token=f.core.settingsToken(f.core.readSettings(f.state));await f.controller.importSettings({json:JSON.stringify(old),expectedToken:token});assert.deepEqual(f.state.authorDisplayRules,[]);assert.equal(f.state.authorDisplayRevision,2);
- const bad=JSON.parse(json);bad.settings.authorDisplayRules[0].displayName='x\ny';assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(bad)));
+ const token=f.core.settingsToken(f.core.readSettings(f.state));await f.controller.importSettings({json:JSON.stringify(old),expectedToken:token});assert.equal(f.state.authorDisplayRules.length,1);assert.equal(f.state.authorDisplayRevision,2);
+ const bad=JSON.parse(json);bad.settings.authorDisplayRules[0].displayName='x\ny';assert.ok(f.core.inspectSettingsImport(JSON.stringify(bad),f.state).ignored.some(x=>x.path.startsWith('authorDisplayRules')));
 });
 test('形式7は3モードを内部保存・書き出しで往復し作者名を保持',async()=>{
  for(const mode of ['normal','severe','social']){
@@ -82,13 +82,12 @@ test('形式7は3モードを内部保存・書き出しで往復し作者名を
    assert.equal(f.state.mode,mode);assert.equal(Object.hasOwn(f.state,'legacyMode'),false);assert.equal(f.state.authorDisplayRules[0].displayName,'作者名');assert.equal(f.state.enabled,false);
  }
 });
-test('未知mode・旧フラグ混在は読み込み前に拒否し、保存済み設定を変更しない',async()=>{
- const f=backend(),base=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state))),before=plain(f.state),expectedToken=f.core.settingsToken(f.core.readSettings(f.state));
- for(const mode of ['unknown','NORMAL',false,null,{},undefined]){
-   const doc=plain(base);doc.settings.mode=mode;const json=JSON.stringify(doc);
-   assert.throws(()=>f.core.parseSettingsExport(json));await assert.rejects(f.controller.importSettings({json,expectedToken}));assert.deepEqual(f.state,before);assert.equal(f.writes,0);
+test('未知modeは無視し、modeがあれば旧フラグで補完しない',async()=>{
+ const f=backend({mode:'social'});
+ for(const mode of ['unknown','NORMAL',false,null,{}]){
+  const report=f.core.inspectSettingsImport(JSON.stringify({mode,legacyMode:true}),f.state);assert.equal(report.settings.mode,'social');assert.equal(report.applied.length,0);assert.equal(report.ignored.length,2);
  }
- const mixed=plain(base);mixed.settings.legacyMode=false;assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(mixed)));
+ const json=JSON.stringify({legacyMode:true});await f.controller.importSettings({json,expectedToken:f.core.settingsToken(f.core.readSettings(f.state))});assert.equal(f.state.mode,'severe');
 });
 test('既存の形式2は明示的なインポートでsevereへ変換し、書き出しは形式7',async()=>{
  const f=backend(),doc=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));doc.schemaVersion=2;delete doc.settings.hideLikeCounts;for(const g of doc.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete doc.settings.keepNoteHeaderVisible;doc.settings.legacyMode=true;delete doc.settings.mode;
@@ -204,7 +203,7 @@ test('専用ホームは辞書順の既存ユーザーの状態変更・解除�
  assert.equal(n.get('panel-authors').hidden,false);assert.equal(n.get('author-form'),undefined);assert.equal(n.get('author-user'),undefined);assert.match(n.get('authors-hidden').children[0].textContent,/あ（b）/);
  n.get('authors-hidden').children[0].querySelector('button').onclick();await flush();assert.equal(f.state.authorDisplayRules.find(x=>x.userId==='b').action,'allow');assert.equal(f.state.enabled,false);
  n.get('authors-allowed').children[0].querySelectorAll('button')[1].onclick();await flush();assert.equal(f.state.authorDisplayRules.some(x=>x.userId==='b'),false);
- const doc=JSON.parse(f.c.HikikomoriNote.exportSettings(f.c.HikikomoriNote.readSettings(f.state)));doc.schemaVersion=1;delete doc.settings.hideLikeCounts;for(const g of doc.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete doc.settings.keepNoteHeaderVisible;doc.settings.legacyMode=doc.settings.mode==='severe';delete doc.settings.mode;delete doc.settings.authorDisplayRules;n.get('settings-json').value=JSON.stringify(doc);n.get('settings-json').oninput();n.get('import-settings').onclick();await flush();assert.match(f.confirmations.at(-1),/作者設定も解除/);assert.deepEqual(f.state.authorDisplayRules,[]);
+ const doc=JSON.parse(f.c.HikikomoriNote.exportSettings(f.c.HikikomoriNote.readSettings(f.state)));doc.schemaVersion=1;delete doc.settings.hideLikeCounts;for(const g of doc.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}delete doc.settings.keepNoteHeaderVisible;doc.settings.legacyMode=doc.settings.mode==='severe';delete doc.settings.mode;delete doc.settings.authorDisplayRules;n.get('settings-json').value=JSON.stringify(doc);n.get('settings-json').oninput();n.get('import-settings').onclick();await flush();assert.match(f.confirmations.at(-1),/現在値は維持/);assert.equal(f.state.authorDisplayRules.length,1);
 });
 test('作者操作の送信元検証はトップフレーム・現URL・本人・pendingUrlを確認する',async()=>{
  let tab={url:articleUrl};const api={runtime:{id:'self'},tabs:{async get(){return tab;}}};

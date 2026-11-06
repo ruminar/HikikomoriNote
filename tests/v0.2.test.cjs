@@ -1143,7 +1143,10 @@ test('設定JSONは全設定と4グループを往復し、内部番号・診断
  const parsed=f.core.parseSettingsExport(json);assert.equal(parsed.enabled,false);assert.equal(parsed.mode,'severe');assert.equal(parsed.selectedTagGroupId,'group3');assert.deepEqual(plain(parsed.tagGroups[0].tags),['AI','ComfyUI']);
  assert.equal(f.core.exportSettings({...f.stored,groupSelectionRevision:99}),json);assert.throws(()=>f.core.exportSettings({...f.stored,tagWarning:'invalid'}));
  const mutate=fn=>{const doc=JSON.parse(json);fn(doc);return JSON.stringify(doc);};
- for(const text of ['{}','[]','null','broken',mutate(d=>d.schemaVersion=99),mutate(d=>d.format='other'),mutate(d=>delete d.settings.enabled),mutate(d=>d.settings.enabled='true'),mutate(d=>d.settings.extra=true),mutate(d=>d.settings.noteUserId='https://note.com/ruminar'),mutate(d=>d.settings.tagGroups.pop()),mutate(d=>d.settings.tagGroups.reverse()),mutate(d=>d.settings.tagGroups[0].items=[{type:'tag',tag:'AI'},{type:'tag',tag:'AI'}]),mutate(d=>d.settings.tagGroups[0].items=[{type:'tag',tag:' #AI '}]),mutate(d=>d.settings.tagGroups[0].name=' X '),mutate(d=>d.settings.selectedTagGroupId='group5')])assert.throws(()=>f.core.parseSettingsExport(text));
+ for(const text of ['[]','null','broken'])assert.throws(()=>f.core.parseSettingsExport(text));
+ for(const text of ['{}',mutate(d=>d.schemaVersion=99),mutate(d=>d.format='other'),mutate(d=>delete d.settings.enabled),mutate(d=>d.settings.enabled='true'),mutate(d=>d.settings.extra=true),mutate(d=>d.settings.tagGroups.pop()),mutate(d=>d.settings.tagGroups.reverse())])assert.doesNotThrow(()=>f.core.parseSettingsExport(text));
+ const invalid=f.core.inspectSettingsImport(mutate(d=>{d.settings.enabled='true';d.settings.selectedTagGroupId='group5';}),f.stored);assert.equal(invalid.settings.enabled,false);assert.ok(invalid.ignored.some(x=>x.path==='enabled'));assert.ok(invalid.ignored.some(x=>x.path==='selectedTagGroupId'));
+
  const doc=JSON.parse(json);doc.settings.tagGroups[1].items=[{type:'tag',tag:'AI'}];assert.doesNotThrow(()=>f.core.parseSettingsExport(JSON.stringify(doc)));
  assert.throws(()=>f.core.parseSettingsExport(' '.repeat(1048577)));
 });
@@ -1168,7 +1171,7 @@ test('読み込みの検証・ルール適用・保存失敗はデータを変�
  const context=vm.createContext({URL});for(const file of ['src/common.js','src/routing.js'])vm.runInContext(source(file),context);
  const controller=context.HikikomoriNoteRouting.createController({load:async()=>stored,store:async value=>{stores++;if(failStore)throw Error('store failed');stored=plain(value);},setRules:async value=>{calls++;if(failRules)throw Error('rules failed');ruleValues.push(plain(value));}});
  const patch={json:core.exportSettings(target),expectedToken:core.settingsToken(original)};
- await assert.rejects(controller.importSettings({...patch,json:'{}'}));assert.equal(calls,0);assert.equal(stores,0);
+ const empty=await controller.importSettings({...patch,json:'{}'});assert.equal(empty.importReport.applied.length,0);assert.equal(calls,0);assert.equal(stores,0);
  failRules=true;await assert.rejects(controller.importSettings(patch),/rules failed/);assert.equal(stores,0);
  failRules=false;failStore=true;await assert.rejects(controller.importSettings(patch),/store failed/);assert.deepEqual(stored,original);assert.equal(ruleValues.at(-1).length,2);
  failStore=false;await controller.importSettings(patch);assert.equal(stored.enabled,false);assert.equal(stores,2);
@@ -1608,7 +1611,7 @@ test('設定形式7はヘッダ設定を往復し、旧形式1～3はOFF。不�
  }
  for(const value of [undefined,'true',1,null]){
   const bad=JSON.parse(json);if(value===undefined)delete bad.settings.keepNoteHeaderVisible;else bad.settings.keepNoteHeaderVisible=value;
-  await assert.rejects(f.controller.importSettings({json:JSON.stringify(bad),expectedToken:f.core.settingsToken(f.stored)}));assert.equal(f.writes,0);assert.equal(f.stored.keepNoteHeaderVisible,true);
+  const report=f.core.inspectSettingsImport(JSON.stringify(bad),f.stored);assert.equal(report.settings.keepNoteHeaderVisible,true);if(value!==undefined)assert.ok(report.ignored.some(x=>x.path==='keepNoteHeaderVisible'));assert.equal(f.writes,0);
  }
  const target=fixture();await target.controller.importSettings({json,expectedToken:target.core.settingsToken(target.stored)});assert.equal(target.stored.keepNoteHeaderVisible,true);
 });
@@ -1689,7 +1692,7 @@ test('作者登録も保存キューで直列化し、モード・OFF・作者�
 test('形式7は種類付き項目を順序通り往復し、旧形式4の明示読込と破損データ保持も維持',async()=>{
  const f=fixture({...groups(['A'])});await f.controller.tag(addFavorite(),favoriteOptions());const json=f.core.exportSettings(await f.controller.getState()),d=JSON.parse(json);assert.equal(d.schemaVersion,7);assert.deepEqual(d.settings.tagGroups[0].items,[{type:'tag',tag:'A'},favoriteCreator]);assert.equal(Object.hasOwn(d.settings.tagGroups[0],'tags'),false);
  const target=fixture();await target.controller.importSettings({json,expectedToken:target.core.settingsToken(target.stored)});assert.deepEqual(target.stored.tagGroups[0].tags,['A',favoriteCreator]);assert.equal(target.stored.tagSchemaVersion,3);
- for(const change of [d=>{d.settings.tagGroups[0].items.push({...favoriteCreator,userId:'KINOKORO'});},d=>{d.settings.tagGroups[0].items[1].userId='https://evil.test/';},d=>{d.settings.tagGroups[0].items[1].type='other';},d=>{d.settings.tagGroups[0].items[1].displayName='bad\nname';}]){const bad=JSON.parse(json);change(bad);assert.throws(()=>f.core.parseSettingsExport(JSON.stringify(bad)));}
+ for(const change of [d=>{d.settings.tagGroups[0].items.push({...favoriteCreator,userId:'KINOKORO'});},d=>{d.settings.tagGroups[0].items[1].userId='https://evil.test/';},d=>{d.settings.tagGroups[0].items[1].type='other';},d=>{d.settings.tagGroups[0].items[1].displayName='bad\nname';}]){const bad=JSON.parse(json);change(bad);assert.ok(f.core.inspectSettingsImport(JSON.stringify(bad),f.stored).ignored.length>0);}
  const old=JSON.parse(f.core.exportSettings({...settingsData(),keepNoteHeaderVisible:true,...groups(['old'])}));old.schemaVersion=4;delete old.settings.hideLikeCounts;for(const g of old.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}await target.controller.importSettings({json:JSON.stringify(old),expectedToken:target.core.settingsToken(target.stored)});assert.deepEqual(target.stored.tagGroups[0].tags,['old']);assert.equal(target.stored.keepNoteHeaderVisible,true);
  const broken=fixture({tagSchemaVersion:3,...groups(),tagGroups:[{id:'group1',name:'',tags:[{...favoriteCreator,extra:true}]}]});await broken.controller.save({dashboardDisabled:true});assert.equal(broken.stored.tagGroups[0].tags[0].extra,true);await assert.rejects(broken.controller.tag(addFavorite(),favoriteOptions()));
 });
@@ -1723,7 +1726,7 @@ test('作者お気に入りは実際の背景メッセージで現在ページ�
 
 test('旧JSONでお気に入りユーザーが解除されることを確認し、キャンセルなら保存しない',async()=>{
  const h=homeFixture({state:{...groups(['A',favoriteCreator]),tagSchemaVersion:3}});await flush();const c=h.c.HikikomoriNote,d=JSON.parse(c.exportSettings({...settingsData(),...groups(['old'])}));d.schemaVersion=4;delete d.settings.hideLikeCounts;for(const g of d.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}
- h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/作者・マガジンのお気に入りも解除/);assert.deepEqual(h.state.tagGroups[0].tags,['A',favoriteCreator]);
+ h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/指定された一覧/);assert.deepEqual(h.state.tagGroups[0].tags,['A',favoriteCreator]);
 });
 
 test('作者お気に入りの＠は通常だけ初期閉状態で出し、Escapeでフォーカスを戻し、作者移動で開状態を引き継がない',()=>{
@@ -1764,11 +1767,12 @@ test('マガジン保存の失敗・モード・OFF・偽登録を拒否し、�
  await Promise.all([f.controller.tag(addMagazine(),magazineOptions()),f.controller.tag(addFavorite(),favoriteOptions()),f.controller.save({hidePaidArticles:true})]);assert.deepEqual(f.stored.tagGroups[0].tags,['A',favoriteMagazine,favoriteCreator]);assert.equal(f.stored.hidePaidArticles,true);
 });
 
-test('形式7で3種類を順序通り往復し、不正マガジンは全置換前に全体を拒否する',async()=>{
+test('形式7で3種類を順序通り往復し、不正マガジンだけを無視する',async()=>{
  const f=fixture({...groups(['keep',favoriteCreator,favoriteMagazine]),tagSchemaVersion:4}),json=f.core.exportSettings(await f.controller.getState()),d=JSON.parse(json);assert.equal(d.schemaVersion,7);assert.deepEqual(d.settings.tagGroups[0].items,[{type:'tag',tag:'keep'},favoriteCreator,favoriteMagazine]);
  const target=fixture();await target.controller.importSettings({json,expectedToken:target.core.settingsToken(target.stored)});assert.deepEqual(target.stored.tagGroups[0].tags,['keep',favoriteCreator,favoriteMagazine]);assert.equal(target.stored.tagSchemaVersion,4);assert.equal(target.core.exportSettings(await target.controller.getState()),json);
- const before=plain(target.stored),writes=target.writes,rules=plain(target.rules);
- for(const change of [x=>x.items.push({...favoriteMagazine,userId:'KINOKORO'}),x=>x.items.push('raw tag'),x=>{x.items[2].magazineId='../bad';},x=>{x.items[2].extra=true;},x=>{x.items[2].type='unknown';}]){const bad=JSON.parse(json);change(bad.settings.tagGroups[0]);await assert.rejects(target.controller.importSettings({json:JSON.stringify(bad),expectedToken:target.core.settingsToken(before)}));assert.deepEqual(target.stored,before);assert.equal(target.writes,writes);assert.deepEqual(target.rules,rules);}
+ const before=plain(target.stored);
+ for(const change of [x=>x.items.push({...favoriteMagazine,userId:'KINOKORO'}),x=>{x.items[2].magazineId='../bad';},x=>{x.items[2].extra=true;},x=>{x.items[2].type='unknown';}]){const bad=JSON.parse(json);change(bad.settings.tagGroups[0]);const report=target.core.inspectSettingsImport(JSON.stringify(bad),before);assert.ok(report.ignored.length>0);assert.ok(report.settings.tagGroups[0].tags.length>=2);}
+
  const broken=fixture({...before,tagGroups:[{id:'group1',name:'',tags:[{...favoriteMagazine,extra:true}]}]});await broken.controller.save({dashboardDisabled:true});assert.equal(broken.stored.tagGroups[0].tags[0].extra,true);await assert.rejects(broken.controller.tag(addMagazine(),magazineOptions()));
 });
 
@@ -1809,9 +1813,9 @@ test('マガジンのお気に入りは左メニューで本SVG・新しいタ�
  h.nodes.get('export-settings').onclick();await flush();assert.equal(JSON.parse(h.nodes.get('settings-json').value).schemaVersion,7);assert.equal(JSON.parse(h.nodes.get('settings-json').value).settings.tagGroups[0].items[0].type,'magazine');
 });
 
-test('形式7のマガジンを移行画面で読み込める。不正なIDは読み込み無効で保存しない',async()=>{
+test('形式7のマガジンを移行画面で読み込める。不正なIDは無視して報告する',async()=>{
  const h=homeFixture();await flush();const c=h.c.HikikomoriNote,d=JSON.parse(c.exportSettings(c.readSettings(h.state)));d.settings.tagGroups[1].items.push({...favoriteMagazine});h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();assert.equal(h.nodes.get('import-settings').disabled,false);h.nodes.get('import-settings').onclick();await flush();assert.deepEqual(h.state.tagGroups[1].tags,[favoriteMagazine]);
- const before=plain(h.state);d.settings.tagGroups[1].items[0].magazineId='bad';h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();assert.equal(h.nodes.get('import-settings').disabled,true);assert.deepEqual(h.state,before);
+ const before=plain(h.state);d.settings.tagGroups[1].items[0].magazineId='bad';h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();assert.equal(h.nodes.get('import-settings').disabled,false);assert.match(h.nodes.get('transfer-report').textContent,/無視/);assert.deepEqual(h.state,before);
 });
 test('マガジン登録メッセージは現在のタブ・保存直前・フレームを照合する',async()=>{
  let tab={url:magazineUrl},failed=false;
@@ -1831,7 +1835,7 @@ test('マガジン登録メッセージは現在のタブ・保存直前・フ�
 
 test('旧JSON全置換はマガジンの解除も確認し、キャンセルでは現在の設定を保持する',async()=>{
  const h=homeFixture({state:{...groups([favoriteMagazine]),tagSchemaVersion:4}});await flush();const c=h.c.HikikomoriNote,d=JSON.parse(c.exportSettings(c.readSettings({...settingsData(),...groups(['old'])})));d.schemaVersion=4;delete d.settings.hideLikeCounts;for(const g of d.settings.tagGroups){g.tags=g.items.map(x=>x.tag);delete g.items;}
- h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/作者・マガジンのお気に入りも解除/,h.nodes.get('transfer-validation').textContent+' '+h.nodes.get('status').textContent);assert.deepEqual(h.state.tagGroups[0].tags,[favoriteMagazine]);
+ h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/指定された一覧/,h.nodes.get('transfer-validation').textContent+' '+h.nodes.get('status').textContent);assert.deepEqual(h.state.tagGroups[0].tags,[favoriteMagazine]);
 });
 const profileLayoutHtml='<aside class="w-full lg:w-96"><div id="profile-identity"><button data-name="avatar"></button><h1></h1><a id="profile-followings" href="https://note.com/creator/followings"></a></div></aside>';
 const profileRoot=f=>f.doc.querySelector('[class="hikikomori-note-profile-controls"]');
@@ -1889,9 +1893,10 @@ test('メンバーシップ保存も直列化し、OFF・別モード・偽登�
  await Promise.all([f.controller.tag(memberOperation(),memberOptions()),f.controller.tag({type:'ADD_TAG',groupId:'group1',tag:'B'}),f.controller.save({dashboardDisabled:true})]);assert.deepEqual(f.stored.tagGroups[0].tags,['A',memberFavorite,'B']);assert.equal(f.stored.dashboardDisabled,true);
 });
 
-test('形式7で4種類を往復し、形式5は従来3種類だけ受理。不正データは全体を保存前に拒否',async()=>{
+test('形式7で4種類を往復し、形式5の旧データにも対応。不正な項目だけを無視する',async()=>{
  const f=fixture({...groups(['A',favoriteCreator,favoriteMagazine,memberFavorite]),tagSchemaVersion:5}),json=f.core.exportSettings(await f.controller.getState()),d=JSON.parse(json);assert.equal(d.schemaVersion,7);const t=fixture();await t.controller.importSettings({json,expectedToken:t.core.settingsToken(t.stored)});assert.deepEqual(t.stored.tagGroups[0].tags,['A',favoriteCreator,favoriteMagazine,memberFavorite]);assert.equal(t.stored.tagSchemaVersion,5);assert.equal(t.core.exportSettings(await t.controller.getState()),json);
- const before=plain(t.stored),writes=t.writes,rules=plain(t.rules);for(const change of [x=>x.schemaVersion=5,x=>x.settings.tagGroups[0].items.push({...memberFavorite,userId:'AKB428'}),x=>x.settings.tagGroups[0].items[3].userId='settings',x=>x.settings.tagGroups[0].items[3].url=memberUrl,x=>x.settings.tagGroups[0].items[3].type='other']){const bad=JSON.parse(json);change(bad);await assert.rejects(t.controller.importSettings({json:JSON.stringify(bad),expectedToken:t.core.settingsToken(before)}));assert.deepEqual(t.stored,before);assert.equal(t.writes,writes);assert.deepEqual(t.rules,rules);}
+ const before=plain(t.stored);for(const change of [x=>x.settings.tagGroups[0].items.push({...memberFavorite,userId:'AKB428'}),x=>x.settings.tagGroups[0].items[3].userId='settings',x=>x.settings.tagGroups[0].items[3].url=memberUrl,x=>x.settings.tagGroups[0].items[3].type='other']){const bad=JSON.parse(json);change(bad);const report=t.core.inspectSettingsImport(JSON.stringify(bad),before);assert.ok(report.ignored.length>0);assert.ok(report.settings.tagGroups[0].tags.length>=3);}
+
  d.schemaVersion=5;delete d.settings.hideLikeCounts;d.settings.tagGroups[0].items.pop();await t.controller.importSettings({json:JSON.stringify(d),expectedToken:t.core.settingsToken(t.stored)});assert.deepEqual(t.stored.tagGroups[0].tags,['A',favoriteCreator,favoriteMagazine]);assert.equal(t.stored.tagSchemaVersion,4);
  const broken=fixture({...groups([memberFavorite]),tagSchemaVersion:4});assert.ok((await broken.controller.getState()).tagWarning);await broken.controller.save({dashboardDisabled:true});assert.deepEqual(broken.stored.tagGroups[0].tags,[memberFavorite]);await assert.rejects(broken.controller.tag(memberOperation(),memberOptions()));
 });
@@ -1916,7 +1921,7 @@ test('メンバーシップ登録の未確認結果は再確認まで自動再�
 test('メンバーシップは左メニューで人SVGと新しいタブ、設定で同じタブのリンクと共通管理',async()=>{
  const state={...groups(['A',memberFavorite,favoriteMagazine,favoriteCreator]),tagSchemaVersion:5},f=uiFixture(sidebarHtml);f.ui.update(f.core.readSettings(state),'https://note.com/following');const link=f.doc.querySelector('ul').children[1].querySelector('a');assert.equal(link.href,memberUrl);assert.equal(link.getAttribute('target'),'_blank');assert.equal(link.getAttribute('rel'),'noopener noreferrer');assert.equal(link.querySelector('path').getAttribute('d'),f.core.membershipIconPath);assert.match(link.getAttribute('aria-label'),/メンバーシップ/);
  const h=homeFixture({state});await flush();const row=h.nodes.get('edit-tags').children[1],name=row.children[0];assert.equal(name.textContent,'AI活用実践ラボ (akb428)');assert.equal(name.href,memberUrl);assert.equal(name.getAttribute('target'),'_self');assert.equal(name.querySelector('path').getAttribute('d'),h.c.HikikomoriNote.membershipIconPath);row.querySelector('button').onclick();await flush();assert.deepEqual(h.state.tagGroups[0].tags,[memberFavorite,'A',favoriteMagazine,favoriteCreator]);
- const d=JSON.parse(h.c.HikikomoriNote.exportSettings(h.c.HikikomoriNote.readSettings(h.state)));d.schemaVersion=5;delete d.settings.hideLikeCounts;d.settings.tagGroups[0].items.shift();h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/メンバーシップのお気に入りも解除/);assert.equal(h.state.tagGroups[0].tags[0].type,'membership');
+ const d=JSON.parse(h.c.HikikomoriNote.exportSettings(h.c.HikikomoriNote.readSettings(h.state)));d.schemaVersion=5;delete d.settings.hideLikeCounts;d.settings.tagGroups[0].items.shift();h.nodes.get('settings-json').value=JSON.stringify(d);h.nodes.get('settings-json').oninput();h.options.confirm=()=>false;h.nodes.get('import-settings').onclick();await flush();assert.match(h.confirmations.at(-1),/指定された一覧/);assert.equal(h.state.tagGroups[0].tags[0].type,'membership');
 });
 
 test('メンバーシップ登録メッセージは現在URL・pendingUrl・フレームと保存直前を照合',async()=>{

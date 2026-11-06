@@ -1,6 +1,6 @@
 "use strict";
 module.exports = function settings(tags = []) {
-  return { enabled: true, noteUserId: "", dashboardDisabled: false, mode:'normal',
+  return { enabled: true, theme: "system", noteUserId: "", dashboardDisabled: false, mode:'normal',
     hideArticleRecommendations: false, hidePaidArticles: false, hideLikeCounts: false, noteLogoBrowserBack: false, keepNoteHeaderVisible: false, tagSchemaVersion: 2,
     tagGroups: [1, 2, 3, 4].map(number => ({ id: `group${number}`, name: "", tags: number === 1 ? tags : [] })),
     selectedTagGroupId: "group1", groupSelectionRevision: 0, tagGroupsRevision: 0 };

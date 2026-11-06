@@ -4,7 +4,7 @@
   const settingsKey = "hikikomoriNote.settings.v2";
   const groupIds = ["group1", "group2", "group3", "group4"];
   function defaultSettings() {
-    return { enabled: true, noteUserId: "", dashboardDisabled: false, mode: "normal",
+    return { enabled: true, theme: "system", noteUserId: "", dashboardDisabled: false, mode: "normal",
       hideArticleRecommendations: false, hidePaidArticles: false, hideLikeCounts: false, noteLogoBrowserBack: false, keepNoteHeaderVisible: false, tagSchemaVersion: 2,
       tagGroups: groupIds.map(id => ({ id, name: "", tags: [] })), selectedTagGroupId: "group1",
       groupSelectionRevision: 0, tagGroupsRevision: 0, authorDisplayRules: [], authorDisplayRevision: 0 };
@@ -74,6 +74,7 @@
       ((modeOf(settings) !== "social" && isHome(url)) || (settings.dashboardDisabled === true && isDashboard(url)));
   }
   function modeOf(settings) { return ["normal", "severe", "social"].includes(settings?.mode) ? settings.mode : "normal"; }
+  function themeOf(settings) { return ["system", "dark", "light"].includes(settings?.theme) ? settings.theme : "system"; }
   function usesTags(settings) { return modeOf(settings) === "normal"; }
   function usesFollowing(settings) { return modeOf(settings) !== "severe"; }
   function usesLogoBack(settings) { return settings?.enabled === true && modeOf(settings) !== "social" && settings.noteLogoBrowserBack === true; }
@@ -81,7 +82,7 @@
     let noteUserId = "";
     try { noteUserId = normalizeUserId(value?.noteUserId); } catch { /* 破損値は空欄へ */ }
     const groups = inspectGroups(value);
-    return { enabled: value?.enabled !== false, noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
+    return { enabled: value?.enabled !== false, theme: themeOf(value), noteUserId, dashboardDisabled: value?.dashboardDisabled === true,
       mode: modeOf(value), hideArticleRecommendations: value?.hideArticleRecommendations === true, hidePaidArticles: value?.hidePaidArticles === true, hideLikeCounts: value?.hideLikeCounts === true,
       noteLogoBrowserBack: value?.noteLogoBrowserBack === true, keepNoteHeaderVisible: value?.keepNoteHeaderVisible === true, ...groups, ...inspectAuthors(value) };
   }
@@ -295,7 +296,7 @@
     if (settings.tagWarning || settings.groupSelectionInvalid || settings.authorWarning) throw new Error("保存データに異常があります。状態を再確認してください。");
     const value = Object.fromEntries([...transferFlags.filter(key => key !== "legacyMode"), "keepNoteHeaderVisible", "hideLikeCounts", "mode", "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "mode" ? modeOf(settings) : ["keepNoteHeaderVisible", "hideLikeCounts"].includes(key) ? settings[key] ?? false : key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]]));
     value.tagGroups = value.tagGroups.map(group => ({ id: group.id, name: group.name, items: group.tags.map(item => typeof item === "string" ? { type: "tag", tag: item } : item) }));
-    return validateTransferSettings(value, 7);
+    return { ...validateTransferSettings(value, 7), theme: themeOf(settings) };
   }
   function exportSettings(settings) {
     const value = transferSettings(settings);
@@ -304,21 +305,113 @@
     if (json.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     return json;
   }
-  function parseSettingsExport(text) {
+  function inspectSettingsImport(text, current = defaultSettings()) {
     if (typeof text !== "string" || text.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     let document;
     try { document = JSON.parse(text); } catch { throw new Error("JSONの書式が正しくありません。"); }
-    if (!exactKeys(document, ["format", "schemaVersion", "settings"]) || document.format !== "hikikomori-note-settings" || ![1, 2, 3, 4, 5, 6, 7].includes(document.schemaVersion)) {
-      throw new Error("ひきこもりnoteの設定JSON（形式バージョン1～7）を入力してください。");
+    const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
+    if (!object(document)) throw new Error("設定項目を含むJSONオブジェクトを入力してください。");
+    const wrapped = Object.hasOwn(document, "settings"), source = wrapped ? document.settings : document;
+    if (!object(source)) throw new Error("settingsはJSONオブジェクトにしてください。");
+    const settings = transferSettings(current), applied = [], ignored = [];
+    settings.tagGroups = settings.tagGroups.map(g => ({ ...g, tags: [...g.tags] }));
+    const skip = (path, reason) => ignored.push({ path, reason });
+    const accept = path => applied.push(path);
+    const metadata = new Set(["format", "schemaVersion"]);
+    if (wrapped) for (const key of Object.keys(document)) {
+      if (key !== "settings" && !metadata.has(key)) skip(key, "設定ラッパーの未対応項目です。");
     }
-    return validateTransferSettings(document.settings, document.schemaVersion);
+    const flags = new Set([...transferFlags.filter(k => k !== "legacyMode"), "keepNoteHeaderVisible", "hideLikeCounts"]);
+    const scalar = new Set([...flags, "noteUserId", "mode", "theme", "selectedTagGroupId", "legacyMode"]);
+    const fieldsOnly = (value, keys, path) => {
+      for (const key of Object.keys(value)) if (!keys.includes(key)) skip(`${path}.${key}`, "未対応の項目です。");
+      return Object.fromEntries(keys.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
+    };
+    const parseFavorite = (item, path) => {
+      if (typeof item === "string") {
+        const tag = normalizeTag(item); if (tag !== item) throw new Error("タグ名の前後の空白・#を除いてください。"); return tag;
+      }
+      if (!object(item)) throw new Error("お気に入りは文字列またはオブジェクトにしてください。");
+      if (item.type === "tag") {
+        const clean = fieldsOnly(item, ["type", "tag"], path), tag = normalizeTag(clean.tag);
+        if (tag !== clean.tag) throw new Error("タグ名の前後の空白・#を除いてください。"); return tag;
+      }
+      const keys = item.type === "magazine" ? ["type", "userId", "magazineId", "displayName"] : ["type", "userId", "displayName"];
+      if (!["user", "magazine", "membership"].includes(item.type)) throw new Error("未対応のお気に入り種別です。");
+      const clean = fieldsOnly(item, keys, path); if (!Object.hasOwn(clean, "displayName")) clean.displayName = "";
+      return favorite(clean);
+    };
+    function list(value, path, parse, keyOf) {
+      if (!Array.isArray(value)) { skip(path, "配列ではないため現在値を維持しました。"); return null; }
+      const result = [], seen = new Set();
+      value.forEach((item, index) => {
+        const itemPath = `${path}[${index}]`;
+        try {
+          const parsed = parse(item, itemPath), key = keyOf(parsed);
+          if (seen.has(key)) throw new Error("重複しているため先頭の項目を使用します。");
+          seen.add(key); result.push(parsed);
+        } catch (error) { skip(itemPath, error.message); }
+      });
+      if (value.length && !result.length) { skip(path, "有効な項目がないため現在値を維持しました。"); return null; }
+      accept(path); return result;
+    }
+    for (const key of Object.keys(source)) {
+      const value = source[key];
+      if (metadata.has(key)) continue;
+      if (scalar.has(key)) {
+        try {
+          if (key === "legacyMode" && Object.hasOwn(source, "mode")) { skip(key, "modeが指定されているため使用しません。"); continue; }
+          let parsed = value;
+          if (flags.has(key) || key === "legacyMode") { if (typeof value !== "boolean") throw new Error("trueまたはfalseにしてください。"); }
+          else if (key === "noteUserId") { if (typeof value !== "string") throw new Error("文字列にしてください。"); parsed = normalizeUserId(value); }
+          else if (key === "mode" && !["normal", "severe", "social"].includes(value)) throw new Error("normal・severe・socialのいずれかにしてください。");
+          else if (key === "theme" && !["system", "dark", "light"].includes(value)) throw new Error("system・dark・lightのいずれかにしてください。");
+          else if (key === "selectedTagGroupId" && !groupIds.includes(value)) throw new Error("group1〜group4のいずれかにしてください。");
+          settings[key === "legacyMode" ? "mode" : key] = key === "legacyMode" ? value ? "severe" : "normal" : parsed;
+          accept(key); continue;
+        } catch (error) { skip(key, error.message); continue; }
+      }
+      if (key === "tagGroups") {
+        if (!Array.isArray(value)) { skip(key, "配列ではないため現在値を維持しました。"); continue; }
+        if (!value.length) { settings.tagGroups = settings.tagGroups.map(g => ({ ...g, tags: [] })); accept(key); continue; }
+        const seen = new Set();
+        value.forEach((group, index) => {
+          const path = `tagGroups[${index}]`;
+          if (!object(group) || !groupIds.includes(group.id)) { skip(path, "既知のグループIDがありません。"); return; }
+          if (seen.has(group.id)) { skip(path, "重複グループのため先頭を使用します。"); return; }
+          seen.add(group.id); const target = settings.tagGroups.find(g => g.id === group.id);
+          fieldsOnly(group, ["id", "name", "items", "tags"], path);
+          if (Object.hasOwn(group, "name")) {
+            try { const name = normalizeGroupName(group.name); if (name !== group.name) throw new Error("グループ名の前後の空白を除いてください。"); target.name = name; accept(`${path}.name`); }
+            catch (error) { skip(`${path}.name`, error.message); }
+          }
+          const field = Object.hasOwn(group, "items") ? "items" : Object.hasOwn(group, "tags") ? "tags" : null;
+          if (field === "items" && Object.hasOwn(group, "tags")) skip(`${path}.tags`, "itemsを優先します。");
+          if (field) { const tags = list(group[field], `${path}.${field}`, parseFavorite, favoriteKey); if (tags !== null) target.tags = tags; }
+        });
+        continue;
+      }
+      if (key === "authorDisplayRules") {
+        const rules = list(value, key, (rule, path) => {
+          if (!object(rule)) throw new Error("作者ルールはオブジェクトにしてください。");
+          const clean = fieldsOnly(rule, ["userId", "displayName", "action"], path);
+          if (!Object.hasOwn(clean, "displayName")) clean.displayName = "";
+          return validateAuthors([clean])[0];
+        }, rule => rule.userId.toLowerCase());
+        if (rules !== null) settings.authorDisplayRules = rules;
+        continue;
+      }
+      skip(key, "ひきこもりnoteでは未対応の項目です。");
+    }
+    return { settings, applied, ignored };
   }
+  function parseSettingsExport(text, current = defaultSettings()) { return inspectSettingsImport(text, current).settings; }
   function settingsToken(settings) {
     return JSON.stringify([transferSettings(settings), settings.groupSelectionRevision, settings.tagGroupsRevision, settings.authorDisplayRevision ?? 0]);
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
-    modeOf, usesTags, usesFollowing, usesLogoBack,
-    exportSettings, parseSettingsExport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
+    modeOf, themeOf, usesTags, usesFollowing, usesLogoBack,
+    exportSettings, parseSettingsExport, inspectSettingsImport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
     favorite, favoriteKey, favoriteLabel, favoriteUrl, authorSearchUrl, searchedAuthor, favoriteUser, favoriteMagazine, favoriteMembership, favoriteSchema, bookIconPath, membershipIconPath, membershipPage, questionPage,
     normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

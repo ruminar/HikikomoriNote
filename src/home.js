@@ -4,7 +4,7 @@
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
   const views = ["settings", "tags", "authors", "transfer"];
-  const fields = { hideLikeCounts: "hide-like-counts", hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", keepNoteHeaderVisible: "keep-note-header-visible", mode: "operation-mode" };
+  const fields = { theme: "theme", hideLikeCounts: "hide-like-counts", hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", keepNoteHeaderVisible: "keep-note-header-visible", mode: "operation-mode" };
   const modeNames = { normal: "通常モード（ひとみしりモード）", severe: "重度ひきこもりモード", social: "社会復帰モード" };
   function updateModeHelp() {
     byId("operation-mode-help").textContent = { normal: "専用ホームとお気に入りから、見たい記事を選んで閲覧します。", severe: "公式ホームを開かず、左メニューには自分のページだけを表示します。お気に入りグループやTLへのリンクは表示しません。", social: "note公式ホームと左メニューを使用し、記事の非表示設定や追加導線は使います。" }[byId("operation-mode").value] || "";
@@ -12,28 +12,46 @@
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();
-  let copying = false, validatedText, parsedImport;
+  let copying = false, parsedImport;
+  function renderImportReport(report, applied = false) {
+    const lines = [`${applied ? "適用した項目" : "適用予定の項目"}（${report.applied.length}件）：`, ...report.applied.map(path => `・${path}`),
+      `無視した項目（${report.ignored.length}件）：`, ...report.ignored.map(item => `・${item.path}：${item.reason}`)];
+    byId("transfer-report").textContent = lines.join("\n");
+  }
   function transferControls() {
     const text = byId("settings-json").value;
-    if (text !== validatedText) {
-      validatedText = text; parsedImport = undefined;
-      let message = "設定JSONを入力してください。";
-      if (text.trim()) {
-        try {
-          parsedImport = core.parseSettingsExport(text);
-          message = `読み込み可能です。4グループ・お気に入り${parsedImport.tagGroups.reduce((total, group) => total + group.tags.length, 0)}件。`;
-        } catch (error) { message = error.message; }
-      }
-      byId("transfer-validation").textContent = message;
-    }
+    parsedImport = undefined;
+    let message = "設定JSONを入力してください。";
+    if (text.trim()) {
+      try {
+        parsedImport = core.inspectSettingsImport(text, state ?? core.defaultSettings());
+        message = parsedImport.applied.length ? `読み込み可能です。適用予定${parsedImport.applied.length}項目・無視${parsedImport.ignored.length}項目。` : "適用できる項目はありません。現在の設定は変更しません。";
+        if (!byId("transfer-status").textContent) renderImportReport(parsedImport);
+      } catch (error) { message = error.message; if (!byId("transfer-status").textContent) byId("transfer-report").textContent = ""; }
+    } else if (!byId("transfer-status").textContent) byId("transfer-report").textContent = "";
+    byId("transfer-validation").textContent = message;
     let healthy = false;
-    try { if (state) { core.settingsToken(state); healthy = true; } } catch { /* 不正な保存値を正常な書き出しとして扱わない。 */ }
+    try { if (state) { core.settingsToken(state); healthy = true; } } catch { /* 破損した保存値を正常として書き出さない。 */ }
     const blocked = !healthy || busy || uncertain || copying;
     byId("export-settings").disabled = blocked;
-    byId("import-settings").disabled = blocked || !parsedImport;
+    byId("import-settings").disabled = blocked || !parsedImport?.applied.length;
     byId("copy-settings").disabled = busy || copying || !text.trim();
     byId("clear-settings-json").disabled = busy || copying || !text.length;
     byId("settings-json").disabled = busy && ["import", "export"].includes(pendingState);
+  }
+  async function confirmChange(message) {
+    const dialog = byId("confirm-dialog");
+    if (typeof dialog.showModal !== "function") return confirm(message);
+    byId("confirm-message").textContent = message;
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = value => { if (settled) return; settled = true; dialog.onclose = null; dialog.close(); resolve(value); };
+      byId("confirm-accept").onclick = () => finish(true);
+      byId("confirm-cancel").onclick = () => finish(false);
+      dialog.oncancel = event => { event.preventDefault(); finish(false); };
+      dialog.onclose = () => finish(false);
+      dialog.showModal(); byId("confirm-cancel").focus();
+    });
   }
   let state, selected = location.hash === "#authors" ? "authors" : location.hash === "#tags" ? "tags" : "settings", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
   function selectView(name, focus = false) {
@@ -174,6 +192,7 @@
     const previous = state?.selectedTagGroupId;
     if (previous) draft(previous).tag = byId("tag-input").value;
     state = core.readSettings(value);
+    document.querySelector("html").setAttribute("data-theme", core.themeOf(state));
     // 背景処理が正常項目と一緒に返した診断を、再正規化で消さない。
     if (typeof value?.tagWarning === "string" && value.tagWarning) state.tagWarning = value.tagWarning;
     if (value?.groupSelectionInvalid) state.groupSelectionInvalid = true;
@@ -192,7 +211,7 @@
     if (core.usesTags(state) && selected === "intro") selected = "tags";
     for (const [field, id] of Object.entries(fields)) {
       if (dirty.has(field)) continue;
-      if (["noteUserId", "mode"].includes(field)) byId(id).value = state[field];
+      if (["noteUserId", "mode", "theme"].includes(field)) byId(id).value = state[field];
       else byId(id).checked = state[field];
     }
     byId("home-menu").hidden = false;
@@ -252,7 +271,7 @@
       if (options.rename && draft(options.rename.groupId).name === options.rename.name) draft(options.rename.groupId).nameDirty = false;
       show(before === revision ? result : state);
       byId("status").textContent = "保存しました。";
-      if (options.kind === "import") byId("transfer-status").textContent = "設定を読み込みました。各画面へ反映しました。";
+      if (options.kind === "import") { byId("transfer-status").textContent = "設定を読み込みました。各画面へ反映しました。"; renderImportReport(result.importReport ?? options.importReport, true); }
       if (options.off) location.assign("https://note.com/");
       if (options.focusTagInput && core.usesTags(state)) byId("tag-input").focus();
       if (options.focusGroup) byId(options.focusGroup[0]).querySelector(`[data-group-id="${options.focusGroup[1]}"]`)?.focus();
@@ -273,7 +292,7 @@
   byId("settings").onsubmit = event => {
     event.preventDefault();
     const patch = {};
-    for (const field of dirty) patch[field] = ["noteUserId", "mode"].includes(field) ? byId(fields[field]).value : byId(fields[field]).checked;
+    for (const field of dirty) patch[field] = ["noteUserId", "mode", "theme"].includes(field) ? byId(fields[field]).value : byId(fields[field]).checked;
     try { if (Object.hasOwn(patch, "noteUserId")) patch.noteUserId = core.normalizeUserId(patch.noteUserId); }
     catch (error) { byId("status").textContent = error.message; byId("note-user").focus(); return; }
     void perform(() => platform.save(patch), { kind: "settings" });
@@ -330,7 +349,7 @@
   };
   byId("export-settings").onclick = async () => {
     if (byId("export-settings").disabled) return;
-    if (byId("settings-json").value && !confirm("テキストエリアの内容を、保存済み設定のJSONで置き換えますか？")) return;
+    if (byId("settings-json").value && !await confirmChange("テキストエリアの内容を、保存済み設定のJSONで置き換えますか？")) return;
     busy = true; pendingState = "export"; controls();
     const before = revision;
     try {
@@ -352,16 +371,12 @@
     } catch { byId("transfer-status").textContent = "コピーできませんでした。テキストエリアから手動でコピーしてください。"; }
     finally { copying = false; transferControls(); }
   };
-  byId("import-settings").onclick = () => {
+  byId("import-settings").onclick = async () => {
     transferControls();
     if (byId("import-settings").disabled) return;
-    const json = byId("settings-json").value, expectedToken = core.settingsToken(state);
-    const version = JSON.parse(json).schemaVersion;
-    let oldFormat = (version === 1 ? " このJSONには作者の表示設定がなく、現在の作者設定も解除されます。" : "") +
-      (version < 5 && state.tagGroups.some(g => g.tags.some(item => typeof item !== "string")) ? " このJSONには作者・マガジンのお気に入りが含まれないため、現在登録されている作者・マガジンのお気に入りも解除されます。" : "");
-    if (version < 6 && state.tagGroups.some(g => g.tags.some(item => item?.type === "membership"))) oldFormat += " このJSONにはメンバーシップのお気に入りが含まれないため、現在のメンバーシップのお気に入りも解除されます。";
-    if (!confirm(`現在の設定とお気に入り・作者の表示設定をすべて置き換えます。未保存の入力も破棄します。${oldFormat}読み込みますか？`)) return;
-    void perform(() => platform.importSettings({ json, expectedToken }), { kind: "import" });
+    const json = byId("settings-json").value, expectedToken = core.settingsToken(state), report = parsedImport;
+    if (!await confirmChange(`有効な${report.applied.length}項目を適用します。指定のない項目と不正な項目の現在値は維持します。指定された一覧は有効な内容で置き換えます。お気に入りはタグ・作者・マガジン・メンバーシップ、作者の表示設定を含みます。明示された空配列は一覧を解除します。未保存の入力は破棄します。読み込みますか？`)) return;
+    void perform(() => platform.importSettings({ json, expectedToken }), { kind: "import", importReport: report });
   };
   platform.subscribe(value => { revision++; show(value); });
   void refresh();
