@@ -121,7 +121,7 @@
   function favoriteUrl(value) { return typeof value === "string" ? tagUrl(value) : value.type === "membership" ? `${profileUrl(value.userId)}/membership` : value.type === "magazine" ? `${profileUrl(value.userId)}/m/${value.magazineId}` : profileUrl(value.userId); }
   function authorSearchUrl(userId) {
     const url = new URL("https://note.com/search");
-    for (const [key, value] of [["q", `from:@${authorId(userId)} `], ["context", "note"], ["mode", "search"], ["autofocus", "1"], ["sort", "new"]]) url.searchParams.set(key, value);
+    for (const [key, value] of [["q", `from:@${authorId(userId)} `], ["context", "note"], ["mode", "search"], ["sort", "new"]]) url.searchParams.set(key, value);
     return url.href;
   }
   function searchedAuthor(url) {
