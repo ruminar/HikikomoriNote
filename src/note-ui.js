@@ -1152,9 +1152,8 @@
           articleMobile.setAttribute("aria-label", "記事ナビゲーション"); panel.append(articleMobile);
         }
         // 同じ操作部品を移し、コピー中の状態と前後記事キャッシュを維持する。
-        for (const node of [articleFollowing, articleAuthor, articleAuthorSearch, articleActions]) {
-          if (node && node.parentElement !== articleMobile) articleMobile.append(node);
-        }
+        const ordered = [articleFollowing, articleAuthor, articleAuthorSearch, articleActions].filter(Boolean);
+        if (ordered.some((node, index) => articleMobile.children[index] !== node)) articleMobile.append(...ordered);
       } else {
         for (const node of [articleFollowing, articleAuthor, articleAuthorSearch, articleActions]) {
           if (node && node.parentElement !== doc.body) doc.body.append(node);

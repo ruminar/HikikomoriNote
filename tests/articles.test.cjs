@@ -33,7 +33,7 @@ test('記事の狭幅メニューはTL・作者・作者検索・前後・全文
 });
 test('記事メニューは3モードで使え重度のみTLなし、公式ヘッダや記事枠が不明なら出さない',()=>{
  const f=articleCopyUi({header:true,avatar:true,wide:false});
- for(const mode of ['normal','social','severe']){f.update(undefined,{mode});const nav=mobilePanel(f).querySelector('nav');assert.equal(nav.children[0].textContent,mode==='severe'?'著者':'フォロー中のTL');assert.ok(f.button);assert.equal(mobileToggle(f).isConnected,true);}
+ for(const mode of ['normal','social','severe','normal']){f.update(undefined,{mode});const nav=mobilePanel(f).querySelector('nav');assert.equal(nav.children[0].textContent,mode==='severe'?'著者':'フォロー中のTL');assert.ok(f.button);assert.equal(mobileToggle(f).isConnected,true);}
  const g=articleCopyUi({header:false,wide:false});assert.equal(mobileToggle(g),null);assert.equal(Boolean(g.wrapper),false);
  f.doc.getElementById('note-article').hidden=true;f.update();assert.equal(mobileToggle(f),null);assert.equal(Boolean(f.wrapper),false);
 });
