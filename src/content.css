@@ -245,12 +245,12 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 /* 記事の狭幅メニューでは、固定左メニューと同じ操作部品を通常配置にする。 */
 .hikikomori-note-article-mobile { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; min-width: 0; }
 .hikikomori-note-article-mobile > :is(a, .hikikomori-note-article-actions) {
-  display: block; position: static; box-sizing: border-box; width: 100%; max-height: none; margin: 0;
+  position: static; box-sizing: border-box; width: 100%; max-height: none; margin: 0;
 }
-.hikikomori-note-article-mobile > a { min-height: 44px; }
+.hikikomori-note-article-mobile > a { display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 44px; }
 .hikikomori-note-article-mobile > .hikikomori-note-article-following { grid-column: 1 / -1; }
 .hikikomori-note-article-mobile > .hikikomori-note-article-author { display: flex; }
 .hikikomori-note-article-mobile > .hikikomori-note-article-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; grid-column: 1 / -1; overflow: visible; }
-.hikikomori-note-article-mobile .hikikomori-note-article-actions :is(a, button) { min-height: 44px; }
+.hikikomori-note-article-mobile .hikikomori-note-article-actions :is(a, button) { display: flex; align-items: center; justify-content: center; min-height: 44px; }
 .hikikomori-note-article-mobile .hikikomori-note-article-actions > :is(a, button) { margin: 0; min-width: 0; }
 .hikikomori-note-article-mobile .hikikomori-note-article-actions > :is(button, span) { grid-column: 1 / -1; }
