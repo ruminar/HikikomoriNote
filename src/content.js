@@ -12,6 +12,9 @@
   }
   const noteUi = globalThis.HikikomoriNoteUi?.create(document, window, {
     settingsUrl: () => homeDestination(),
+    loadArticleAdjacent: (url, signal) => globalThis.HikikomoriNoteArticles.adjacent(url, fetch,
+      signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000)),
+    copyArticle: (article, publishedAt) => navigator.clipboard.writeText(globalThis.HikikomoriNoteArticles.copyText(article, publishedAt)),
     async addCurrentMembership(groupId, userId, displayName) {
       const before = revision;
       const value = await platform.addCurrentMembership(groupId, userId, displayName);

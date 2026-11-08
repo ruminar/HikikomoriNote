@@ -2,6 +2,7 @@
 class Element {
   constructor(tag, document) { this.tagName=tag.toUpperCase(); this.ownerDocument=document; this.children=[]; this.parentElement=null; this.attributes=new Map(); this.dataset={}; this.listeners={}; this.value=""; this.checked=false; this.disabled=false; this.hidden=false; this.nodeType=1; this.width=180; this._text=""; }
   set textContent(text) { this.replaceChildren(); this._text=String(text); }
+  get childNodes() { return [...(this._text ? [{ nodeType: 3, nodeValue: this._text, parentElement: this }] : []), ...this.children]; }
   get textContent() { return this._text+this.children.map(child=>child.textContent).join(""); }
   get className() { return this.getAttribute("class")||""; } set className(value){this.setAttribute("class",value);}
   get classList(){return {contains:value=>this.className.split(/\s+/).includes(value),add:value=>{if(!this.className.split(/\s+/).includes(value))this.className=(this.className+' '+value).trim();},remove:value=>{this.className=this.className.split(/\s+/).filter(item=>item!==value).join(' ');}};}

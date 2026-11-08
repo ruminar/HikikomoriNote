@@ -206,7 +206,7 @@
     }
     const authorControls = createAuthorControls(doc, win, actions, profileSlot);
     let host, menu, signature;
-    let articleFollowing;
+    let articleFollowing, articleActions, articleActionsKey, articleAdjacentState, articleMobile;
     let articleAuthor, articleAuthorSearch, authorSignature;
     let questionFollowing, questionAuthor, questionSelf, questionAuthorSignature;
     let searchAuthorInfo, searchAuthorDirty = true;
@@ -775,7 +775,7 @@
           const container = profile.parentElement;
           if (profile.closest("article") || profile.closest('[id="note-body"]') ||
               container?.tagName !== "DIV" || !["fixed", "top-24", "left-8"].every(name => container.classList.contains(name))) continue;
-          const offset = articleAuthorSearch?.isConnected
+          const offset = articleActions?.isConnected ? core.usesFollowing(currentSettings) ? "article-actions" : "article-actions-only" : articleAuthorSearch?.isConnected
             ? articleFollowing?.isConnected ? "author-search" : "author-search-only"
             : articleAuthor?.isConnected && articleFollowing?.isConnected ? "author" : "following";
           if (container.getAttribute(sideProfileOffset) !== offset) container.setAttribute(sideProfileOffset, offset);
@@ -968,12 +968,165 @@
         doc.body.append(questionSelf);
       }
     }
+    function clearArticleActions() {
+      articleActions?.remove(); articleActions = undefined; articleActionsKey = undefined;
+      articleAdjacentState?.controller?.abort(); articleAdjacentState = undefined;
+    }
+    function articleAdjacentSource(url) {
+      try {
+        const source = globalThis.HikikomoriNoteArticles.adjacentPage(url);
+        const article = doc.querySelector('article[id="note-article"]'), bodies = article?.querySelectorAll('[id="note-body"]');
+        const body = bodies?.length === 1 ? bodies[0] : null, region = body?.closest('[data-note-key]');
+        return body?.getAttribute('data-name') === 'body' && visible(body) && article.contains(region) &&
+          region?.getAttribute('data-note-key') === source.articleId ? source : null;
+      } catch { return null; }
+    }
+    function articleAdjacent(url) {
+      const found = { previous: [], next: [] }, result = {};
+      let current;
+      try { current = globalThis.HikikomoriNoteArticles.page(url); } catch { return result; }
+      if (!articleAdjacentSource(url)) return result;
+      const article = doc.querySelector('article[id="note-article"]'), body = article?.querySelector('[id="note-body"]');
+      if (body?.closest('[data-note-key]')?.getAttribute('data-note-key') !== current.articleId) return result;
+      for (const card of doc.querySelectorAll('div[class~="basis-1/2"]')) {
+        if (!hasClasses(card, ["relative", "flex", "min-w-0", "items-center", "gap-2", "py-4"]) ||
+            !hasClasses(card.parentElement, ["flex"]) || !visible(card) || card.closest('[id="note-body"]') || card.closest(`[${owned}]`) ||
+            (article.closest("main") && card.closest("main") !== article.closest("main"))) continue;
+        const scope = card.closest('[data-note-key]');
+        if (scope && scope.getAttribute('data-note-key') !== current.articleId) continue;
+        const text = [...card.children].find(n => n.tagName === "DIV" && n.classList.contains("min-w-0"));
+        const paragraphs = text && [...text.children].filter(n => n.tagName === "P");
+        if (paragraphs?.length !== 2) continue;
+        const label = paragraphs[0].textContent.trim(), direction = label === "前の記事" ? "previous" : label === "次の記事" ? "next" : null;
+        const links = [...card.children].filter(n => n.tagName === "A" && hasClasses(n, ["absolute", "inset-0"]));
+        if (!direction || links.length !== 1) continue;
+        const link = links[0], title = paragraphs[1].textContent.trim();
+        if (!title || link.getAttribute("title") !== title || link.getAttribute("aria-label") !== title || link.getAttribute("target") !== "_self") continue;
+        try {
+          const target = globalThis.HikikomoriNoteArticles.adjacentPage(new URL(link.getAttribute("href"), url).href);
+          if (target.url.split("?")[0] !== current.url) found[direction].push({ url: target.url, title });
+        } catch { /* 記事以外や外部サイトへのリンクは使わない。 */ }
+      }
+      for (const direction of ["previous", "next"]) if (found[direction].length === 1) result[direction] = found[direction][0];
+      return result;
+    }
+    function resolvedArticleAdjacent(url) {
+      const source = articleAdjacentSource(url);
+      if (!source) return {};
+      const cached = articleAdjacentState?.url === source.url ? articleAdjacentState.value : null;
+      return { ...cached, ...articleAdjacent(url) };
+    }
+    function syncArticleAdjacent(wrapper, url) {
+      const source = articleAdjacentSource(url);
+      if (source && typeof actions.loadArticleAdjacent === "function" && articleAdjacentState?.url !== source.url) {
+        articleAdjacentState?.controller?.abort();
+        const controller = typeof win.AbortController === "function" ? new win.AbortController() : null;
+        const state = { url: source.url, value: {}, loading: true, controller }; articleAdjacentState = state;
+        Promise.resolve().then(() => {
+          if (disposed || articleAdjacentState !== state || state.controller?.signal.aborted) return {};
+          return actions.loadArticleAdjacent(source.url, state.controller?.signal);
+        }).then(value => {
+          if (!disposed && articleAdjacentState === state && articleAdjacentSource(win.location?.href || currentUrl)?.url === state.url) { state.value = value; state.loading = false; }
+        }, () => {
+          if (articleAdjacentState === state) { state.loading = false; state.failed = true; }
+        }).then(() => {
+          if (!disposed && articleAdjacentState === state && articleActions?.isConnected) syncArticleAdjacent(articleActions, currentUrl);
+        });
+      }
+      const adjacent = resolvedArticleAdjacent(url);
+      for (const link of wrapper.querySelectorAll('a[data-hikikomori-note-adjacent]')) {
+        const target = adjacent[link.getAttribute('data-hikikomori-note-adjacent')];
+        if (target) {
+          if (link.getAttribute("href") !== target.url) link.setAttribute("href", target.url);
+          if (link.getAttribute("title") !== target.title) link.setAttribute("title", target.title);
+          if (link.hasAttribute("aria-disabled")) link.removeAttribute("aria-disabled");
+        } else {
+          if (link.hasAttribute("href")) link.removeAttribute("href");
+          if (link.getAttribute("aria-disabled") !== "true") link.setAttribute("aria-disabled", "true");
+          const title = articleAdjacentState?.url === source?.url && articleAdjacentState?.loading ? "前後の記事を取得しています…" :
+            articleAdjacentState?.url === source?.url && articleAdjacentState?.failed ? "前後の記事を取得できませんでした。ページを再読み込みしてください" : "前後の記事のリンクがありません";
+          if (link.getAttribute("title") !== title) link.setAttribute("title", title);
+        }
+      }
+    }
+    function articlePublicationDate() {
+      const region = doc.querySelector('article[id="note-article"]')?.querySelector('[id="note-body"]')?.closest('[data-note-key]');
+      const dates = new Set();
+      for (const time of region?.querySelectorAll("time") || []) {
+        if (time.closest('[id="note-body"]') || !visible(time)) continue;
+        const value = time.getAttribute("datetime") || "", day = value.slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}(?:T|$)/.test(value) || !Number.isFinite(Date.parse(value))) continue;
+        if (new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day) dates.add(day);
+      }
+      return dates.size === 1 ? [...dates][0] : "";
+    }
+    function syncArticleActions(show, url) {
+      if (!show || !core.isArticle(url) || typeof actions.copyArticle !== "function" || !globalThis.HikikomoriNoteArticles) { clearArticleActions(); return; }
+      let key;
+      try { key = globalThis.HikikomoriNoteArticles.adjacentPage(url).url; }
+      catch {
+        try { key = globalThis.HikikomoriNoteArticles.page(url).url + "|invalid-context"; }
+        catch { clearArticleActions(); return; }
+      }
+      if (key !== articleActionsKey) { clearArticleActions(); articleActionsKey = key; }
+      if (articleActions?.isConnected) {
+        if (core.usesFollowing(currentSettings)) articleActions.removeAttribute("data-hikikomori-note-actions-only");
+        else articleActions.setAttribute("data-hikikomori-note-actions-only", "");
+        syncArticleAdjacent(articleActions, url); return;
+      }
+      const wrapper = doc.createElement("div"), copy = doc.createElement("button"), status = doc.createElement("span");
+      wrapper.setAttribute(owned, ""); wrapper.className = "hikikomori-note-article-actions";
+      if (!core.usesFollowing(currentSettings)) wrapper.setAttribute("data-hikikomori-note-actions-only", "");
+      copy.type = "button"; copy.textContent = "記事全文を取得";
+      copy.setAttribute("title", "現在閲覧できる記事のタイトル・著者名・投稿日・URL・本文をクリップボードへコピーします");
+      status.setAttribute("role", "status");
+      const articles = globalThis.HikikomoriNoteArticles;
+      copy.onclick = async () => {
+        if (disposed || copy.disabled || !wrapper.isConnected || !currentSettings?.enabled) return;
+        const targetUrl = win.location?.href || currentUrl;
+        const sameArticle = () => {
+          try { return wrapper.isConnected && articleActions === wrapper && articles.page(win.location?.href || currentUrl).url === articles.page(targetUrl).url; }
+          catch { return false; }
+        };
+        copy.disabled = true; status.textContent = "記事を取得しています…";
+        try {
+          const article = articles.extract(doc, win, targetUrl);
+          try { await actions.copyArticle(article, articlePublicationDate()); }
+          catch { throw new Error("クリップボードへのコピーに失敗しました。ページを選択してから、もう一度お試しください。"); }
+          if (sameArticle()) status.textContent = "記事全文をクリップボードにコピーしました。";
+        } catch (error) { if (sameArticle()) status.textContent = error.message || "記事を取得できませんでした。コピーは行いません。"; }
+        finally { copy.disabled = false; }
+      };
+      for (const [direction, text] of [["previous", "◀ 前の記事"], ["next", "次の記事 ▶"]]) {
+        const link = doc.createElement("a"); link.textContent = text; link.setAttribute("data-hikikomori-note-adjacent", direction);
+        link.setAttribute("target", "_self"); link.setAttribute("role", "link");
+        link.onclick = event => {
+          const source = win.location?.href || currentUrl;
+          const target = !disposed && currentSettings?.enabled && wrapper.isConnected && resolvedArticleAdjacent(source)[direction];
+          if (!target || target.url !== link.getAttribute("href")) { event.preventDefault(); if (!disposed && wrapper.isConnected) syncArticleAdjacent(wrapper, source); }
+        };
+        wrapper.append(link);
+      }
+      wrapper.append(copy, status); doc.body.append(wrapper); articleActions = wrapper;
+      syncArticleAdjacent(wrapper, url);
+    }
     function syncArticleFollowing(settings, url) {
       const article = doc.querySelector('article[id="note-article"]');
-      const show = settings.enabled && (core.isArticle(url) || core.isPreviewArticle(url)) &&
-        win.matchMedia("(min-width: 1100px)").matches && article && visible(article) &&
-        article.getBoundingClientRect().left >= 228 && doc.body;
-      if (!show) { articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor(); syncSideProfiles(false); return; }
+      const articlePage = core.isArticle(url) || core.isPreviewArticle(url);
+      const eligible = settings.enabled && articlePage && article && visible(article) && doc.body;
+      const desktop = eligible && win.matchMedia("(min-width: 1100px)").matches && article.getBoundingClientRect().left >= 228;
+      if (articleMobile && (desktop || !eligible || !articleMobile.isConnected || !mobile || logoContainer(mobile.logo) !== mobile.parent)) {
+        for (const node of [articleFollowing, articleAuthor, articleAuthorSearch, articleActions]) {
+          if (node && node.parentElement !== doc.body) doc.body.append(node);
+        }
+      }
+      const panel = articlePage ? syncMobile(Boolean(eligible && !desktop), url) : null;
+      const show = eligible && (desktop || panel);
+      syncArticleActions(show, url);
+      if (!show) {
+        articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor();
+        articleMobile?.remove(); articleMobile = undefined; syncSideProfiles(false); return;
+      }
       if (!core.usesFollowing(settings)) { articleFollowing?.remove(); articleFollowing = undefined; }
       else if (!articleFollowing?.isConnected) {
         articleFollowing = doc.createElement("a");
@@ -992,7 +1145,23 @@
         if (articleFollowing?.isConnected) articleAuthorSearch.classList.remove("hikikomori-note-article-author-search-only");
         else articleAuthorSearch.classList.add("hikikomori-note-article-author-search-only");
       }
-      syncSideProfiles(Boolean(articleFollowing?.isConnected || articleAuthor?.isConnected));
+      if (panel) {
+        if (!articleMobile?.isConnected || articleMobile.parentElement !== panel) {
+          articleMobile?.remove(); articleMobile = doc.createElement("nav"); articleMobile.setAttribute(owned, "");
+          articleMobile.className = "hikikomori-note-article-mobile";
+          articleMobile.setAttribute("aria-label", "記事ナビゲーション"); panel.append(articleMobile);
+        }
+        // 同じ操作部品を移し、コピー中の状態と前後記事キャッシュを維持する。
+        for (const node of [articleFollowing, articleAuthor, articleAuthorSearch, articleActions]) {
+          if (node && node.parentElement !== articleMobile) articleMobile.append(node);
+        }
+      } else {
+        for (const node of [articleFollowing, articleAuthor, articleAuthorSearch, articleActions]) {
+          if (node && node.parentElement !== doc.body) doc.body.append(node);
+        }
+        articleMobile?.remove(); articleMobile = undefined;
+      }
+      syncSideProfiles(Boolean(desktop && (articleFollowing?.isConnected || articleAuthor?.isConnected || articleActions?.isConnected)));
     }
     function isRecommendations(element) {
       if (element.tagName !== "DIV" || !element.classList.contains("pt-6") ||
@@ -1467,6 +1636,7 @@
       syncPaidCards(settings, url);
       syncHomePaidRecommendations(settings, url);
       syncProfilePromotions(settings, url);
+      if (core.isArticle(url) || core.isPreviewArticle(url)) { restore(); pruneProfileLayout(); return; }
       if (!settings.enabled || !page || core.membershipPage(url) || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.modeOf(settings) !== "social")) { removeMobile(); restore(); pruneProfileLayout(); return; }
       const common = ["following", "tag", "search", "topic"].includes(page.type);
       const officialAside = common && (navigationSidebars(doc)[0] || [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky")));
@@ -1628,7 +1798,9 @@
         syncSearchClear(false);
         articleFollowing?.remove();
         articleFollowing = undefined;
+        clearArticleActions();
         clearArticleAuthor();
+        articleMobile?.remove(); articleMobile = undefined;
         syncSideProfiles(false);
         for (const profile of sideProfileFollowRoots) profile.removeAttribute(sideProfileFollowHidden);
         sideProfileFollowRoots.clear();

@@ -230,3 +230,24 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
   }
 }
 [data-hikikomori-note-like-hidden] { display: none !important; }
+
+/* 公開記事の前後移動と、利用者が指定した可視本文のコピー。 */
+.hikikomori-note-article-actions { position: fixed; top: 232px; left: 12px; width: 200px; z-index: 100; max-height: min(200px, calc(100vh - 244px)); overflow-y: auto; font: inherit; font-size: 14px; }
+.hikikomori-note-article-actions[data-hikikomori-note-actions-only] { top: 184px; max-height: min(200px, calc(100vh - 196px)); }
+.hikikomori-note-article-actions button, .hikikomori-note-article-actions a { display: block; box-sizing: border-box; width: 100%; min-height: 36px; padding: 8px 12px; border: 1px solid rgba(128,128,128,.35); border-radius: 8px; color: var(--color-text-primary, inherit); background: var(--color-surface-normal, transparent); cursor: pointer; font: inherit; text-align: center; text-decoration: none; }
+.hikikomori-note-article-actions > :is(a,button) + :is(a,button) { margin-top: 8px; }
+.hikikomori-note-article-actions a[aria-disabled="true"], .hikikomori-note-article-actions button:disabled { opacity: .5; cursor: default; }
+.hikikomori-note-article-actions :is(a,button):focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.hikikomori-note-article-actions span { display: block; white-space: normal; overflow-wrap: anywhere; }
+[data-hikikomori-note-side-profile-offset="article-actions"] { top: 448px !important; max-height: calc(100vh - 464px); overflow-y: auto; }
+[data-hikikomori-note-side-profile-offset="article-actions-only"] { top: 400px !important; max-height: calc(100vh - 416px); overflow-y: auto; }
+@media(max-width:1099px) { .hikikomori-note-article-actions { display: none; } }
+/* 記事の狭幅メニューでは、固定左メニューと同じ操作部品を通常配置にする。 */
+.hikikomori-note-article-mobile { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: 0; }
+.hikikomori-note-article-mobile > :is(a, .hikikomori-note-article-actions) {
+  display: block; position: static; box-sizing: border-box; width: 100%; max-height: none; margin: 0;
+}
+.hikikomori-note-article-mobile > a { min-height: 44px; }
+.hikikomori-note-article-mobile > .hikikomori-note-article-author { display: flex; }
+.hikikomori-note-article-mobile > .hikikomori-note-article-actions { overflow: visible; }
+.hikikomori-note-article-mobile .hikikomori-note-article-actions :is(a, button) { min-height: 44px; }
