@@ -2390,3 +2390,68 @@ test('ログイン済み本体は対応する公式メニューを確認し、jo
  f.ui.update(settings,url+'/join');assert.equal(Boolean(qaAuthor(f)),false);
  f.ui.update(settings,url);assert.equal(Boolean(qaAuthor(f)),true);f.ui.stop();assert.equal(Boolean(qaAuthor(f)),false);
 });
+// 未ログイン時もお気に入りへ戻れる帰還リンク。サンプル個人情報は使わない。
+const guestReturnUrl='https://note.com/search?q=&context=note&mode=search&sort=new';
+function guestAccountHeader(f){
+ const header=f.doc.createElement('header');header.setAttribute('data-header-state','navbar');
+ const logoRow=f.doc.createElement('div'),logo=f.doc.createElement('a'),icon=f.doc.createElement('svg');logo.href='https://note.com/';icon.setAttribute('role','img');icon.setAttribute('aria-label','note');logo.append(icon);logoRow.append(logo);header.append(logoRow);
+ const nav=f.doc.createElement('nav');nav.setAttribute('aria-label','アカウント');
+ const login=f.doc.createElement('a'),signup=f.doc.createElement('a');login.href='/login?redirectPath=https%3A%2F%2Fnote.com%2Fsearch';login.textContent='ログイン';signup.href='/signup';signup.textContent='会員登録';nav.append(login,signup);header.append(nav);f.doc.root.prepend(header);
+ return {header,nav,login,signup};
+}
+const returnLink=f=>f.doc.querySelector('a[data-hikikomori-note-following]');
+test('公式ヘッダのログイン・会員登録が揃った場合だけ追加TLリンクを空欄新着検索へ切り替える',()=>{
+ const f=uiFixture(sidebarHtml),g=guestAccountHeader(f),state=f.core.readSettings(groups()),url='https://note.com/search?q=';
+ const official=f.doc.createElement('a');official.href='https://note.com/following';official.textContent='フォロー中';f.doc.querySelector('main').append(official);
+ f.ui.update(state,url);const link=returnLink(f);assert.equal(link.href,guestReturnUrl);assert.equal(link.textContent,'フォロー中のTL');assert.match(link.getAttribute('title'),/未ログイン/);assert.equal(official.href,'https://note.com/following');
+ const before=JSON.stringify(state);g.nav.remove();f.ui.invalidatePaidCards();f.ui.update(state,url);assert.equal(returnLink(f),link);assert.equal(link.href,'https://note.com/following');assert.equal(link.hasAttribute('title'),false);assert.equal(JSON.stringify(state),before);
+});
+test('ヘッダ遅延表示でもクリック直前・修飾クリック・中クリック・右クリック時に現DOMで遷移先を更新する',()=>{
+ const f=uiFixture(sidebarHtml),state=f.core.readSettings(groups());f.ui.update(state,'https://note.com/search');const link=returnLink(f);assert.equal(link.href,'https://note.com/following');const g=guestAccountHeader(f);
+ for(const [type,event] of [['pointerdown',{}],['mousedown',{button:1}],['focus',{}],['contextmenu',{button:2}],['click',{button:0,ctrlKey:true}],['click',{button:0,metaKey:true}],['auxclick',{button:1}]]){
+  g.login.href='/login';const result=link.fire(type,event);assert.equal(link.href,guestReturnUrl);assert.notEqual(result.defaultPrevented,true);
+  g.login.href='/not-login';link.fire(type);assert.equal(link.href,'https://note.com/following');
+ }
+});
+test('ヘッダの再描画・未ログイン表示の消失・ログイン済みとの矛盾は判定結果を保持せず追従する',()=>{
+ const f=uiFixture(sidebarHtml),g=guestAccountHeader(f),state=f.core.readSettings(groups());f.ui.update(state,'https://note.com/search');const link=returnLink(f);assert.equal(link.href,guestReturnUrl);
+ const signed=f.doc.createElement('nav');signed.setAttribute('aria-label','自分のコンテンツや通知');g.header.append(signed);link.fire('click');assert.equal(link.href,'https://note.com/following');signed.hidden=true;link.fire('click');assert.equal(link.href,guestReturnUrl);
+ g.header.remove();link.fire('click');assert.equal(link.href,'https://note.com/following');guestAccountHeader(f);link.fire('click');assert.equal(link.href,guestReturnUrl);
+});
+test('本文・外部リンク・不正ラベル・片側だけ・不可視・拡張UIの未ログイン表示を誤認しない',()=>{
+ const cases=[
+  (f,g)=>g.login.remove(),(f,g)=>g.signup.remove(),(f,g)=>{g.login.href='https://outside.test/login';},(f,g)=>{g.signup.href='https://u:p@note.com/signup';},
+  (f,g)=>{g.signup.textContent='投稿';},(f,g)=>{g.login.href='/login-other';},(f,g)=>{g.nav.setAttribute('aria-label','別の領域');},(f,g)=>{g.header.removeAttribute('data-header-state');},
+  (f,g)=>{g.header.hidden=true;},(f,g)=>{g.signup.hidden=true;},(f,g)=>{g.nav.setAttribute('aria-hidden','true');},(f,g)=>{f.win.getComputedStyle=n=>({display:'block',opacity:n===g.login?'0':'1'});},
+  (f,g)=>{g.header.setAttribute('data-hikikomori-note-owned','');},(f,g)=>{f.doc.querySelector('article').append(g.header);},(f,g)=>{f.win.location={href:'chrome-extension://self/home.html'};}
+ ];
+ for(const mutate of cases){const f=uiFixture(sidebarHtml),g=guestAccountHeader(f);mutate(f,g);f.ui.update(f.core.readSettings(groups()),'https://note.com/search');assert.equal(returnLink(f).href,'https://note.com/following');}
+});
+test('共通ハンバーガーと作者ページにも未ログイン用帰還リンクを適用する',()=>{
+ const f=uiFixture(sidebarHtml),g=guestAccountHeader(f),state=f.core.readSettings(groups());f.doc.querySelector('aside').width=0;f.win.wide=false;f.ui.update(state,'https://note.com/search');assert.equal(returnLink(f).href,guestReturnUrl);assert.ok(returnLink(f).closest('[class="hikikomori-note-mobile-panel"]'));
+ const profile=uiFixture('<aside class="lg:w-96"><div><h1></h1><span data-name="avatar"></span><a href="https://note.com/creator/followings"></a></div></aside>'),h=guestAccountHeader(profile);profile.ui.update(profile.core.readSettings(groups()),'https://note.com/creator');assert.equal(returnLink(profile).href,guestReturnUrl);h.nav.remove();returnLink(profile).fire('click');assert.equal(returnLink(profile).href,'https://note.com/following');
+});
+test('記事・プレビュー・質問箱・メンバーシップ・マガジンのTL導線にも共通適用する',()=>{
+ for(const [make,url] of [[authorFixture,'https://note.com/ruminar/n/n123'],[authorFixture,'https://note.com/preview/n123'],[qaFixture,'https://note.com/qa/nontsu'],[joinNavigationFixture,'https://note.com/nontsu/membership/join'],[magazineNavigationFixture,magazineUrl],[memberHomeNavigationFixture,'https://note.com/akb428/membership']]){
+  const f=make(),g=guestAccountHeader(f),state=f.core.readSettings(groups());f.ui.update(state,url);assert.equal(returnLink(f)?.href,guestReturnUrl,url);g.nav.remove();returnLink(f).fire('click');assert.equal(returnLink(f).href,'https://note.com/following');
+ }
+});
+test('OFF・停止で追加TLリンクを撤去し、外した操作要素に未ログイン判定を残さない',()=>{
+ const f=uiFixture(sidebarHtml),g=guestAccountHeader(f),state=f.core.readSettings(groups());f.ui.update(state,'https://note.com/search');let link=returnLink(f);f.ui.update({...state,enabled:false},'https://note.com/search');assert.equal(returnLink(f),null);assert.equal(link.href,'https://note.com/following');
+ f.ui.update(state,'https://note.com/search');link=returnLink(f);assert.equal(link.href,guestReturnUrl);f.ui.stop();assert.equal(link.href,'https://note.com/following');link.fire('click');assert.equal(link.href,'https://note.com/following');assert.equal(returnLink(f),null);
+});
+
+
+test('DOM変更がない画面同期では未ログインヘッダを再走査せず、変更通知後に一度だけ確認する',()=>{
+ const f=uiFixture(sidebarHtml),g=guestAccountHeader(f),state=f.core.readSettings(groups()),url='https://note.com/search';let scans=0;
+ const query=g.header.querySelectorAll.bind(g.header);g.header.querySelectorAll=selector=>{if(selector==='nav[aria-label="アカウント"]')scans++;return query(selector);};
+ f.ui.update(state,url);assert.equal(returnLink(f).href,guestReturnUrl);scans=0;
+ for(let i=0;i<8;i++)f.ui.update(state,url);assert.equal(scans,0);
+ g.login.textContent='読み込み中';f.ui.invalidatePaidCards();f.ui.invalidatePaidCards();f.ui.update(state,url);assert.equal(scans,1);assert.equal(returnLink(f).href,'https://note.com/following');
+ scans=0;for(let i=0;i<8;i++)f.ui.update(state,url);assert.equal(scans,0);
+ g.login.textContent='ログイン';returnLink(f).fire('click');assert.equal(scans,1);assert.equal(returnLink(f).href,guestReturnUrl);
+});
+test('DOM変更フラグがなくてもURL変更時には現在のヘッダでTL帰還先を再確認する',()=>{
+ const f=uiFixture(sidebarHtml),g=guestAccountHeader(f),state=f.core.readSettings(groups());f.ui.update(state,'https://note.com/search?q=one');assert.equal(returnLink(f).href,guestReturnUrl);
+ g.nav.remove();f.ui.update(state,'https://note.com/search?q=two');assert.equal(returnLink(f).href,'https://note.com/following');
+});

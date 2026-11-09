@@ -168,7 +168,7 @@
       window.navigation?.addEventListener("navigate", onNavigate);
       window.navigation?.addEventListener("currententrychange", checkHome);
       observer = new MutationObserver(scheduleSync);
-      observer.observe(document, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["href", "src", "class", "hidden", "style", "aria-label", "aria-pressed", "data-id", "role", "type", "tabindex", "onclick", "contenteditable"] });
+      observer.observe(document, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["href", "src", "class", "hidden", "style", "aria-hidden", "data-header-state", "aria-label", "aria-pressed", "data-id", "role", "type", "tabindex", "onclick", "contenteditable"] });
       noteUi?.prepareSidebar?.(location.href);
       unsubscribe = platform.subscribe(value => {
         if (stopped) return;

@@ -232,6 +232,65 @@
       return value;
     }
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
+    const followingUrl = "https://note.com/following";
+    const guestFollowingUrl = "https://note.com/search?q=&context=note&mode=search&sort=new";
+    const followingLinks = new Map();
+    let followingLinksDirty = true;
+    function guestHeaderVisible(element) {
+      if (!visible(element) || element.closest(`[${owned}]`)) return false;
+      for (let node = element; node; node = node.parentElement) {
+        const style = win.getComputedStyle(node);
+        if (node.getAttribute("aria-hidden") === "true" || style.opacity === "0" || style.contentVisibility === "hidden") return false;
+      }
+      return true;
+    }
+    function hasGuestHeader() {
+      try { if (new URL(win.location?.href || currentUrl).origin !== "https://note.com") return false; } catch { return false; }
+      const headers = [...doc.querySelectorAll("header")].filter(header => isOfficialNavbar(header) &&
+        !header.closest("article") && !header.closest('[id="note-body"]') && guestHeaderVisible(header));
+      if (headers.some(header => [...header.querySelectorAll('nav[aria-label="自分のコンテンツや通知"]')].some(guestHeaderVisible))) return false;
+      return headers.some(header => [...header.querySelectorAll('nav[aria-label="アカウント"]')].filter(guestHeaderVisible).some(nav => {
+        const hasLink = (path, text) => [...nav.querySelectorAll("a[href]")].some(link => {
+          if (link.textContent.trim() !== text || !guestHeaderVisible(link)) return false;
+          try {
+            const url = new URL(link.getAttribute("href"), "https://note.com");
+            return url.origin === "https://note.com" && !url.username && !url.password && url.pathname.replace(/\/$/, "") === path;
+          } catch { return false; }
+        });
+        return hasLink("/login", "ログイン") && hasLink("/signup", "会員登録");
+      }));
+    }
+    function refreshFollowingLink(link) {
+      const guest = !disposed && currentSettings?.enabled && hasGuestHeader();
+      const destination = guest ? guestFollowingUrl : followingUrl;
+      if (link.getAttribute("href") !== destination) link.setAttribute("href", destination);
+      if (guest) {
+        const title = "未ログインのため検索画面を開きます";
+        if (link.getAttribute("title") !== title) link.setAttribute("title", title);
+      } else if (link.hasAttribute("title")) link.removeAttribute("title");
+    }
+    const followingEvents = ["pointerdown", "mousedown", "focus", "contextmenu", "click", "auxclick"];
+    function followingLink() {
+      const link = doc.createElement("a"), refresh = () => refreshFollowingLink(link);
+      link.textContent = "フォロー中のTL";
+      link.setAttribute("data-hikikomori-note-following", "");
+      for (const event of followingEvents) link.addEventListener(event, refresh);
+      followingLinks.set(link, refresh); refresh();
+      return link;
+    }
+    function releaseFollowingLink(link, refresh) {
+      for (const event of followingEvents) link.removeEventListener(event, refresh);
+      link.setAttribute("href", followingUrl); link.removeAttribute("title");
+      followingLinks.delete(link);
+    }
+    function syncFollowingLinks() {
+      const needsRefresh = followingLinksDirty;
+      followingLinksDirty = false;
+      for (const [link, refresh] of followingLinks) {
+        if (!link.isConnected && link !== articleFollowing) releaseFollowingLink(link, refresh);
+        else if (needsRefresh) refresh();
+      }
+    }
     let favoriteProfile;
     function membershipOwner() {
       const page = core.membershipPage(currentUrl);
@@ -945,9 +1004,8 @@
           (!showFollowing || questionFollowing?.isConnected) && questionAuthorSignature === signature) return;
       clearQuestionAuthor();
       if (showFollowing) {
-        questionFollowing = doc.createElement("a"); questionFollowing.setAttribute(owned, "");
+        questionFollowing = followingLink(); questionFollowing.setAttribute(owned, "");
         questionFollowing.className = "hikikomori-note-question-following";
-        questionFollowing.href = "https://note.com/following"; questionFollowing.textContent = "フォロー中のTL";
         doc.body.append(questionFollowing);
       }
       questionAuthor = doc.createElement("a"); questionAuthor.setAttribute(owned, ""); questionAuthor.className = "hikikomori-note-question-author";
@@ -1129,11 +1187,9 @@
       }
       if (!core.usesFollowing(settings)) { articleFollowing?.remove(); articleFollowing = undefined; }
       else if (!articleFollowing?.isConnected) {
-        articleFollowing = doc.createElement("a");
+        articleFollowing = followingLink();
         articleFollowing.setAttribute(owned, "");
         articleFollowing.className = "hikikomori-note-article-following";
-        articleFollowing.href = "https://note.com/following";
-        articleFollowing.textContent = "フォロー中のTL";
         doc.body.append(articleFollowing);
       }
       syncArticleAuthor(article, url);
@@ -1613,7 +1669,9 @@
       }
       prepareSidebar(url, settings);
       if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
+      if (currentUrl !== url || Boolean(currentSettings?.enabled) !== Boolean(settings.enabled)) followingLinksDirty = true;
       currentSettings = settings; currentUrl = url;
+      syncFollowingLinks();
       prepareProfilePaidAllowance(settings, url);
       syncPinnedHeader(settings, url);
       authorControls.update(settings, url);
@@ -1672,9 +1730,8 @@
           profile.href = destination || `${(actions.settingsUrl?.() || "").split("#")[0]}#settings`;
           menu.append(profile);
         } else {
-          const following = doc.createElement("a"); following.href = "https://note.com/following";
+          const following = followingLink();
           following.className = "hikikomori-note-navigation-following";
-          following.textContent = "フォロー中のTL";
           if (page.type === "following") following.setAttribute("aria-current", "page");
           if (page.type === "profile" && favoriteProfile) {
             const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
@@ -1768,6 +1825,7 @@
     return Object.freeze({
       update, prepareSidebar,
       invalidatePaidCards() {
+        followingLinksDirty = true;
         searchAuthorDirty = true;
         likeVisibility.invalidate();
         authorControls.invalidate();
@@ -1787,6 +1845,7 @@
         sidebarRoots.clear();
         authorControls.stop();
         disposed = true;
+        for (const [link, refresh] of followingLinks) releaseFollowingLink(link, refresh);
         profilePaidAllowance = undefined;
         favoriteProfile?.toggle.remove(); favoriteProfile?.block.remove(); favoriteProfile?.mount?.remove(); favoriteProfile = undefined;
         profileLayout?.root.remove(); profileLayout = undefined;

@@ -20,6 +20,13 @@ function articleCopyUi(options={}) {
 
 const mobileToggle=f=>f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]');
 const mobilePanel=f=>f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');
+test('記事ハンバーガーのヘッダ交換後もTLクリックで未ログイン表示を再確認する',()=>{
+ const f=articleCopyUi({header:true,avatar:true,wide:false});
+ const controls=header=>{const nav=f.doc.createElement('nav');nav.setAttribute('aria-label','アカウント');for(const [path,text]of [['/login','ログイン'],['/signup','会員登録']]){const a=f.doc.createElement('a');a.href=path;a.textContent=text;nav.append(a);}header.append(nav);return nav;};
+ controls(f.doc.querySelector('header'));const link=f.doc.querySelector('a[data-hikikomori-note-following]');link.fire('click');assert.ok(link.href.includes('/search?q='));
+ const old=f.doc.querySelector('header'),header=documentFromHtml('<header data-header-state="navbar"><div><a href="/" target="_self"><svg role="img" aria-label="note"></svg></a></div></header>').root.children[0];old.remove();f.doc.body.prepend(header);f.ui.invalidatePaidCards();f.update();assert.equal(f.doc.querySelector('a[data-hikikomori-note-following]'),link);assert.equal(link.href,'https://note.com/following');
+ controls(header);link.fire('click');assert.ok(link.href.includes('/search?q='));
+});
 test('記事の狭幅メニューはTL・作者・作者検索・前後・全文の順、閉状態で開始しEscapeとリンクで閉じる',async()=>{
  const f=articleCopyUi({header:true,avatar:true,wide:false});const toggle=mobileToggle(f),panel=mobilePanel(f),nav=panel.querySelector('nav');
  assert.ok(toggle);assert.equal(panel.hidden,true);assert.equal(toggle.getAttribute('aria-expanded'),'false');
