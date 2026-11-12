@@ -111,7 +111,7 @@
     tags.forEach((tag, index) => {
       const row = document.createElement("li"); row.className = "tag-row"; row.draggable = true;
       const name = document.createElement("a");
-      name.textContent = typeof tag === "string" ? core.favoriteLabel(tag) : tag.type === "membership" ? `${core.favoriteLabel(tag)} (${tag.userId})` : tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : tag.displayName ? `＠${tag.displayName} (${tag.userId})` : `＠${tag.userId}`;
+      name.textContent = typeof tag === "string" || tag.type === "article" ? core.favoriteLabel(tag) : tag.type === "membership" ? `${core.favoriteLabel(tag)} (${tag.userId})` : tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : tag.displayName ? `＠${tag.displayName} (${tag.userId})` : `＠${tag.userId}`;
       if (["magazine", "membership"].includes(tag?.type)) {
         const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"), path = document.createElementNS(ns, "path");
         svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "20"); svg.setAttribute("height", "20");

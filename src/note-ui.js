@@ -206,7 +206,7 @@
     }
     const authorControls = createAuthorControls(doc, win, actions, profileSlot);
     let host, menu, signature;
-    let articleFollowing, articleActions, articleActionsKey, articleAdjacentState, articleMobile;
+    let articleFollowing, articleActions, articleActionsKey, articleAdjacentState, articleMobile, articleRow;
     let articleAuthor, articleAuthorSearch, authorSignature;
     let questionFollowing, questionAuthor, questionSelf, questionAuthorSignature;
     let searchAuthorInfo, searchAuthorDirty = true;
@@ -347,16 +347,31 @@
       }
       return null;
     }
+    function articleFavoriteOwner() {
+      try {
+        const address = core.articleAddress(currentUrl), article = doc.querySelector('article[id="note-article"]');
+        const bodies = article?.querySelectorAll('[id="note-body"]'), body = bodies?.length === 1 ? bodies[0] : null;
+        const region = body?.closest('[data-note-key]');
+        if (!article || !visible(article) || !region || !article.contains(region) || region.getAttribute('data-note-key') !== address.articleId) return null;
+        const headings = [...article.querySelectorAll('h1')].filter(h => !h.closest('[id="note-body"]') && visible(h));
+        if (headings.length !== 1 || !region.contains(headings[0])) return null;
+        const title = (headings[0].innerText ?? headings[0].textContent).trim().replace(/\s+/g, " ");
+        return { ...core.favoriteArticle({ type: "article", ...address, title }), host: article };
+      } catch { return null; }
+    }
+    function articleFavoriteContext() { return favoriteProfile?.owner.type === "article" ? favoriteProfile : null; }
     function syncFavoriteProfile(settings) {
+      const article = core.isArticle(currentUrl);
       const magazine = core.pageKind(currentUrl)?.type === "magazine";
       const membership = Boolean(core.membershipPage(currentUrl));
       let owner = null;
       if (settings.enabled && core.usesTags(settings)) {
-        if (membership && actions.addCurrentMembership) owner = membershipOwner();
+        if (article && actions.addCurrentArticle) owner = articleFavoriteOwner();
+        else if (membership && actions.addCurrentMembership) owner = membershipOwner();
         else if (magazine && actions.addCurrentMagazine) owner = magazineOwner();
         else if (!magazine && !membership && actions.addCurrentUser) owner = authorControls.profileOwner();
       }
-      if (favoriteProfile && (!owner || owner.type !== favoriteProfile.owner.type || owner.userId !== favoriteProfile.owner.userId || owner.magazineId !== favoriteProfile.owner.magazineId || owner.host !== favoriteProfile.owner.host || !favoriteProfile.block.isConnected)) {
+      if (favoriteProfile && (!owner || owner.type !== favoriteProfile.owner.type || owner.userId !== favoriteProfile.owner.userId || owner.magazineId !== favoriteProfile.owner.magazineId || owner.articleId !== favoriteProfile.owner.articleId || owner.url !== favoriteProfile.owner.url || owner.host !== favoriteProfile.owner.host || !favoriteProfile.block.isConnected)) {
         favoriteProfile.toggle.remove(); favoriteProfile.block.remove(); favoriteProfile.mount?.remove(); favoriteProfile = undefined;
       }
       if (!owner) return;
@@ -364,9 +379,10 @@
         const block = doc.createElement("div"); block.setAttribute(owned, ""); block.className = "hikikomori-note-author-profile hikikomori-note-favorite-profile";
         block.id = "hikikomori-note-favorite-profile"; block.setAttribute("id", block.id); block.hidden = true;
         const toggle = doc.createElement("button"); toggle.type = "button"; toggle.setAttribute(owned, "");
-        toggle.className = "hikikomori-note-favorite-toggle"; toggle.textContent = "＠";
+        toggle.className = "hikikomori-note-favorite-toggle"; toggle.textContent = article ? "&" : "＠";
         if (magazine || membership) { toggle.textContent = ""; toggle.append(favoriteIcon(doc, membership ? "membership" : "magazine")); toggle.classList.add(membership ? "hikikomori-note-membership-toggle" : "hikikomori-note-magazine-toggle"); }
-        const title = membership ? "このメンバーシップをお気に入りに追加" : magazine ? "このマガジンをお気に入りに追加" : "この作者をお気に入りに追加";
+        if (article) block.classList.add("hikikomori-note-article-favorite-profile");
+        const title = article ? "この記事をお気に入りに追加" : membership ? "このメンバーシップをお気に入りに追加" : magazine ? "このマガジンをお気に入りに追加" : "この作者をお気に入りに追加";
         toggle.setAttribute("aria-label", title); toggle.setAttribute("title", title);
         toggle.setAttribute("aria-expanded", "false"); toggle.setAttribute("aria-controls", block.id);
         const label = doc.createElement("label"); label.textContent = "お気に入りに追加　登録先";
@@ -388,7 +404,8 @@
           if (favoriteProfile !== context || context.busy || context.uncertain || button.disabled) return;
           context.busy = true; const groupId = context.groupId, user = context.owner; status.textContent = "保存しています…"; repaint();
           try {
-            if (membership) await actions.addCurrentMembership(groupId, user.userId, user.displayName);
+            if (article) await actions.addCurrentArticle(groupId, user.articleId, user.url, user.title);
+            else if (membership) await actions.addCurrentMembership(groupId, user.userId, user.displayName);
             else if (magazine) await actions.addCurrentMagazine(groupId, user.userId, user.magazineId, user.displayName);
             else await actions.addCurrentUser(groupId, user.userId, user.displayName);
             if (favoriteProfile === context) status.textContent = "お気に入りに追加しました。";
@@ -404,10 +421,11 @@
           finally { context.busy = false; repaint(); }
         };
         block.append(label, button, status, refresh);
+        // 記事フォームは記事メニューの配置確定後に移す。
         if (membership) {
           const mount = doc.createElement("div"); mount.setAttribute(owned, ""); mount.className = "hikikomori-note-membership-controls";
           mount.append(toggle, block); owner.host.append(mount); context.mount = mount;
-        } else if (magazine) owner.host.append(block); else profileSlot(owner, "favorites").append(block);
+        } else if (magazine) owner.host.append(block); else if (!article) profileSlot(owner, "favorites").append(block);
         favoriteProfile = context;
       }
       const context = favoriteProfile; context.owner = owner;
@@ -419,9 +437,10 @@
       }
       context.select.value = context.groupId;
       const group = settings.tagGroups.find(g => g.id === context.groupId);
-      const key = core.favoriteKey(magazine || membership ? owner : { type: "user", userId: owner.userId });
-      const registered = group?.tags.some(item => core.favoriteKey(item) === key);
-      context.button.textContent = context.busy ? "保存中…" : registered ? "登録済み" : membership ? "このメンバーシップを追加" : magazine ? "このマガジンを追加" : "この作者を追加";
+      const key = core.favoriteKey(article || magazine || membership ? owner : { type: "user", userId: owner.userId });
+      const registeredGroup = article ? settings.tagGroups.find(g => g.tags.some(item => core.favoriteKey(item) === key)) : null;
+      const registered = article ? Boolean(registeredGroup) : group?.tags.some(item => core.favoriteKey(item) === key);
+      context.button.textContent = context.busy ? "保存中…" : registered ? article ? `${core.groupName(registeredGroup)}に登録済み` : "登録済み" : article ? "この記事を追加" : membership ? "このメンバーシップを追加" : magazine ? "このマガジンを追加" : "この作者を追加";
       context.button.disabled = !group || registered || context.busy || context.uncertain || Boolean(settings.tagWarning);
       context.select.disabled = context.busy || context.uncertain || Boolean(settings.tagWarning);
       context.refresh.disabled = context.busy || !actions.refresh;
@@ -1174,7 +1193,7 @@
       const eligible = settings.enabled && articlePage && article && visible(article) && doc.body;
       const desktop = eligible && win.matchMedia("(min-width: 1100px)").matches && article.getBoundingClientRect().left >= 228;
       if (articleMobile && (desktop || !eligible || !articleMobile.isConnected || !mobile || logoContainer(mobile.logo) !== mobile.parent)) {
-        for (const node of [articleFollowing, articleAuthor, articleAuthorSearch, articleActions]) {
+        for (const node of [articleRow || articleFollowing, articleFavoriteContext()?.block, articleAuthor, articleAuthorSearch, articleActions]) {
           if (node && node.parentElement !== doc.body) doc.body.append(node);
         }
       }
@@ -1183,6 +1202,8 @@
       syncArticleActions(show, url);
       if (!show) {
         articleFollowing?.remove(); articleFollowing = undefined; clearArticleAuthor();
+        articleRow?.remove(); articleRow = undefined;
+        articleFavoriteContext()?.block.remove();
         articleMobile?.remove(); articleMobile = undefined; syncSideProfiles(false); return;
       }
       if (!core.usesFollowing(settings)) { articleFollowing?.remove(); articleFollowing = undefined; }
@@ -1191,6 +1212,18 @@
         articleFollowing.setAttribute(owned, "");
         articleFollowing.className = "hikikomori-note-article-following";
         doc.body.append(articleFollowing);
+      }
+      const favorite = articleFavoriteContext();
+      if (favorite && articleFollowing) {
+        if (!articleRow) {
+          articleRow = doc.createElement("div"); articleRow.setAttribute(owned, "");
+          articleRow.className = "hikikomori-note-article-following-row"; doc.body.append(articleRow);
+        }
+        if (favorite.toggle.parentElement !== articleRow) articleRow.prepend(favorite.toggle);
+        if (articleFollowing.parentElement !== articleRow) articleRow.append(articleFollowing);
+      } else {
+        if (articleFollowing?.parentElement === articleRow && articleRow) doc.body.append(articleFollowing);
+        articleRow?.remove(); articleRow = undefined;
       }
       syncArticleAuthor(article, url);
       if (articleAuthor) {
@@ -1208,10 +1241,10 @@
           articleMobile.setAttribute("aria-label", "記事ナビゲーション"); panel.append(articleMobile);
         }
         // 同じ操作部品を移し、コピー中の状態と前後記事キャッシュを維持する。
-        const ordered = [articleFollowing, articleAuthor, articleAuthorSearch, articleActions].filter(Boolean);
+        const ordered = [articleRow || articleFollowing, articleFavoriteContext()?.block, articleAuthor, articleAuthorSearch, articleActions].filter(Boolean);
         if (ordered.some((node, index) => articleMobile.children[index] !== node)) articleMobile.append(...ordered);
       } else {
-        for (const node of [articleFollowing, articleAuthor, articleAuthorSearch, articleActions]) {
+        for (const node of [articleRow || articleFollowing, articleFavoriteContext()?.block, articleAuthor, articleAuthorSearch, articleActions]) {
           if (node && node.parentElement !== doc.body) doc.body.append(node);
         }
         articleMobile?.remove(); articleMobile = undefined;
@@ -1790,7 +1823,7 @@
               const user = tag?.type === "user";
               link.textContent = core.favoriteLabel(tag); link.href = user ? core.authorSearchUrl(tag.userId) : core.favoriteUrl(tag);
               if (["magazine", "membership"].includes(tag?.type)) link.prepend(favoriteIcon(doc, tag.type));
-              link.setAttribute("title", typeof tag === "string" ? core.favoriteLabel(tag) : user ? `${core.authorLabel(tag)}（新着記事を検索）` : `${tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : core.authorLabel(tag)}（新しいタブで開く）`);
+              link.setAttribute("title", typeof tag === "string" || tag.type === "article" ? core.favoriteLabel(tag) : user ? `${core.authorLabel(tag)}（新着記事を検索）` : `${tag.type === "magazine" ? `${core.favoriteLabel(tag)} (${tag.userId}/${tag.magazineId})` : core.authorLabel(tag)}（新しいタブで開く）`);
               if (user) {
                 link.setAttribute("target", "_self"); link.setAttribute("aria-label", `${core.favoriteLabel(tag)}（新着記事を検索）`);
               } else if (typeof tag !== "string") {
@@ -1856,6 +1889,7 @@
         syncSearchClear(false);
         articleFollowing?.remove();
         articleFollowing = undefined;
+        articleRow?.remove(); articleRow = undefined;
         clearArticleActions();
         clearArticleAuthor();
         articleMobile?.remove(); articleMobile = undefined;
