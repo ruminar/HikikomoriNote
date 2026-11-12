@@ -119,7 +119,7 @@
   function homeDestination() {
     const page = core.pageKind(location.href);
     if (core.usesTags(settings) && core.membershipPage(location.href)) return platform.homeUrl() + "#tags";
-    const tags = core.usesTags(settings) && ["following", "tag", "search", "topic", "magazine"].includes(page?.type);
+    const tags = core.usesTags(settings) && (core.isArticle(location.href) || ["following", "tag", "search", "topic", "magazine"].includes(page?.type));
     return platform.homeUrl() + (page?.type === "profile" ? "#authors" : tags ? "#tags" : core.modeOf(settings) === "social" ? "#settings" : "");
   }
   function checkHome() {

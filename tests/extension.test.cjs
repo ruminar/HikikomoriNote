@@ -450,7 +450,7 @@ test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホ�
 test('プロフィールの専用ホーム導線は作者管理へ直行し、記事や検索からは従来の初期画面',async()=>{
  let actions;const f=contentFixture({}, {ui:{create(doc,win,a){actions=a;return {update(){}};}}});await flush();
  assert.equal(actions.settingsUrl(),f.home+'#authors');
- for(const [url,suffix] of [['https://note.com/yeku/n/n123',''],['https://note.com/search?q=AI','#tags']]){f.location.href=url;assert.equal(actions.settingsUrl(),f.home+suffix);f.click();assert.equal(f.moves.at(-1)[1],f.home+suffix);}
+ for(const [url,suffix] of [['https://note.com/yeku/n/n123','#tags'],['https://note.com/search?q=AI','#tags']]){f.location.href=url;assert.equal(actions.settingsUrl(),f.home+suffix);f.click();assert.equal(f.moves.at(-1)[1],f.home+suffix);}
 });
 
 test('社会復帰ではホームのロード・クリック・SPAを奪わず、ダッシュボード制限だけ継続',async()=>{
@@ -473,13 +473,13 @@ test('社会復帰でも検索の記事タブへの新着復帰を行い、タ�
  assert.equal(f.click('https://note.com/tag/AI').defaultPrevented,false);
 });
 
-test('タグメニューを使う通常画面からだけタグ管理へ直行。記事と管理画面は設定を開く',async()=>{
+test('通常の記事とお気に入り表示画面の歯車はお気に入りへ、管理画面は既定の設定を開く',async()=>{
  for(const mode of ['normal','social','severe']){
   let actions;const f=contentFixture({mode},{ui:{create:(doc,win,value)=>{actions=value;return {update(){}};}}});await flush();
-  for(const path of ['/following','/tag/AI','/hashtag/AI','/search?q=AI','/topic/education_learning','/kinokoro/m/m95cee8dfaa5e','/kinokoro/m/m95cee8dfaa5e/archive','/kinokoro/m/m95cee8dfaa5e/hashtag']){
+  for(const path of ['/ruminar/n/n123','/ruminar/n/n123?magazine_key=m1#body','/following','/tag/AI','/hashtag/AI','/search?q=AI','/topic/education_learning','/kinokoro/m/m95cee8dfaa5e','/kinokoro/m/m95cee8dfaa5e/archive','/kinokoro/m/m95cee8dfaa5e/hashtag']){
    f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='normal'?'#tags':mode==='social'?'#settings':''));
   }
-  for(const path of ['/ruminar/n/n123','/dashboard','/settings/account']){f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='social'?'#settings':''));}
+  for(const path of ['/preview/n123','/dashboard','/settings/account']){f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='social'?'#settings':''));}
   f.location.href='https://note.com/yeku';assert.equal(actions.settingsUrl(),f.home+'#authors');
   for(const path of ['/akb428/membership','/akb428/membership/join']){f.location.href='https://note.com'+path;assert.equal(actions.settingsUrl(),f.home+(mode==='normal'?'#tags':'#authors'));}
  }

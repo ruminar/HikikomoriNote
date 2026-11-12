@@ -114,3 +114,9 @@ test('記事タイトル変更を次の登録に反映し、追跡パラメー�
 test('記事なしの書き出しは形式7を維持し、記事を削除しても従来の相互移行を妨げない',async()=>{
  const f=backend();assert.equal(JSON.parse(f.core.exportSettings(f.core.readSettings(f.state))).schemaVersion,7);await f.add();assert.equal(JSON.parse(f.core.exportSettings(f.core.readSettings(f.state))).schemaVersion,8);await f.controller.tag({type:'REMOVE_TAG',groupId:'group1',tag:item});assert.equal(JSON.parse(f.core.exportSettings(f.core.readSettings(f.state))).schemaVersion,7);
 });
+
+
+test('おしゃべりnote形式1の記事と共通設定を読み込み、専用設定を取り込まない',()=>{
+ const f=backend(),r=f.core.inspectSettingsImport(JSON.stringify({format:'oshaberi-note-settings',schemaVersion:1,settings:{theme:'dark',tagGroups:[{id:'group2',name:'Articles',items:[item]}],ollamaUrl:'http://127.0.0.1:11434',ollamaModel:'synthetic-model',ollamaSystemPrompt:'not-imported'}}));assert.deepEqual(plain(r.settings.tagGroups[1].tags),[item]);assert.equal(r.settings.theme,'dark');assert.equal(Object.hasOwn(r.settings,'ollamaUrl'),false);assert.equal(r.ignored.filter(x=>x.path.startsWith('ollama')).length,3);
+ const json=f.core.exportSettings({...f.core.defaultSettings(),...r.settings,tagSchemaVersion:6});assert.equal(JSON.parse(json).schemaVersion,8);
+});
