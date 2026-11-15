@@ -436,6 +436,47 @@ test('プレビューも狭幅・余白不足・OFF・離脱で固定リンク�
 });
 
 const logoHeaderHtml='<header data-header-state="navbar"><div><a href="/" target="_self"><svg role="img" aria-label="note"></svg></a></div></header>';
+const notificationAvatarHtml='<div id="notifications"><ul><li><a href="https://note.com/example"><button id="notice-avatar" data-name="avatar"><span><img alt="通知の作者"></span></button></a><a href="/other"><button id="notice-other" data-name="avatar" title="公式の説明"><img alt="別の作者"></button></a></li></ul></div>';
+test('通知の各作者に名前とID、非表示だけに！を付け、全モード・設定変更・OFFに追従する',()=>{
+ const f=uiFixture(notificationAvatarHtml),settings=f.core.readSettings(groups()),url='https://note.com/following';
+ for(const mode of ['normal','severe','social']){
+  f.ui.update({...settings,mode,authorDisplayRules:[{userId:'EXAMPLE',displayName:'保存名',action:'hide'},{userId:'other',displayName:'',action:'allow'}]},url);
+  assert.equal(f.doc.getElementById('notice-avatar').getAttribute('title'),'　！通知の作者（@example）');
+  assert.equal(f.doc.getElementById('notice-other').getAttribute('title'),'　別の作者（@other）');
+ }
+ f.ui.update({...settings,authorDisplayRules:[]},url);
+ assert.equal(f.doc.getElementById('notice-avatar').getAttribute('title'),'　通知の作者（@example）');
+ assert.equal(f.doc.getElementById('notice-avatar').closest('a').href,'https://note.com/example');
+ f.ui.update({...settings,enabled:false},url);
+ assert.equal(f.doc.getElementById('notice-avatar').getAttribute('title'),null);
+ assert.equal(f.doc.getElementById('notice-other').getAttribute('title'),'公式の説明');
+});
+test('通知の遅延挿入・作者変更をDOM通知後に反映し、定期同期では再走査しない',()=>{
+ const f=uiFixture(''),settings=f.core.readSettings(groups()),url='https://note.com/search';
+ f.ui.update(settings,url);
+ const panel=f.doc.createElement('div');panel.setAttribute('id','notifications');
+ const row=f.doc.createElement('li'),link=f.doc.createElement('a'),button=f.doc.createElement('button'),img=f.doc.createElement('img');
+ link.href='https://note.com/example';button.setAttribute('data-name','avatar');img.setAttribute('alt','初期名');
+ button.append(img);link.append(button);row.append(link);panel.append(row);f.doc.root.append(panel);
+ f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(button.getAttribute('title'),'　初期名（@example）');
+ img.setAttribute('alt','更新名');link.href='https://note.com/other';
+ f.ui.update(settings,url);assert.equal(button.getAttribute('title'),'　初期名（@example）');
+ f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(button.getAttribute('title'),'　更新名（@other）');
+ img.setAttribute('alt','');f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(button.getAttribute('title'),'　other（@other）');
+ panel.remove();f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(button.getAttribute('title'),null);
+ f.doc.root.append(panel);f.ui.invalidatePaidCards();f.ui.update(settings,url);f.ui.stop();assert.equal(button.getAttribute('title'),null);
+});
+test('通知外・記事URL・外部URLは変更せず、公式側が更新したtitleを停止時に壊さない',()=>{
+ const f=uiFixture(notificationAvatarHtml+'<a href="/example"><button id="outside" data-name="avatar"><img alt="通知外"></button></a>'),settings=f.core.readSettings(groups()),url='https://note.com/following';
+ const button=f.doc.getElementById('notice-avatar'),link=button.closest('a');
+ for(const href of ['https://other.test/example','https://note.com/example/n/n123','https://note.com/search','https://user:pass@note.com/example']){
+  link.href=href;f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(button.getAttribute('title'),null);
+ }
+ assert.equal(f.doc.getElementById('outside').getAttribute('title'),null);
+ link.href='https://note.com/example';f.ui.invalidatePaidCards();f.ui.update(settings,url);
+ button.setAttribute('title','公式の新しい説明');f.ui.stop();assert.equal(button.getAttribute('title'),'公式の新しい説明');
+});
+
 test('狭幅の共通メニューはロゴ左のボタンで開閉し、広幅へ戻すと撤去・再狭幅では閉じる',()=>{
  const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings(groups(['AI'])),url='https://note.com/following';
  const aside=f.doc.querySelector('aside');aside.width=0;f.win.wide=false;

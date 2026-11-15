@@ -546,6 +546,41 @@
     const products = new Set();
     const recommendations = new Set();
     const sidebarRoots = new Set();
+    const notificationTitles = new Map();
+    let notificationTitlesDirty = true, notificationRules, notificationEnabled;
+    function restoreNotificationTitle(button, state) {
+      if (button.getAttribute("title") !== state.applied) return;
+      if (state.original === null) button.removeAttribute("title");
+      else button.setAttribute("title", state.original);
+    }
+    function syncNotificationTitles(settings) {
+      const enabled = Boolean(settings.enabled);
+      if (!notificationTitlesDirty && notificationEnabled === enabled && notificationRules === settings.authorDisplayRules) return;
+      notificationTitlesDirty = false; notificationEnabled = enabled; notificationRules = settings.authorDisplayRules;
+      const next = new Map(), panel = enabled ? doc.getElementById("notifications") : null;
+      for (const button of panel?.isConnected ? panel.querySelectorAll('button[data-name="avatar"]') : []) {
+        const link = button.closest("a[href]"), image = button.querySelector("img");
+        if (!link || !panel.contains(link) || !button.closest("li") || button.closest(`[${owned}]`) || !image) continue;
+        try {
+          const address = new URL(link.href), match = /^\/([a-zA-Z0-9_]+)\/?$/.exec(address.pathname);
+          if (address.origin !== "https://note.com" || address.username || address.password || !match) continue;
+          const id = core.authorId(match[1]), name = core.authorName(image.getAttribute("alt") || "") || id;
+          const prefix = core.authorRule(settings, id)?.action === "hide" ? "！" : "";
+          next.set(button, `　${prefix}${name}（@${id}）`);
+        } catch { /* プロフィールと確認できないリンクは変更しない。 */ }
+      }
+      for (const [button, state] of notificationTitles) {
+        if (!next.has(button)) { restoreNotificationTitle(button, state); notificationTitles.delete(button); }
+      }
+      for (const [button, title] of next) {
+        let state = notificationTitles.get(button);
+        if (!state || button.getAttribute("title") !== state.applied) {
+          state = { original: button.getAttribute("title"), applied: title }; notificationTitles.set(button, state);
+        }
+        if (button.getAttribute("title") !== title) button.setAttribute("title", title);
+        state.applied = title;
+      }
+    }
     const rootClass = "hikikomori-note-navigation-root";
     const followingRootClass = "hikikomori-note-following-root";
     const isSidebarGrid = root => sidebarGridClasses.some(name => root.classList.contains(name));
@@ -1699,6 +1734,7 @@
     function update(settings, url) {
       if (disposed) return;
       likeVisibility.update(settings, url);
+      syncNotificationTitles(settings);
       const profilePage = core.pageKind(url);
       if (profileLayout && (profilePage?.type !== "profile" || profilePage.user !== profileLayout.userId ||
           !profileLayout.root.isConnected || Object.values(profileLayout.slots).some(slot => slot.parentElement !== profileLayout.root))) {
@@ -1862,6 +1898,7 @@
     return Object.freeze({
       update, prepareSidebar,
       invalidatePaidCards() {
+        notificationTitlesDirty = true;
         followingLinksDirty = true;
         searchAuthorDirty = true;
         likeVisibility.invalidate();
@@ -1875,6 +1912,8 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        for (const [button, state] of notificationTitles) restoreNotificationTitle(button, state);
+        notificationTitles.clear();
         clearQuestionAuthor();
         searchAuthorInfo = undefined;
         likeVisibility.stop();
