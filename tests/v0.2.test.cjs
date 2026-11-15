@@ -17,6 +17,73 @@ function fixture(initial={},options={}) {
  function restart(){return context.HikikomoriNoteRouting.createController({load:async()=>stored,store:async next=>{if(options.fail)throw Error('save failed');stored=plain(next);writes++;},setRules:async next=>{rules=plain(next);}});}
  return {core:context.HikikomoriNote,controller:restart(),restart,options,get stored(){return stored;},get rules(){return rules;},get writes(){return writes;}};
 }
+function eightGroups(tags=[]){return {tagSchemaVersion:7,tagGroups:Array.from({length:8},(_,i)=>({id:`group${i+1}`,name:'',tags:i===7?tags:[]})),selectedTagGroupId:'group1',groupSelectionRevision:0,tagGroupsRevision:0};}
+test('2段モード保存で旧4グループを8へ一度だけ補完し、初期状態と読取のみは変更しない',async()=>{
+ const f=fixture({...groups(['Keep'])});
+ assert.equal(f.core.defaultSettings().mode,'normal');assert.equal(f.core.defaultSettings().tagGroups.length,4);
+ await f.controller.getState();assert.equal(f.writes,0);
+ const normalized=f.core.readSettings({...f.stored,mode:'normal-double'});
+ assert.equal(normalized.tagSchemaVersion,7);assert.deepEqual(plain(f.core.readSettings(normalized)),plain(normalized));assert.equal(f.writes,0);
+ let state=await f.controller.save({mode:'normal-double'});
+ assert.equal(state.tagGroups.length,8);assert.equal(state.tagWarning,undefined);assert.equal(f.stored.tagSchemaVersion,7);assert.deepEqual(f.stored.tagGroups[0].tags,['Keep']);
+ const original=plain(f.stored.tagGroups);await f.controller.save({mode:'normal-double'});assert.deepEqual(f.stored.tagGroups,original);
+ for(const mode of ['social','severe','normal','normal-double']){state=await f.controller.save({mode});assert.equal(state.mode,mode);assert.deepEqual(f.stored.tagGroups,original);}
+});
+test('後半で5種の追加・名前変更・順序変更・移動・削除を共用し、通常へ戻すと非表示グループ操作を拒否',async()=>{
+ const f=fixture({...eightGroups(),mode:'normal-double'}),groupId='group8';
+ await f.controller.tag({type:'SELECT_TAG_GROUP',groupId});
+ await f.controller.tag({type:'ADD_TAG',groupId,tag:'First'});
+ await f.controller.tag({type:'ADD_USER',groupId,userId:'author',displayName:'Author'},{currentUser:'author',validateCurrent:async()=>true});
+ await f.controller.tag({type:'ADD_MAGAZINE',groupId,userId:'author',magazineId:'m123',displayName:'Magazine'},{currentUser:'author',currentMagazineId:'m123',validateCurrent:async()=>true});
+ await f.controller.tag({type:'ADD_MEMBERSHIP',groupId,userId:'author',displayName:'Membership'},{currentMembership:true,currentUser:'author',validateCurrent:async()=>true});
+ await f.controller.tag({type:'ADD_ARTICLE',groupId,articleId:'n123',url:'https://note.com/author/n/n123',title:'Article'},{currentArticleId:'n123',currentArticleUrl:'https://note.com/author/n/n123',validateCurrent:async()=>true});
+ assert.equal(f.stored.tagGroups[7].tags.length,5);
+ await f.controller.tag({type:'RENAME_TAG_GROUP',groupId,name:'Last',expectedName:''});
+ await f.controller.tag({type:'MOVE_TAG',groupId,tag:'First',beforeTag:null});assert.equal(f.stored.tagGroups[7].tags.at(-1),'First');
+ await f.controller.tag({type:'TRANSFER_TAG',groupId,targetGroupId:'group5',tag:'First'});
+ await f.controller.tag({type:'REMOVE_TAG',groupId:'group5',tag:'First'});
+ const before=plain(f.stored.tagGroups),revision=f.stored.groupSelectionRevision;
+ await f.controller.save({mode:'normal'});assert.equal(f.stored.selectedTagGroupId,'group1');assert.equal(f.stored.groupSelectionRevision,revision+1);
+ for(const op of [{type:'SELECT_TAG_GROUP',groupId},{type:'ADD_TAG',groupId,tag:'Oops'},{type:'RENAME_TAG_GROUP',groupId,name:'Oops',expectedName:'Last'},{type:'REMOVE_TAG',groupId,tag:before[7].tags[0]},{type:'MOVE_TAG',groupId,tag:before[7].tags[0],beforeTag:null},{type:'TRANSFER_TAG',groupId:'group1',targetGroupId:'group5',tag:'Missing'}])await assert.rejects(f.controller.tag(op),{code:'MODE_RESTRICTED'});
+ assert.deepEqual(f.stored.tagGroups,before);
+ await f.controller.save({mode:'normal-double'});assert.deepEqual(f.stored.tagGroups,before);
+});
+test('8グループJSONは形式9でモードから独立し、旧4グループJSONの部分取込で後半を失わない',async()=>{
+ const f=fixture({...eightGroups(['Hidden']),mode:'normal-double'}),core=f.core;
+ for(const mode of ['normal-double','normal','social','severe']){
+  const state=await f.controller.save({mode}),json=core.exportSettings(state),data=JSON.parse(json);
+  assert.equal(data.schemaVersion,9);assert.equal(data.settings.tagGroups.length,8);assert.deepEqual(data.settings.tagGroups[7].items,[{type:'tag',tag:'Hidden'}]);
+  const imported=core.parseSettingsExport(json);assert.equal(imported.tagGroups.length,8);assert.deepEqual(plain(imported.tagGroups[7].tags),['Hidden']);assert.equal(imported.mode,mode);
+ }
+ const current=core.readSettings(f.stored),old=JSON.parse(core.exportSettings(core.readSettings(groups(['Old']))));
+ const report=core.inspectSettingsImport(JSON.stringify(old),current);assert.deepEqual(plain(report.settings.tagGroups[7].tags),['Hidden']);assert.deepEqual(plain(report.settings.tagGroups[0].tags),['Old']);
+ const again=core.parseSettingsExport(core.exportSettings(report.settings));assert.deepEqual(plain(again.tagGroups),plain(report.settings.tagGroups));
+ for(const text of [JSON.stringify({selectedTagGroupId:'group8',mode:'normal-double'}),JSON.stringify({mode:'normal-double',selectedTagGroupId:'group8'})]){const parsed=core.parseSettingsExport(text);assert.equal(parsed.selectedTagGroupId,'group8');assert.equal(parsed.tagGroups.length,8);}
+ const partial=core.inspectSettingsImport(JSON.stringify({format:'other',schemaVersion:999,settings:{tagGroups:[{id:'group6',name:'Six',items:[{type:'tag',tag:'Valid'},null]}],selectedTagGroupId:'group6'}}));
+ assert.equal(partial.settings.tagGroups.length,8);assert.deepEqual(plain(partial.settings.tagGroups[5].tags),['Valid']);assert.equal(partial.settings.selectedTagGroupId,'group1');assert.ok(partial.ignored.length>=2);
+});
+test('8グループ形式の破損と未知版は保護し、旧画面の操作とモード変更の競合で後半へ書かない',async()=>{
+ for(const patch of [{tagSchemaVersion:99},{tagGroups:eightGroups().tagGroups.slice(0,7)},{tagGroups:eightGroups().tagGroups.map((g,i)=>i===7?{...g,id:'group7'}:g)}]){
+  const f=fixture({...eightGroups(['Keep']),mode:'normal-double',...patch}),before=plain(f.stored.tagGroups);assert.ok((await f.controller.getState()).tagWarning);
+  await f.controller.save({mode:'normal'});assert.deepEqual(f.stored.tagGroups,before);await assert.rejects(f.controller.tag({type:'ADD_TAG',groupId:'group1',tag:'No'}),{code:'INVALID_TAGS'});
+ }
+ const f=fixture({...eightGroups(['Keep']),mode:'normal-double',selectedTagGroupId:'group8'});
+ const tasks=await Promise.allSettled([f.controller.save({mode:'normal'}),f.controller.tag({type:'ADD_TAG',groupId:'group8',tag:'Stale'})]);
+ assert.equal(tasks[1].reason.code,'MODE_RESTRICTED');assert.deepEqual(f.stored.tagGroups[7].tags,['Keep']);
+});
+test('形式番号なしの後半グループJSONを保存・再読込し、items空配列と省略を区別する',async()=>{
+ const f=fixture(),load=async settings=>f.controller.importSettings({json:JSON.stringify(settings),expectedToken:f.core.settingsToken(f.core.readSettings(f.stored))});
+ const article={type:'article',articleId:'n123',url:'https://note.com/author/n/n123',title:'Article'};
+ await load({tagGroups:[{id:'group8',name:'Last',items:[article,{type:'tag',tag:'Keep'}]}]});
+ assert.equal(f.stored.mode,'normal');assert.equal(f.stored.tagSchemaVersion,7);assert.equal(f.stored.tagGroups.length,8);
+ let state=await f.restart().getState();assert.equal(state.tagWarning,undefined);assert.deepEqual(plain(state.tagGroups[7].tags),[article,'Keep']);
+ await load({mode:'normal-double',selectedTagGroupId:'group8'});assert.equal(f.stored.selectedTagGroupId,'group8');
+ await assert.rejects(f.controller.tag({type:'ADD_ARTICLE',groupId:'group1',articleId:article.articleId,url:article.url,title:article.title},{currentArticleId:article.articleId,currentArticleUrl:article.url,validateCurrent:async()=>true}),{code:'CONFLICT'});
+ const old=JSON.parse(f.core.exportSettings(f.core.readSettings(groups(['Legacy']))));
+ await load(old);await load(old);assert.deepEqual(f.stored.tagGroups[7].tags,[article,'Keep']);assert.equal(f.stored.mode,'normal');assert.equal(f.stored.selectedTagGroupId,'group1');
+ await load({tagGroups:[{id:'group8',items:[]}]});assert.deepEqual(f.stored.tagGroups[7].tags,[]);assert.equal(f.stored.tagGroups[7].name,'Last');assert.deepEqual(f.stored.tagGroups[0].tags,['Legacy']);
+});
+
 test('タグ正規化は前後空白と#だけ。大小・全半角・内部空白・Unicode表現を保存',()=>{
  const {core}=fixture();
  assert.equal(core.normalizeTag('  #ComfyUI  '),'ComfyUI');
@@ -80,7 +147,7 @@ test('保存失敗ではタグ・モードを確定せず、背景再起動後�
 });
 test('左メニューでタグ管理と設定を切替。重度では設定入口とキャッチコピーだけにする',async()=>{
  const f=homeFixture({state:{...groups(['A'])}});await flush();const n=f.nodes;
- assert.match(n.get('mode').textContent,/通常モード（ひとみしりモード）/);
+ assert.match(n.get('mode').textContent,/ひとみしりモード（通常）/);
  assert.equal(n.get('panel-settings').hidden,false);assert.equal(n.get('nav-settings').getAttribute('aria-current'),'page');
  for(const id of ['tabs','tab-main','panel-main','quick-access','main-tags'])assert.equal(n.has(id),false);
  assert.equal(n.get('home-menu').contains(n.get('nav-settings')),true);assert.equal(n.get('home-menu').contains(n.get('following')),false);
@@ -165,6 +232,38 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
 });
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:query=>({matches:query.includes("max-width")?!win.wide:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
+
+test('2段版の共通メニューは8個、通常版は4個。幅変更でも同じデータと選択を使う',()=>{
+ const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings({...eightGroups(['Last']),mode:'normal-double',selectedTagGroupId:'group8'}),url='https://note.com/following';
+ const selector=()=>f.doc.querySelector('[class="hikikomori-note-group-selector"]');
+ f.ui.update(settings,url);assert.equal(selector().children.length,8);assert.equal(selector().getAttribute('data-group-count'),'8');
+ assert.equal(selector().children[7].textContent,'⑧');assert.equal(selector().children[7].getAttribute('aria-pressed'),'true');
+ f.win.wide=false;f.doc.querySelector('aside').width=0;f.ui.update(settings,url);
+ const panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');assert.ok(panel.contains(selector()));assert.equal(selector().children.length,8);
+ assert.ok(panel.querySelector('ul').textContent.includes('Last'));
+ f.ui.update(f.core.readSettings({...settings,mode:'normal'}),url);assert.equal(selector().children.length,4);assert.equal(selector().children[0].getAttribute('aria-pressed'),'true');assert.ok(!panel.querySelector('ul').textContent.includes('Last'));
+ f.ui.update(settings,url);assert.equal(selector().children[7].getAttribute('aria-pressed'),'true');
+ f.ui.update({...settings,mode:'severe'},url);assert.equal(selector(),null);
+});
+test('専用ホームも8グループを編集・移動し、通常版では後半の選択と移動先を出さない',async()=>{
+ const f=homeFixture({state:{...eightGroups(['Last']),mode:'normal-double',selectedTagGroupId:'group8'},hash:'#tags'});await flush();
+ const buttons=()=>f.nodes.get('edit-groups').querySelectorAll('button');
+ assert.equal(f.nodes.get('operation-mode').querySelectorAll('option').length,4);
+ assert.equal(buttons().length,8);assert.equal(buttons()[7].textContent,'⑧');assert.equal(buttons()[7].getAttribute('aria-pressed'),'true');
+ assert.equal(f.nodes.get('edit-tags').querySelector('select').children.length,7);
+ f.changed({mode:'normal'});assert.equal(buttons().length,4);assert.equal(f.nodes.get('edit-tags').children.length,0);
+ f.changed({mode:'normal-double'});assert.equal(buttons().length,8);assert.equal(f.nodes.get('edit-tags').children.length,1);
+ buttons()[4].onclick();await flush();assert.equal(f.state.selectedTagGroupId,'group5');
+ f.nodes.get('tag-input').value='Fifth';f.nodes.get('tag-form').fire('submit');await flush();assert.deepEqual(f.state.tagGroups[4].tags,['Fifth']);
+ f.changed({mode:'normal'});assert.equal(buttons().length,4);assert.equal(f.state.tagGroups[7].tags[0],'Last');
+});
+test('作者登録先も2段版は8個。通常へ変更すると隠れた登録先を解除する',()=>{
+ const f=uiFixture('<aside class="w-full lg:w-96"><div><h1></h1><button data-name="avatar"></button><a href="https://note.com/creator/followings"></a></div></aside>',{addCurrentUser:async()=>{}}),settings=f.core.readSettings({...eightGroups(),mode:'normal-double'}),url='https://note.com/creator';
+ f.doc.querySelector('h1').textContent='作者';f.ui.update(settings,url);
+ const block=f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),select=block.querySelector('select'),button=block.querySelector('button');
+ assert.equal(select.children.length,9);select.value='group8';select.onchange();assert.equal(button.disabled,false);
+ f.ui.update({...settings,mode:'normal'},url);assert.equal(select.children.length,5);assert.equal(select.value,'');assert.equal(button.disabled,true);
+});
 
 const streamingLayout='<div class="min-h-screen lg:grid lg:grid-cols-[202px_minmax(0,1fr)]"><div class="py-4"></div><main id="main-content"><div class="py-4"></div></main></div>';
 test('ローダーしかないSSR親へクラスを付け、後から現れる公式asideにも引き継ぐ',()=>{

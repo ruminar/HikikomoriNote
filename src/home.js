@@ -5,9 +5,9 @@
   const byId = id => document.getElementById(id);
   const views = ["settings", "tags", "authors", "transfer"];
   const fields = { theme: "theme", hideLikeCounts: "hide-like-counts", hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", keepNoteHeaderVisible: "keep-note-header-visible", mode: "operation-mode" };
-  const modeNames = { normal: "通常モード（ひとみしりモード）", severe: "重度ひきこもりモード", social: "社会復帰モード" };
+  const modeNames = { normal: "ひとみしりモード（通常）", "normal-double": "ひとみしりモード（2段）", severe: "重度ひきこもりモード", social: "社会復帰モード" };
   function updateModeHelp() {
-    byId("operation-mode-help").textContent = { normal: "専用ホームとお気に入りから、見たい記事を選んで閲覧します。", severe: "公式ホームを開かず、左メニューには自分のページだけを表示します。お気に入りグループやTLへのリンクは表示しません。", social: "note公式ホームと左メニューを使用し、記事の非表示設定や追加導線は使います。" }[byId("operation-mode").value] || "";
+    byId("operation-mode-help").textContent = { normal: "専用ホームと4グループのお気に入りから、見たい記事を選んで閲覧します。", "normal-double": "8グループのお気に入りを使います。左メニューは4個×2段、ハンバーガー内は8個×1段です。", severe: "公式ホームを開かず、左メニューには自分のページだけを表示します。お気に入りグループやTLへのリンクは表示しません。", social: "note公式ホームと左メニューを使用し、記事の非表示設定や追加導線は使います。" }[byId("operation-mode").value] || "";
   }
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { tag: "", name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
@@ -97,8 +97,8 @@
     for (const id of ["edit-groups"]) {
       const container = byId(id), focused = container.contains(document.activeElement) ? document.activeElement?.getAttribute("data-group-id") : null;
       container.replaceChildren(); container.setAttribute("role", "group"); container.setAttribute("aria-label", "お気に入りのグループ");
-      state.tagGroups.forEach((item, index) => {
-        const button = document.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
+      core.availableGroups(state).forEach((item, index) => {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = core.groupSymbols[index];
         button.setAttribute("data-group-id", item.id); button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
         button.setAttribute("aria-pressed", String(item.id === group.id)); button.setAttribute("title", core.groupName(item));
         button.onclick = () => { void perform(() => platform.tag({ type: "SELECT_TAG_GROUP", groupId: item.id }), { focusGroup: [id, item.id] }); };
@@ -131,10 +131,10 @@
       action("↓", "下へ移動", { type: "MOVE_TAG", tag, beforeTag: tags[index + 2] ?? null }, index === tags.length - 1);
       action("削除", "削除", { type: "REMOVE_TAG", tag });
       const destination = document.createElement("select"); destination.setAttribute("aria-label", `${core.favoriteLabel(tag)}の移動先`);
-      for (const item of state.tagGroups.filter(item => item.id !== group.id)) {
+      for (const item of core.availableGroups(state).filter(item => item.id !== group.id)) {
         const option = document.createElement("option"); option.value = item.id; option.textContent = `${core.groupIds.indexOf(item.id) + 1} ${core.groupName(item)}`; destination.append(option);
       }
-      destination.value = state.tagGroups.find(item => item.id !== group.id).id; row.append(destination);
+      destination.value = core.availableGroups(state).find(item => item.id !== group.id).id; row.append(destination);
       const transfer = document.createElement("button"); transfer.type = "button"; transfer.textContent = "移動";
       transfer.setAttribute("aria-label", `${core.favoriteLabel(tag)}を別グループへ移動`);
       transfer.onclick = () => { void mutateTag({ type: "TRANSFER_TAG", groupId: group.id, targetGroupId: destination.value, tag }); }; row.append(transfer);

@@ -32,9 +32,18 @@
     function failure(message, code) { return Object.assign(new Error(message), { code }); }
     function storedValue(raw, settings) {
       const { tagWarning, groupSelectionInvalid, authorWarning, ...clean } = settings;
-      // タグ関連の保存値は通常設定保存では一切正規化・上書きしない。
+      // 元データの保護を維持し、検証済みの8グループ移行と選択補正だけを許可する。
       for (const key of ["tagSchemaVersion", "tagGroups", "selectedTagGroupId", "groupSelectionRevision", "tagGroupsRevision", "authorDisplayRules", "authorDisplayRevision"]) delete clean[key];
       const result = { ...(raw === undefined ? core.defaultSettings() : raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}), ...clean };
+      if (!settings.tagWarning && settings.tagGroups.length === 8 && result.tagSchemaVersion !== 7) {
+        result.tagGroups = settings.tagGroups;
+        result.tagSchemaVersion = 7;
+      }
+      const selection = core.selectedGroupId(settings);
+      if (!settings.tagWarning && !settings.groupSelectionInvalid && selection !== result.selectedTagGroupId) {
+        result.selectedTagGroupId = selection;
+        result.groupSelectionRevision = increment(settings.groupSelectionRevision);
+      }
       delete result.legacyMode;
       return result;
     }
@@ -61,7 +70,7 @@
         if (Object.hasOwn(patch, "dashboardDisabled") && typeof patch.dashboardDisabled !== "boolean") {
           throw new Error("ダッシュボード設定の値が正しくありません。");
         }
-        if (Object.hasOwn(patch, "mode") && !["normal", "severe", "social"].includes(patch.mode)) throw new Error("モード設定の値が正しくありません。");
+        if (Object.hasOwn(patch, "mode") && !core.operationModes.includes(patch.mode)) throw new Error("モード設定の値が正しくありません。");
         if (Object.hasOwn(patch, "hidePaidArticles") && typeof patch.hidePaidArticles !== "boolean") throw new Error("有料記事表示設定の値が正しくありません。");
         if (Object.hasOwn(patch, "hideLikeCounts") && typeof patch.hideLikeCounts !== "boolean") throw new Error("スキ数表示設定の値が正しくありません。");
         if (Object.hasOwn(patch, "hideArticleRecommendations") && typeof patch.hideArticleRecommendations !== "boolean") throw new Error("おすすめ表示設定の値が正しくありません。");
@@ -69,6 +78,10 @@
         if (Object.hasOwn(patch, "keepNoteHeaderVisible") && typeof patch.keepNoteHeaderVisible !== "boolean") throw new Error("ヘッダ表示設定の値が正しくありません。");
         if (Object.hasOwn(patch, "theme") && !["system", "dark", "light"].includes(patch.theme)) throw new Error("テーマの値が正しくありません。");
         const next = { ...previous, ...patch };
+        // 旧4グループを2段モードで初めて保存する際にだけ不足領域を補う。
+        if (!previous.tagWarning && next.mode === "normal-double" && next.tagGroups.length === 4) {
+          next.tagGroups = core.groupIds.map(id => next.tagGroups.find(group => group.id === id) || { id, name: "", tags: [] });
+        }
         next.noteUserId = core.normalizeUserId(next.noteUserId);
         await port.setRules(rules(next.enabled, next.dashboardDisabled, core.modeOf(next)));
         try { await port.store(storedValue(raw, next)); }
@@ -137,6 +150,11 @@
         if (options.requireEnabled && !settings.enabled) throw failure("拡張OFFではタグを追加できません。", "DISABLED");
         if (!core.usesTags(settings)) throw failure("現在のモードではタグを編集できません。状態を再確認してください。", "MODE_RESTRICTED");
         if (settings.tagWarning) throw failure(settings.tagWarning, "INVALID_TAGS");
+        const available = core.availableGroups(settings);
+        if (!available.some(group => group.id === operation.groupId) ||
+            (operation.type === "TRANSFER_TAG" && !available.some(group => group.id === operation.targetGroupId))) {
+          throw failure("現在のモードではこのグループを操作できません。状態を再確認してください。", "MODE_RESTRICTED");
+        }
         if (settings.groupSelectionInvalid && operation.type !== "SELECT_TAG_GROUP") throw failure("グループを選び直してください。", "CONFLICT");
         if (options.selectionRevision !== undefined && (settings.groupSelectionRevision !== options.selectionRevision || settings.selectedTagGroupId !== operation.groupId)) throw failure("選択グループが変わりました。状態を再確認してください。", "CONFLICT");
         const groups = settings.tagGroups.map(group => ({ ...group, tags: [...group.tags] }));

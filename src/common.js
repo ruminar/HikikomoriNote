@@ -2,11 +2,16 @@
 (() => {
   "use strict";
   const settingsKey = "hikikomoriNote.settings.v2";
-  const groupIds = ["group1", "group2", "group3", "group4"];
+  const groupIds = Object.freeze(Array.from({ length: 8 }, (_, i) => `group${i + 1}`));
+  const groupSymbols = Object.freeze(["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧"]);
+  const operationModes = Object.freeze(["normal", "normal-double", "severe", "social"]);
+  function expandGroups(groups) { return groupIds.map(id => groups.find(g => g.id === id) || { id, name: "", tags: [] }); }
+  function availableGroups(settings) { return usesTags(settings) ? settings.tagGroups.slice(0, modeOf(settings) === "normal-double" ? 8 : 4) : []; }
+  function selectedGroupId(settings) { return modeOf(settings) === "normal" && groupIds.indexOf(settings.selectedTagGroupId) >= 4 ? "group1" : settings.selectedTagGroupId; }
   function defaultSettings() {
     return { enabled: true, theme: "system", noteUserId: "", dashboardDisabled: false, mode: "normal",
       hideArticleRecommendations: false, hidePaidArticles: false, hideLikeCounts: false, noteLogoBrowserBack: false, keepNoteHeaderVisible: false, tagSchemaVersion: 2,
-      tagGroups: groupIds.map(id => ({ id, name: "", tags: [] })), selectedTagGroupId: "group1",
+      tagGroups: groupIds.slice(0, 4).map(id => ({ id, name: "", tags: [] })), selectedTagGroupId: "group1",
       groupSelectionRevision: 0, tagGroupsRevision: 0, authorDisplayRules: [], authorDisplayRevision: 0 };
   }
   function groupName(group) { return group.name || `グループ${groupIds.indexOf(group.id) + 1}`; }
@@ -20,8 +25,9 @@
   function inspectGroups(value) {
     let warning = !value || typeof value !== "object" || Array.isArray(value) ? "設定の保存形式に異常があります。タグ編集を停止しました。" : "";
     const source = Array.isArray(value?.tagGroups) ? value.tagGroups : [];
-    if (![2, 3, 4, 5, 6].includes(value?.tagSchemaVersion) || source.length !== 4) warning = "お気に入りの保存形式に異常があります。元データを保持し、編集を停止しました。";
-    const groups = groupIds.map((id, index) => {
+    if (![2, 3, 4, 5, 6, 7].includes(value?.tagSchemaVersion) || source.length !== (value?.tagSchemaVersion === 7 ? 8 : 4)) warning = "お気に入りの保存形式に異常があります。元データを保持し、編集を停止しました。";
+    const groups = groupIds.slice(0, value?.tagSchemaVersion === 7 || modeOf(value) === "normal-double" ? 8 : 4).map((id, index) => {
+      if (index >= 4 && value?.tagSchemaVersion !== 7 && source.length === 4) return { id, name: "", tags: [] };
       const matches = source.filter(group => group?.id === id), item = matches.length === 1 ? matches[0] : undefined;
       const tags = inspectTags(item?.tags, value?.tagSchemaVersion >= 3, value?.tagSchemaVersion >= 4, value?.tagSchemaVersion >= 5, value?.tagSchemaVersion >= 6); let name = "";
       try { name = normalizeGroupName(item?.name); if (name !== item.name) warning ||= "グループ名の保存値に異常があります。"; }
@@ -37,14 +43,14 @@
     for (const key of ["groupSelectionRevision", "tagGroupsRevision"]) {
       if (!Number.isSafeInteger(value?.[key]) || value[key] < 0) warning ||= "グループの更新番号に異常があります。";
     }
-    const selectionInvalid = !groupIds.includes(value?.selectedTagGroupId);
-    return { tagSchemaVersion: value?.tagSchemaVersion, tagGroups: groups,
-      selectedTagGroupId: !selectionInvalid ? value.selectedTagGroupId : "group1",
+    const selectionInvalid = !groupIds.slice(0, source.length === 8 ? 8 : 4).includes(value?.selectedTagGroupId);
+    return { tagSchemaVersion: groups.length === 8 && !warning ? 7 : value?.tagSchemaVersion, tagGroups: groups,
+      selectedTagGroupId: !selectionInvalid ? selectedGroupId(value) : "group1",
       groupSelectionRevision: value?.groupSelectionRevision,
       tagGroupsRevision: value?.tagGroupsRevision,
       ...(warning ? { tagWarning: warning } : {}), ...(selectionInvalid ? { groupSelectionInvalid: true } : {}) };
   }
-  function selectedGroup(settings) { return settings.tagGroups.find(group => group.id === settings.selectedTagGroupId); }
+  function selectedGroup(settings) { return settings.tagGroups.find(group => group.id === selectedGroupId(settings)); }
   function isHome(url) {
     try {
       const parsed = new URL(url);
@@ -78,9 +84,9 @@
     return settings?.enabled === true &&
       ((modeOf(settings) !== "social" && isHome(url)) || (settings.dashboardDisabled === true && isDashboard(url)));
   }
-  function modeOf(settings) { return ["normal", "severe", "social"].includes(settings?.mode) ? settings.mode : "normal"; }
+  function modeOf(settings) { return operationModes.includes(settings?.mode) ? settings.mode : "normal"; }
   function themeOf(settings) { return ["system", "dark", "light"].includes(settings?.theme) ? settings.theme : "system"; }
-  function usesTags(settings) { return modeOf(settings) === "normal"; }
+  function usesTags(settings) { return ["normal", "normal-double"].includes(modeOf(settings)); }
   function usesFollowing(settings) { return modeOf(settings) !== "severe"; }
   function usesLogoBack(settings) { return settings?.enabled === true && modeOf(settings) !== "social" && settings.noteLogoBrowserBack === true; }
   function readSettings(value = defaultSettings()) {
@@ -155,7 +161,7 @@
       return match ? authorId(match[1]) : null;
     } catch { return null; }
   }
-  function favoriteSchema(groups, minimum = 2) { return Math.max(minimum, groups.some(g => g.tags.some(t => t?.type === "article")) ? 6 : groups.some(g => g.tags.some(t => t?.type === "membership")) ? 5 : groups.some(g => g.tags.some(t => t?.type === "magazine")) ? 4 : groups.some(g => g.tags.some(t => t?.type === "user")) ? 3 : 2); }
+  function favoriteSchema(groups, minimum = 2) { return Math.max(minimum, groups.length === 8 ? 7 : groups.some(g => g.tags.some(t => t?.type === "article")) ? 6 : groups.some(g => g.tags.some(t => t?.type === "membership")) ? 5 : groups.some(g => g.tags.some(t => t?.type === "magazine")) ? 4 : groups.some(g => g.tags.some(t => t?.type === "user")) ? 3 : 2); }
   // 自前の輪郭SVG。絵文字の字体や外部アイコン配信には依存しない。
   const bookIconPath = "M12 5.5C9 3.5 5 3.5 2 4.5v14c3-1 7-1 10 1 3-2 7-2 10-1v-14c-3-1-7-1-10 1Zm0 0v14";
   const membershipIconPath = "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 4a4 4 0 0 1 0 8M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2M18 15a4 4 0 0 1 4 4v2";
@@ -290,11 +296,11 @@
     for (const key of flags) if (typeof value[key] !== "boolean") throw new Error(`${key}はtrueまたはfalseを指定してください。`);
     let mode = value.legacyMode === true ? "severe" : "normal";
     if (version >= 3) {
-      if (!["normal", "severe", "social"].includes(value.mode)) throw new Error("modeはnormal・severe・socialのいずれかを指定してください。");
+      if (!operationModes.includes(value.mode)) throw new Error("modeはnormal・normal-double・severe・socialのいずれかを指定してください。");
       mode = value.mode;
     }
     if (typeof value.noteUserId !== "string" || normalizeUserId(value.noteUserId) !== value.noteUserId) throw new Error("ユーザー名の保存値が正しくありません。");
-    if (!Array.isArray(value.tagGroups) || value.tagGroups.length !== 4 || !groupIds.includes(value.selectedTagGroupId)) throw new Error("4グループと選択グループを確認してください。");
+    if (!Array.isArray(value.tagGroups) || ![4, ...(version >= 9 ? [8] : [])].includes(value.tagGroups.length) || !groupIds.slice(0, value.tagGroups.length).includes(value.selectedTagGroupId)) throw new Error("グループ数と選択グループを確認してください。");
     const articleIds = new Set();
     const groups = value.tagGroups.map((group, index) => {
       const items = version >= 5 ? group?.items : group?.tags;
@@ -322,12 +328,12 @@
     if (settings.tagWarning || settings.groupSelectionInvalid || settings.authorWarning) throw new Error("保存データに異常があります。状態を再確認してください。");
     const value = Object.fromEntries([...transferFlags.filter(key => key !== "legacyMode"), "keepNoteHeaderVisible", "hideLikeCounts", "mode", "noteUserId", "tagGroups", "selectedTagGroupId", "authorDisplayRules"].map(key => [key, key === "mode" ? modeOf(settings) : ["keepNoteHeaderVisible", "hideLikeCounts"].includes(key) ? settings[key] ?? false : key === "authorDisplayRules" ? settings[key] ?? [] : settings[key]]));
     value.tagGroups = value.tagGroups.map(group => ({ id: group.id, name: group.name, items: group.tags.map(item => typeof item === "string" ? { type: "tag", tag: item } : item) }));
-    return { ...validateTransferSettings(value, 8), theme: themeOf(settings) };
+    return { ...validateTransferSettings(value, value.tagGroups.length === 8 ? 9 : 8), theme: themeOf(settings) };
   }
   function exportSettings(settings) {
     const value = transferSettings(settings);
     value.tagGroups = value.tagGroups.map(group => ({ id: group.id, name: group.name, items: group.tags.map(item => typeof item === "string" ? { type: "tag", tag: item } : item) }));
-    const schemaVersion = value.tagGroups.some(group => group.items.some(item => item.type === "article")) ? 8 : 7;
+    const schemaVersion = value.tagGroups.length === 8 ? 9 : value.tagGroups.some(group => group.items.some(item => item.type === "article")) ? 8 : 7;
     const json = JSON.stringify({ format: "hikikomori-note-settings", schemaVersion, settings: value }, null, 2);
     if (json.length > 1048576) throw new Error("設定JSONは1,048,576文字以内で入力してください。");
     return json;
@@ -392,9 +398,9 @@
           let parsed = value;
           if (flags.has(key) || key === "legacyMode") { if (typeof value !== "boolean") throw new Error("trueまたはfalseにしてください。"); }
           else if (key === "noteUserId") { if (typeof value !== "string") throw new Error("文字列にしてください。"); parsed = normalizeUserId(value); }
-          else if (key === "mode" && !["normal", "severe", "social"].includes(value)) throw new Error("normal・severe・socialのいずれかにしてください。");
+          else if (key === "mode" && !operationModes.includes(value)) throw new Error("normal・normal-double・severe・socialのいずれかにしてください。");
           else if (key === "theme" && !["system", "dark", "light"].includes(value)) throw new Error("system・dark・lightのいずれかにしてください。");
-          else if (key === "selectedTagGroupId" && !groupIds.includes(value)) throw new Error("group1〜group4のいずれかにしてください。");
+          else if (key === "selectedTagGroupId" && !groupIds.includes(value)) throw new Error("group1〜group8のいずれかにしてください。");
           settings[key === "legacyMode" ? "mode" : key] = key === "legacyMode" ? value ? "severe" : "normal" : parsed;
           accept(key); continue;
         } catch (error) { skip(key, error.message); continue; }
@@ -407,7 +413,9 @@
           const path = `tagGroups[${index}]`;
           if (!object(group) || !groupIds.includes(group.id)) { skip(path, "既知のグループIDがありません。"); return; }
           if (seen.has(group.id)) { skip(path, "重複グループのため先頭を使用します。"); return; }
-          seen.add(group.id); const target = settings.tagGroups.find(g => g.id === group.id);
+          seen.add(group.id);
+          if (groupIds.indexOf(group.id) >= 4) settings.tagGroups = expandGroups(settings.tagGroups);
+          const target = settings.tagGroups.find(g => g.id === group.id);
           fieldsOnly(group, ["id", "name", "items", "tags"], path);
           if (Object.hasOwn(group, "name")) {
             try { const name = normalizeGroupName(group.name); if (name !== group.name) throw new Error("グループ名の前後の空白を除いてください。"); target.name = name; accept(`${path}.name`); }
@@ -448,6 +456,10 @@
         skip(change.path, "有効な記事が残らないため、重複しない現在値を維持しました。");
       } else group.tags = filtered;
     }
+    if (modeOf(settings) === "normal-double") settings.tagGroups = expandGroups(settings.tagGroups);
+    const selection = selectedGroupId(settings);
+    if (selection !== settings.selectedTagGroupId) { skip("selectedTagGroupId", "通常モードでは後半グループを選べないためgroup1へ戻しました。"); settings.selectedTagGroupId = selection; }
+    if (!settings.tagGroups.some(g => g.id === settings.selectedTagGroupId)) { skip("selectedTagGroupId", "保存領域のない選択なのでgroup1へ戻しました。"); settings.selectedTagGroupId = "group1"; }
     return { settings, applied, ignored };
   }
   function parseSettingsExport(text, current = defaultSettings()) { return inspectSettingsImport(text, current).settings; }
@@ -455,7 +467,7 @@
     return JSON.stringify([transferSettings(settings), settings.groupSelectionRevision, settings.tagGroupsRevision, settings.authorDisplayRevision ?? 0]);
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
-    modeOf, themeOf, usesTags, usesFollowing, usesLogoBack,
+    modeOf, operationModes, availableGroups, selectedGroupId, groupSymbols, themeOf, usesTags, usesFollowing, usesLogoBack,
     exportSettings, parseSettingsExport, inspectSettingsImport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
     favorite, favoriteKey, favoriteLabel, favoriteUrl, authorSearchUrl, searchedAuthor, favoriteUser, favoriteMagazine, favoriteMembership, favoriteArticle, articleAddress, favoriteSchema, bookIconPath, membershipIconPath, membershipPage, questionPage,
     normalizeTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });

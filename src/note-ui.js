@@ -430,13 +430,14 @@
       }
       const context = favoriteProfile; context.owner = owner;
       if (magazine && owner.row.children[0] !== context.toggle) owner.row.prepend(context.toggle);
-      const names = JSON.stringify(settings.tagGroups.map(g => [g.id, core.groupName(g)]));
+      const names = JSON.stringify(core.availableGroups(settings).map(g => [g.id, core.groupName(g)]));
       if (context.names !== names) {
+        if (!core.availableGroups(settings).some(group => group.id === context.groupId)) context.groupId = "";
         context.select.replaceChildren(); const placeholder = doc.createElement("option"); placeholder.value = ""; placeholder.textContent = "登録先を選択"; context.select.append(placeholder);
-        settings.tagGroups.forEach((group, index) => { const option = doc.createElement("option"); option.value = group.id; option.textContent = `${["①", "②", "③", "④"][index]} ${core.groupName(group)}`; context.select.append(option); }); context.names = names;
+        core.availableGroups(settings).forEach((group, index) => { const option = doc.createElement("option"); option.value = group.id; option.textContent = `${core.groupSymbols[index]} ${core.groupName(group)}`; context.select.append(option); }); context.names = names;
       }
       context.select.value = context.groupId;
-      const group = settings.tagGroups.find(g => g.id === context.groupId);
+      const group = core.availableGroups(settings).find(g => g.id === context.groupId);
       const key = core.favoriteKey(article || magazine || membership ? owner : { type: "user", userId: owner.userId });
       const registeredGroup = article ? settings.tagGroups.find(g => g.tags.some(item => core.favoriteKey(item) === key)) : null;
       const registered = article ? Boolean(registeredGroup) : group?.tags.some(item => core.favoriteKey(item) === key);
@@ -1856,9 +1857,10 @@
             }
             const title = doc.createElement("p"); title.textContent = "お気に入り"; menu.append(title);
             const selector = doc.createElement("div"); selector.className = "hikikomori-note-group-selector";
+            selector.setAttribute("data-group-count", String(core.availableGroups(settings).length));
             selector.setAttribute("role", "group"); selector.setAttribute("aria-label", "お気に入りのグループ");
-            settings.tagGroups.forEach((item, index) => {
-              const button = doc.createElement("button"); button.type = "button"; button.textContent = ["①", "②", "③", "④"][index];
+            core.availableGroups(settings).forEach((item, index) => {
+              const button = doc.createElement("button"); button.type = "button"; button.textContent = core.groupSymbols[index];
               button.setAttribute("data-group-id", item.id); button.setAttribute("title", core.groupName(item));
               button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
               button.setAttribute("aria-pressed", String(item.id === group.id));
