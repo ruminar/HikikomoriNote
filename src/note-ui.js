@@ -759,6 +759,16 @@
     function isPaidAmount(text) {
       return /^¥\s*[1-9]\d*(?:,\d{3})*\s*[〜～]?\s*$/.test(text.trim());
     }
+    function isArticlePrice(price) {
+      if (isPaidPrice(price)) return true;
+      // 拡散等を条件に無料になる有料記事。0円だけでは無料記事と区別できない。
+      if (!price.classList.contains("text-text-success") || !/^¥\s*0\s*[〜～~]\s*$/.test(price.textContent.trim())) return false;
+      const holder = price.parentElement, row = holder?.parentElement;
+      return holder?.tagName === "DIV" && holder.classList.contains("text-text-success") &&
+        row?.tagName === "DIV" && hasClasses(row, ["flex", "items-center", "gap-2"]) &&
+        [...row.children].some(badge => badge.tagName === "SPAN" &&
+          hasClasses(badge, ["bg-surface-offer", "rounded-full"]) && badge.textContent.trim() === "割引あり");
+    }
     let paidDirty = true, paidSignature;
     function isMagazineCard(card) {
       return card.tagName === "DIV" && ["relative", "mb-[6px]", "mr-[6px]", "flex", "w-[calc(100%-6px)]"].every(name => card.classList.contains(name));
@@ -803,7 +813,7 @@
         link.classList.contains("inset-0") && link.getAttribute("title") && link.getAttribute("aria-label") && core.isArticle(link.href) &&
         link.parentElement.querySelector("h3") &&
         !isAllowedCard(card, link, settings) &&
-        ([...link.parentElement.querySelectorAll("span[class]")].some(isPaidPrice) ||
+        ([...link.parentElement.querySelectorAll("span[class]")].some(isArticlePrice) ||
           [...link.parentElement.querySelectorAll("path[d]")].some(isMembershipLock)));
     }
     function isAllowedCard(card, link, settings) {
@@ -848,7 +858,7 @@
         }
       }
       if (!active) return;
-      const prices = [...doc.querySelectorAll("span[class]")].filter(isPaidPrice);
+      const prices = [...doc.querySelectorAll("span[class]")].filter(isArticlePrice);
       const locks = [...doc.querySelectorAll("path[d]")].filter(isMembershipLock);
       for (const indicator of [...prices, ...locks]) {
         let card = indicator.parentElement;

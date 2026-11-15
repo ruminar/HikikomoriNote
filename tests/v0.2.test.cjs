@@ -853,6 +853,39 @@ const paidCardHtml='<div class="grid-rows-subgrid"><div class="flex"><a class="a
 const paidMarker='data-hikikomori-note-paid-hidden';
 function paidFixture(){const f=uiFixture(paidCardHtml);f.doc.querySelector('span').textContent='¥300';return f;}
 
+function discountedZeroFixture(){
+ const f=paidFixture(),price=f.doc.querySelector('span'),holder=price.parentElement,row=holder.parentElement;
+ holder.className='flex items-center gap-1 text-text-success';row.className='mt-2 flex items-center gap-2 text-sm empty:hidden';
+ const currency=f.doc.createElement('span'),amount=f.doc.createElement('span'),badge=f.doc.createElement('span');
+ currency.textContent='¥';amount.textContent='0〜';price.replaceChildren(currency,amount);
+ badge.className='inline-flex bg-surface-offer rounded-full';badge.textContent='割引あり';row.append(badge);
+ const author=f.doc.createElement('a');author.setAttribute('data-name','avatar');author.href='https://note.com/ai_urawaza_lab';row.parentElement.append(author);
+ return {...f,price,amount,row,badge,card:f.doc.root.children[0]};
+}
+test('条件付き無料の¥0〜＋割引ありを各モードで隠し、許可作者・設定OFF・購入済み・停止は維持',()=>{
+ for(const mode of ['normal','severe','social']){
+  const f=discountedZeroFixture(),settings=f.core.readSettings({...groups(),mode,hidePaidArticles:true,noteUserId:'viewer'}),url='https://note.com/search?q=test';
+  for(const suffix of ['〜','～','~']){
+   f.amount.textContent='0'+suffix;f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(f.card.hasAttribute(paidMarker),true);
+  }
+  f.ui.update({...settings,authorDisplayRules:[{userId:'ai_urawaza_lab',displayName:'',action:'allow'}]},url);assert.equal(f.card.hasAttribute(paidMarker),false);
+  f.ui.update(settings,url);assert.equal(f.card.hasAttribute(paidMarker),true);
+  for(const patch of [{enabled:false},{hidePaidArticles:false}]){f.ui.update({...settings,...patch},url);assert.equal(f.card.hasAttribute(paidMarker),false);f.ui.update(settings,url);}
+  f.ui.update(settings,'https://note.com/notes/purchased');assert.equal(f.card.hasAttribute(paidMarker),false);
+  f.ui.update(settings,url);f.ui.stop();assert.equal(f.card.hasAttribute(paidMarker),false);
+ }
+});
+test('0円だけ・別行の割引・不明バッジ・本文内は隠さず、後挿入と価格変更を再判定する',()=>{
+ const f=discountedZeroFixture(),settings=f.core.readSettings({...groups(),hidePaidArticles:true}),url='https://note.com/following';
+ const hidden=()=>f.card.hasAttribute(paidMarker),refresh=()=>{f.ui.invalidatePaidCards();f.ui.update(settings,url);};
+ f.badge.remove();refresh();assert.equal(hidden(),false);f.row.append(f.badge);refresh();assert.equal(hidden(),true);
+ f.amount.textContent='0';refresh();assert.equal(hidden(),false);f.amount.textContent='0〜';
+ f.badge.textContent='割引についての説明';refresh();assert.equal(hidden(),false);f.badge.textContent='割引あり';
+ f.badge.className='rounded-full';refresh();assert.equal(hidden(),false);f.badge.className='bg-surface-offer rounded-full';
+ f.card.append(f.badge);refresh();assert.equal(hidden(),false);f.row.append(f.badge);refresh();assert.equal(hidden(),true);
+ const article=f.doc.createElement('article');f.doc.root.append(article);article.append(f.card);refresh();assert.equal(hidden(),false);
+});
+
 test('価格付き記事カードを両モードで隠し、OFF・購入済み一覧へのSPA遷移・停止で復元',()=>{
  for(const mode of ["normal","severe","social"]){
   const f=paidFixture(),card=f.doc.root.children[0],settings=f.core.readSettings({...groups(),mode,hidePaidArticles:true});
