@@ -1,5 +1,11 @@
 # 0.2.0のDOM確認記録
 
+## 0.3.3・フォロー中TLの横並びカテゴリ（2026-11-16）
+
+利用者の狭幅画面で、すべて・フォロー中・急上昇・注目・投稿企画・タグの列が残るとの報告。確認用ブラウザは未ログインで /following から / へ転送された。転送先の現行共通DOMでは、既知の min-h-screen/lg:grid/lg:grid-cols-[202px_minmax(0,1fr)] レイアウト直下に、w-full/lg:hidden のDIVがあり、直属のnavは aria-label="カテゴリナビゲーション" と overflow-x-auto を持つ。縦並びカテゴリnavは同じaria-labelだが flex-col で別枠。
+
+/following の通常・重度モードだけ既存の先行レイアウト準備で hikikomori-note-following-root を付け、上記の横並びnavを含む直属DIVをCSSの :has() で隠す。外枠の余白と後挿入にも適用。OFF・社会復帰・離脱・停止で印を解除し、検索タブ・記事本文・ヘッダ・拡張メニューは対象にしない。以前の「上部カテゴリナビを維持」という記録に対する /following 限定の仕様変更。ログイン済みTL・Firefox／Android実機の表示確認は未実施。
+
 ## 0.2.9・マガジン一覧の運営案内
 
 利用者提示outerHTMLに基づく。asideのw-full/[grid-area:aside]/md:max-w-[17.5rem]内に、space-y-2/md:space-y-4のDIVがあり、その直属にメンバーシップの案内バナーと「マガジンをもっと活用するには」の案内カードが並ぶ。前者はassets.st-note.comの手動配信画像と公式/lp/membership/startのオーバーレイリンク、後者はh3と公式ヘルプ・運営notemag記事へのリンクで確認する。

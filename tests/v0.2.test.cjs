@@ -187,6 +187,32 @@ test('先行ルートのクラスはOFF・社会復帰・対象外・親の交�
  f.doc.root.append(layout);f.ui.prepareSidebar(url,settings);f.ui.stop();assert.equal(layout.classList.contains('hikikomori-note-navigation-root'),false);assert.equal(layout.classList.contains('min-h-screen'),true);
 });
 
+test('フォロー中だけカテゴリ非表示用ルートを準備し、検索・タグ等へのSPA遷移では解除する',()=>{
+ const f=uiFixture(streamingLayout),root=f.doc.root.children[0],settings=f.core.readSettings(groups());
+ const marked=()=>root.classList.contains('hikikomori-note-following-root');
+ for(const mode of ['normal','severe']){
+  f.ui.prepareSidebar('https://note.com/following',{...settings,mode});assert.equal(marked(),true);
+  // カテゴリnavの完成前に印を付けるため、後挿入や幅変更にもCSSが適用される。
+  f.win.wide=false;f.ui.update({...settings,mode},'https://note.com/following');assert.equal(marked(),true);
+  for(const path of ['/search?q=test','/tag/test','/topic/challenge','/example/n/n123']){
+   f.ui.prepareSidebar('https://note.com/following',{...settings,mode});
+   f.ui.update({...settings,mode},'https://note.com'+path);assert.equal(marked(),false,path);
+  }
+ }
+});
+
+test('フォロー中カテゴリの印はOFF・社会復帰・レイアウト交換・停止で復元する',()=>{
+ const f=uiFixture(streamingLayout),root=f.doc.root.children[0],settings=f.core.readSettings(groups()),url='https://note.com/following';
+ const marked=()=>root.classList.contains('hikikomori-note-following-root');
+ for(const patch of [{enabled:false},{mode:'social'}]){
+  f.ui.prepareSidebar(url,settings);assert.equal(marked(),true);
+  f.ui.update({...settings,...patch},url);assert.equal(marked(),false);
+ }
+ f.ui.prepareSidebar(url,settings);root.remove();f.ui.prepareSidebar(url,settings);assert.equal(marked(),false);
+ f.doc.root.append(root);f.ui.prepareSidebar(url,settings);assert.equal(marked(),true);
+ f.ui.stop();assert.equal(marked(),false);assert.equal(root.classList.contains('min-h-screen'),true);
+});
+
 test('rem表記・lg:contentsと検索のlg:blockラッパーでも共通レイアウトを先行制御する',()=>{
  for(const wrapperClass of ['hidden lg:contents','hidden lg:block']) for(const path of ['/following','/hashtag/ComfyUI','/tag/ComfyUI','/search?q=%23ComfyUI&context=note','/topic/education_learning']){
   const f=uiFixture('<div class="min-h-screen lg:grid lg:grid-cols-[12.625rem_minmax(0,1fr)]"><div class="'+wrapperClass+'"><div class="py-4"></div></div><main id="main-content"><div class="py-4"></div></main></div>');

@@ -14,6 +14,10 @@ a[data-hikikomori-note-dashboard-hidden] {
   display: none !important;
 }
 [data-hikikomori-note-menu-hidden] { display: none !important; }
+/* フォロー中TLの狭幅用カテゴリ。外枠を隠し、後挿入時も余白を残さない。 */
+.hikikomori-note-following-root > div[class~="lg:hidden"][class~="w-full"]:has(> nav[aria-label="カテゴリナビゲーション"][class~="overflow-x-auto"]) {
+  display: none !important;
+}
 [data-hikikomori-note-product-hidden] { display: none !important; }
 [data-hikikomori-note-home-banner-hidden] { display: none !important; }
 [data-hikikomori-note-membership-examples-hidden] { display: none !important; }
