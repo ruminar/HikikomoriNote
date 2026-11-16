@@ -48,7 +48,8 @@
     tag: operation => request("tag-operation", operation),
     addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision, pageUrl: globalThis.location.href }),
     selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),
-    followingFavoriteDrop: (operation, selectionRevision) => request("following-favorite-drop", { operation, selectionRevision, pageUrl: globalThis.location.href }),
+    // SPA遷移直後に古いメニューを操作しても、ドラッグ開始元のURLで現在タブを検証する。
+    menuFavoriteDrop: (operation, selectionRevision, pageUrl = globalThis.location.href) => request("menu-favorite-drop", { operation, selectionRevision, pageUrl }),
     subscribe(listener) {
       const onChange = (changes, area) => {
         if (area === "local" && Object.hasOwn(changes, key)) listener(changes[key].newValue);
@@ -118,7 +119,7 @@
         if (current.origin !== "https://note.com" || new URL(pageUrl).href !== current.href) return null;
         if (tab.pendingUrl && new URL(tab.pendingUrl).href !== current.href) return null;
         const page = globalThis.HikikomoriNote.pageKind(current.href);
-        return ["following", "tag", "search", "topic", "help"].includes(page?.type) ? page : null;
+        return globalThis.HikikomoriNote.hasFavoriteMenu(current.href) ? page : null;
       } catch { return null; }
     },
     isHomeSender: sender => sender?.id === api.runtime.id &&

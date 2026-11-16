@@ -34,19 +34,19 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (!["following-favorite-drop", "add-searched-user", "select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "add-current-article", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    if (!["menu-favorite-drop", "add-searched-user", "select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "add-current-article", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
     operation = (async () => {
-      if (message.type === "following-favorite-drop") {
+      if (message.type === "menu-favorite-drop") {
         const patch = message.patch, change = patch?.operation;
         const keys = ["type", "groupId", "tag", ...(change?.type === "MOVE_TAG" ? ["beforeTag"] : change?.type === "TRANSFER_TAG" ? ["targetGroupId"] : [])];
         if (!patch || Object.keys(patch).some(key => !["operation", "selectionRevision", "pageUrl"].includes(key)) ||
             !change || !["REMOVE_TAG", "TRANSFER_TAG", "MOVE_TAG"].includes(change.type) || Object.keys(change).some(key => !keys.includes(key)) ||
             !Number.isSafeInteger(patch.selectionRevision) || patch.selectionRevision < 0) throw Object.assign(new Error("お気に入りの操作を確認できません。"), { code: "CONFLICT" });
         const page = await port.currentMenuPage(sender, patch.pageUrl);
-        if (page?.type !== "following") throw Object.assign(new Error("フォロー中のTLで操作してください。"), { code: "CONFLICT" });
+        if (!page || !globalThis.HikikomoriNote.hasFavoriteMenu(patch.pageUrl)) throw Object.assign(new Error("お気に入りのあるメニューで操作してください。"), { code: "CONFLICT" });
         return controller.tag(change, { requireEnabled: true, selectionRevision: patch.selectionRevision, validateCurrent: async () => {
           const current = await port.currentMenuPage(sender, patch.pageUrl);
-          return current?.type === "following";
+          return Boolean(current && globalThis.HikikomoriNote.hasFavoriteMenu(patch.pageUrl));
         } });
       }
       if (message.type === "add-searched-user") {

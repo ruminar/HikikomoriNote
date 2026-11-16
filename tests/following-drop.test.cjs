@@ -32,10 +32,10 @@ async function fixture(patch = {}, options = {}) {
   }
   ui = c.HikikomoriNoteUi.create(doc, win, {
     settingsUrl: () => "chrome-extension://self/home.html",
-    async followingFavoriteDrop(operation, selectionRevision) {
-      calls.push({ operation: plain(operation), selectionRevision, pageUrl: url });
+    async menuFavoriteDrop(operation, selectionRevision, pageUrl = url) {
+      calls.push({ operation: plain(operation), selectionRevision, pageUrl });
       if (options.unconfirmed) throw Object.assign(Error("result unconfirmed"), { code: "UNCONFIRMED" });
-      return apply("following-favorite-drop", { operation, selectionRevision, pageUrl: url });
+      return apply("menu-favorite-drop", { operation, selectionRevision, pageUrl });
     },
     selectGroup: groupId => apply("select-tag-group", { groupId, pageUrl: url }),
     async refresh() { state = core.readSettings(stored); ui.update(state, url); }
@@ -43,7 +43,7 @@ async function fixture(patch = {}, options = {}) {
   ui.update(state, url);
   const menu = () => doc.querySelector('[class="hikikomori-note-navigation"]');
   const group = id => menu()?.querySelector(`[data-group-id="${id}"]`);
-  const rows = () => menu()?.querySelectorAll('[data-following-favorite-item]') || [];
+  const rows = () => menu()?.querySelectorAll('[data-menu-favorite-item]') || [];
   const drag = (index = 0) => { const row = rows()[index], dataTransfer = { setData() {} }; const event = row.fire("dragstart", { dataTransfer }); return { row, dataTransfer, event }; };
   return { c, core, doc, win, ui, options, calls, send, menu, group, rows, drag,
     get state() { return stored; }, get writes() { return writes; }, get checks() { return checks; },
@@ -89,7 +89,7 @@ test("TLの項目の上半分・下半分で全5種を並べ替え、挿入線�
 test("TL一覧の末尾へドロップでき、自分自身や同じ順序になる位置は保存せず、二重実行しない", async () => {
   const f = await fixture(); let drag = f.drag(1); f.rows()[1].fire("drop", { dataTransfer: drag.dataTransfer, clientY: 1 });
   drag = f.drag(1); f.rows()[0].fire("drop", { dataTransfer: drag.dataTransfer, clientY: 39 }); await flush(); assert.equal(f.calls.length, 0);
-  drag = f.drag(); const list = f.menu().querySelector('[data-following-favorite-list]');
+  drag = f.drag(); const list = f.menu().querySelector('[data-menu-favorite-list]');
   list.fire("dragover", { dataTransfer: drag.dataTransfer }); assert.equal(list.hasAttribute("data-favorite-list-end"), true);
   list.fire("drop", { dataTransfer: drag.dataTransfer }); list.fire("drop", { dataTransfer: drag.dataTransfer }); await flush();
   assert.deepEqual(f.state.tagGroups[0].tags, [...items.slice(1), items[0]]); assert.equal(f.calls.length, 1); assert.equal(f.calls[0].operation.beforeTag, null);
@@ -109,9 +109,9 @@ test("背景処理の並べ替えは現在グループ内の挿入先を検証�
   const f = await fixture(), operation = { type: "MOVE_TAG", groupId: "group1", tag: items[0], beforeTag: items[3] };
   const patch = { operation, selectionRevision: 0, pageUrl: "https://note.com/following" };
   for (const change of [{ beforeTag: "Missing" }, { beforeTag: undefined }, { targetGroupId: "group2" }]) {
-    assert.equal((await f.send("following-favorite-drop", { ...patch, operation: { ...operation, ...change } })).ok, false);
+    assert.equal((await f.send("menu-favorite-drop", { ...patch, operation: { ...operation, ...change } })).ok, false);
   }
-  assert.equal(f.writes, 0); assert.equal((await f.send("following-favorite-drop", patch)).ok, true);
+  assert.equal(f.writes, 0); assert.equal((await f.send("menu-favorite-drop", patch)).ok, true);
   assert.deepEqual(f.state.tagGroups[0].tags, [items[1], items[2], items[0], ...items.slice(3)]);
 });
 test("重複先では移動せず、ドラッグ終了・外部データのドロップは保存せず元の表示へ戻る", async () => {
@@ -166,16 +166,35 @@ test("外部更新・選択変更・OFF・ページ変更・停止で古いド�
     assert.equal(f.calls.length, 0); assert.equal(f.writes, 0); assert.deepEqual(f.state.tagGroups[0].tags, items);
   }
 });
-test("タグ・検索・helpなど他の左メニューにはドラッグ処理を追加しない", async () => {
-  for (const url of ["https://note.com/tag/Tag", "https://note.com/search?q=from:@sample_author", "https://note.com/help", "https://note.com/topic/computer_it"]) {
-    const f = await fixture({}, { url }); assert.equal(f.rows().length, 0);
-    assert.ok(f.menu().querySelectorAll('button[data-group-id]').every(b => b.ondrop === undefined));
+const menuUrls = ["https://note.com/following?view=all#top", "https://note.com/tag/Tag", "https://note.com/hashtag/%E5%89%B5%E4%BD%9C",
+  "https://note.com/search?q=%23Tag&context=note", "https://note.com/search?q=from:@sample_author&context=note", "https://note.com/search?q=from:@sample_author&context=magazine",
+  "https://note.com/search?q=from:@sample_author&context=user", "https://note.com/search?q=from:@sample_author&context=circle", "https://note.com/search?q=&context=note&mode=search&sort=new",
+  "https://note.com/topic/computer_it", "https://note.com/topic/computer_it/ai", "https://note.com/help", "https://note.com/help/pg/event"];
+test("お気に入りがある全左メニューへ並べ替え・移動・削除を適用し、広幅／狭幅と4／8グループを維持", async () => {
+  for (const url of menuUrls) for (const mobile of [false, true]) for (const mode of ["normal", "normal-double"]) {
+    const patch = mode === "normal" ? {} : { mode, tagSchemaVersion: 7, tagGroups: Array.from({ length: 8 }, (_, i) => ({ id: `group${i + 1}`, name: "", tags: i === 0 ? plain(items) : [] })) };
+    const f = await fixture(patch, { url, mobile });
+    if (mobile) f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]').onclick();
+    assert.equal(f.rows().length, items.length, url); assert.equal(f.menu().querySelectorAll('button[data-group-id]').length, mode === "normal" ? 4 : 8);
+    let drag = f.drag(2); f.rows()[0].fire("drop", { dataTransfer: drag.dataTransfer, clientY: 1 }); await flush();
+    assert.deepEqual(f.state.tagGroups[0].tags, [items[2], items[0], items[1], ...items.slice(3)], url);
+    const destination = mode === "normal" ? "group2" : "group8";
+    drag = f.drag(); assert.equal(f.group("group1").textContent, "🗑"); f.group(destination).fire("drop", { dataTransfer: drag.dataTransfer }); await flush();
+    drag = f.drag(); f.group("group1").fire("drop", { dataTransfer: drag.dataTransfer }); await flush();
+    assert.deepEqual(f.state.tagGroups[0].tags, [items[1], ...items.slice(3)], url); assert.deepEqual(f.state.tagGroups[mode === "normal" ? 1 : 7].tags, [items[2]], url);
+    assert.equal(f.state.selectedTagGroupId, "group1"); assert.deepEqual(f.calls.map(call => call.operation.type), ["MOVE_TAG", "TRANSFER_TAG", "REMOVE_TAG"]);
+  }
+});
+test("グループのない専用ナビや対象外モードへグループ欄を追加しない", async () => {
+  for (const url of ["https://note.com/sample_author/n/n123", "https://note.com/sample_author", "https://note.com/qa/sample_author", "https://note.com/sample_author/membership",
+    "https://note.com/sample_author/m/m123", "https://note.com/notes/viewed", "https://note.com/help/unknown", "https://evil.test/tag/Tag"]) {
+    const f = await fixture({}, { url }); assert.equal(f.rows().length, 0, url); assert.equal(f.core.hasFavoriteMenu(url), false, url);
   }
   for (const patch of [{ mode: "severe" }, { mode: "social" }, { enabled: false }]) { const f = await fixture(patch); assert.equal(f.rows().length, 0); }
 });
-test("背景処理はTL・メインフレーム・削除／移動だけ許可し、選択リビジョンと現在URLを再検証", async () => {
+test("背景処理は共通メニューのメインフレーム・限定操作だけ許可し、選択リビジョンと現在URLを再検証", async () => {
   const f = await fixture(), operation = { type: "REMOVE_TAG", groupId: "group1", tag: "SampleTag" }, patch = { operation, selectionRevision: 0, pageUrl: "https://note.com/following" };
-  const send = (value = patch, sender) => f.send("following-favorite-drop", value, sender);
+  const send = (value = patch, sender) => f.send("menu-favorite-drop", value, sender);
   assert.equal(await send(patch, { home: true }), null); assert.equal(await send(patch, { note: true, frameId: 1 }), null); assert.equal(await send(patch, {}), null);
   for (const change of [{ selectionRevision: undefined }, { selectionRevision: -1 }, { selectionRevision: 1 }, { pageUrl: "https://note.com/tag/Tag" }, { extra: true },
     { operation: { ...operation, type: "SELECT_TAG_GROUP" } }, { operation: { ...operation, type: "MOVE_TAG" } }, { operation: { ...operation, enabled: false } },
@@ -184,13 +203,37 @@ test("背景処理はTL・メインフレーム・削除／移動だけ許可し
   }
   assert.equal(await f.send("tag-operation", operation), null); assert.equal(f.writes, 0);
   assert.equal((await send()).ok, true); assert.equal(f.writes, 1);
-  const g = await fixture({}, { changeDuringSave: true }); assert.equal((await g.send("following-favorite-drop", patch)).ok, false); assert.equal(g.writes, 0);
-  const h = await fixture({}, { url: "https://note.com/tag/Tag" }); assert.equal((await h.send("following-favorite-drop", { ...patch, pageUrl: "https://note.com/tag/Tag" })).ok, false);
+  const g = await fixture({}, { changeDuringSave: true }); assert.equal((await g.send("menu-favorite-drop", patch)).ok, false); assert.equal(g.writes, 0);
+  const h = await fixture({}, { url: "https://note.com/sample_author" }); assert.equal((await h.send("menu-favorite-drop", { ...patch, pageUrl: "https://note.com/sample_author" })).ok, false);
 });
 test("ブラウザAPIは操作と選択リビジョン・現在URLだけを送信する", async () => {
   const calls = [], c = vm.createContext({ location: { href: "https://note.com/following" }, HikikomoriNote: { settingsKey: "settings" },
     browser: { runtime: { id: "self", async sendMessage(message) { calls.push(plain(message)); return { ok: true, settings: {} }; } } } });
   vm.runInContext(source("platform/browser-api"), c);
-  const operation = { type: "REMOVE_TAG", groupId: "group1", tag: "Tag" }; await c.HikikomoriNotePlatform.followingFavoriteDrop(operation, 3);
-  assert.deepEqual(calls, [{ type: "following-favorite-drop", patch: { operation, selectionRevision: 3, pageUrl: "https://note.com/following" } }]);
+  const operation = { type: "REMOVE_TAG", groupId: "group1", tag: "Tag" }; await c.HikikomoriNotePlatform.menuFavoriteDrop(operation, 3);
+  assert.deepEqual(calls, [{ type: "menu-favorite-drop", patch: { operation, selectionRevision: 3, pageUrl: "https://note.com/following" } }]);
+  c.location.href = "https://note.com/help";
+  await c.HikikomoriNotePlatform.menuFavoriteDrop(operation, 3, "https://note.com/tag/Tag");
+  assert.equal(calls[1].patch.pageUrl, "https://note.com/tag/Tag");
+});
+test("作者検索から別作者検索・タグから活用術への遷移では、古いドラッグを保存しない", async () => {
+  for (const [from, to] of [["https://note.com/search?q=from:@sample_author", "https://note.com/search?q=from:@other_author"], ["https://note.com/tag/Tag", "https://note.com/help"]]) {
+    for (const update of [false, true]) {
+      const f = await fixture({}, { url: from }), drag = f.drag(), target = f.group("group1");
+      f.url = to; if (update) f.update();
+      target.fire("drop", { dataTransfer: drag.dataTransfer }); await flush();
+      assert.equal(f.writes, 0); assert.deepEqual(f.state.tagGroups[0].tags, items);
+      assert.equal(f.calls.length, update ? 0 : 1); if (!update) assert.equal(f.calls[0].pageUrl, from);
+    }
+  }
+});
+test("実際のタブ照合も共通メニュー全種を扱い、未対応URL・別タブURL・遷移中を拒否", async () => {
+  const f = await fixture(); let tab = { url: "https://note.com/following" };
+  const browser = { runtime: { id: "self" }, tabs: { get: async () => tab } }, c = vm.createContext({ URL, browser, HikikomoriNote: f.core });
+  vm.runInContext(source("platform/browser-api"), c);
+  const sender = { id: "self", frameId: 0, tab: { id: 1 }, url: "https://note.com/following" }, check = c.HikikomoriNoteBackgroundPlatform.currentMenuPage;
+  for (const url of menuUrls) { tab = { url }; assert.equal((await check(sender, url)).type, f.core.pageKind(url).type, url); }
+  tab = { url: "https://note.com/tag/Tag", pendingUrl: "https://note.com/help" }; assert.equal(await check(sender, tab.url), null);
+  tab = { url: "https://note.com/help" }; assert.equal(await check(sender, "https://note.com/tag/Tag"), null);
+  for (const url of ["https://note.com/sample_author", "https://note.com/sample_author/n/n123", "https://note.com/help/unknown", "https://evil.test/tag/Tag"]) { tab = { url }; assert.equal(await check(sender, url), null); }
 });

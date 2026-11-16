@@ -173,9 +173,9 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-group-selector button[data-favorite-drop="blocked"] { opacity: .55; cursor: not-allowed; }
 .hikikomori-note-group-selector button[data-drag-over] { outline: 2px solid currentColor; outline-offset: 1px; }
 .hikikomori-note-group-selector button[data-favorite-drop="delete"][data-drag-over] { outline-color: #e74059; }
-.hikikomori-note-navigation li[data-following-favorite-item][draggable="true"] a { cursor: grab; }
+.hikikomori-note-navigation li[data-menu-favorite-item][draggable="true"] a { cursor: grab; }
 .hikikomori-note-navigation li[data-favorite-dragging] { opacity: .65; }
-.hikikomori-note-navigation ul[data-following-favorite-list] { min-height: 32px; padding-bottom: 16px; }
+.hikikomori-note-navigation ul[data-menu-favorite-list] { min-height: 32px; padding-bottom: 16px; }
 .hikikomori-note-navigation li[data-favorite-insert="before"] { box-shadow: inset 0 2px 0 currentColor; }
 .hikikomori-note-navigation li[data-favorite-insert="after"],
 .hikikomori-note-navigation ul[data-favorite-list-end] { box-shadow: inset 0 -2px 0 currentColor; }
