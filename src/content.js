@@ -57,6 +57,13 @@
     }
   });
   let settings;
+  const shiftFavorites = globalThis.HikikomoriNoteUi?.createShiftFavorites?.(document, window, {
+    async save(patch) {
+      const before = revision;
+      const value = await platform.shiftFavorite(patch);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
+    }
+  });
   let revision = 0;
   let stopped = false;
   let unsubscribe;
@@ -102,6 +109,7 @@
     observer?.disconnect();
     restoreLinks();
     noteUi?.stop();
+    shiftFavorites?.stop();
     try { unsubscribe?.(); } catch { /* 拡張の再読み込み */ }
     document.removeEventListener("click", onClick, true);
     window.removeEventListener("popstate", checkHome);
@@ -123,6 +131,7 @@
     return platform.homeUrl() + (page?.type === "profile" ? "#authors" : tags ? "#tags" : core.modeOf(settings) === "social" ? "#settings" : "");
   }
   function checkHome() {
+    shiftFavorites?.sync(settings, location.href);
     if (enabled() && core.shouldRedirect(location.href, settings)) location.replace(platform.homeUrl());
     if (!stopped && settings) noteUi?.update(settings, location.href);
     else if (!stopped) noteUi?.prepareSidebar?.(location.href);
@@ -138,6 +147,7 @@
     queueMicrotask(() => { scheduled = false; if (!stopped) { syncDashboardLinks(); checkHome(); } });
   }
   function onClick(event) {
+    shiftFavorites?.click(event);
     if (!enabled() || event.defaultPrevented || event.button !== 0 ||
         event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     const anchor = event.composedPath().find(node => node?.tagName === "A");

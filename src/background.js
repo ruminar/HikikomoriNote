@@ -34,8 +34,23 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (!["select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "add-current-article", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    if (!["shift-favorite", "select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "add-current-article", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
     operation = (async () => {
+      if (message.type === "shift-favorite") {
+        const core = globalThis.HikikomoriNote, patch = message.patch;
+        if (!patch || Object.keys(patch).some(key => !["item", "remove", "sourceUrl", "pageUrl"].includes(key)) ||
+            typeof patch.remove !== "boolean" || new URL(patch.pageUrl).origin !== "https://note.com") throw new Error("操作を確認できません。");
+        const item = core.favorite(patch.item);
+        if (typeof item === "string") {
+          const source = core.pageKind(patch.sourceUrl);
+          if (patch.remove || source?.type !== "tag" || core.normalizeTag(source.tag) !== item) throw new Error("タグリンクを確認できません。");
+          // Shiftの通常遷移で元タブが移動しても、クリック時の登録は失わない。
+          return controller.shiftFavorite(item, false, { validateCurrent: async () => port.isNoteSender(sender) });
+        }
+        const article = core.articleAddress(patch.sourceUrl);
+        if (item.type !== "user" || !article || core.authorId(new URL(article.url).pathname.split("/")[1]).toLowerCase() !== item.userId.toLowerCase()) throw new Error("記事の作者を確認できません。");
+        return controller.shiftFavorite(item, patch.remove, { validateCurrent: () => port.isCurrentNotePage(sender, patch.pageUrl) });
+      }
       if (message.type === "add-current-article") {
         const patch = message.patch, page = await port.currentArticlePage(sender, patch?.pageUrl);
         if (!page || page.articleId !== patch?.articleId || page.url !== patch?.url) throw Object.assign(new Error("現在の記事を確認できません。"), { code: "CONFLICT" });

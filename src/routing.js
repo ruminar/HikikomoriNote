@@ -131,6 +131,32 @@
         await port.store(next);
         return core.readSettings(next);
       }),
+      // 試作：クリック由来のタグ／作者だけを④へ。一般の編集操作は公開しない。
+      shiftFavorite: (item, remove, options = {}) => run(async () => {
+        const favorite = core.favorite(item);
+        if ((typeof favorite !== "string" && favorite.type !== "user") || typeof remove !== "boolean" ||
+            (remove && typeof favorite === "string")) throw new Error("タグまたはスキの作者を指定してください。");
+        const loaded = await port.load(), raw = loaded === undefined ? core.defaultSettings() : loaded;
+        const settings = core.readSettings(raw);
+        if (!settings.enabled || !core.usesTags(settings)) throw failure("現在のモードでは仮登録できません。", "MODE_RESTRICTED");
+        if (settings.tagWarning || settings.groupSelectionInvalid) throw failure("お気に入りの状態を再確認してください。", "INVALID_TAGS");
+        if (!options.validateCurrent || !await options.validateCurrent()) throw failure("操作元のページを確認できません。", "CONFLICT");
+        const groups = settings.tagGroups.map(group => ({ ...group, tags: [...group.tags] }));
+        const group = groups.find(group => group.id === "group4"), key = core.favoriteKey(favorite);
+        const index = group.tags.findIndex(item => core.favoriteKey(item) === key);
+        if (remove) {
+          if (index < 0) return settings;
+          group.tags.splice(index, 1);
+        } else {
+          if (groups.some(group => group.tags.some(item => core.favoriteKey(item) === key))) return settings;
+          group.tags.push(favorite);
+        }
+        const next = { ...storedValue(raw, settings), tagSchemaVersion: core.favoriteSchema(groups, settings.tagSchemaVersion),
+          tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision) };
+        if (JSON.stringify(next).length > 1048576) throw new Error("設定データが大きすぎます。登録を整理してください。");
+        await port.store(next);
+        return core.readSettings(next);
+      }),
       tag: (operation, options = {}) => run(async () => {
         if (!operation || !["ADD_TAG", "ADD_USER", "ADD_MAGAZINE", "ADD_MEMBERSHIP", "ADD_ARTICLE", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
             Object.keys(operation).some(key => !["type", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "magazineId", "displayName", "articleId", "url", "title"].includes(key)) ||

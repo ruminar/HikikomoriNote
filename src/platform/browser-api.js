@@ -44,6 +44,7 @@
     addCurrentUser: (groupId, userId, displayName) => request("add-current-user", { groupId, userId, displayName, pageUrl: globalThis.location.href }),
     addCurrentMagazine: (groupId, userId, magazineId, displayName) => request("add-current-magazine", { groupId, userId, magazineId, displayName, pageUrl: globalThis.location.href }),
     addCurrentMembership: (groupId, userId, displayName) => request("add-current-membership", { groupId, userId, displayName, pageUrl: globalThis.location.href }),
+    shiftFavorite: patch => request("shift-favorite", patch),
     tag: operation => request("tag-operation", operation),
     addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision, pageUrl: globalThis.location.href }),
     selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),
@@ -68,6 +69,14 @@
       url: api.runtime.getURL("home.html") + (activationFailed ? "#activation-failed" : "")
     }),
     isNoteSender,
+    async isCurrentNotePage(sender, pageUrl) {
+      if (!isNoteSender(sender)) return false;
+      try {
+        const tab = await api.tabs.get(sender.tab.id), current = new URL(tab.url);
+        return current.origin === "https://note.com" && new URL(pageUrl).href === current.href &&
+          (!tab.pendingUrl || new URL(tab.pendingUrl).href === current.href);
+      } catch { return false; }
+    },
     async currentMembershipPage(sender, pageUrl) {
       if (!isNoteSender(sender)) return null;
       try {

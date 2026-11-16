@@ -2251,5 +2251,136 @@
       hiddenCards.clear(); doc.removeEventListener?.("visibilitychange", onVisibility);
     } };
   }
-  globalThis.HikikomoriNoteUi = Object.freeze({ create, createLikeVisibility, isOfficialHeaderLogo });
+  // 試作用。通常クリックを横取りせず、既存のDOM更新通知からスキ状態を確認する。
+  function createShiftFavorites(doc, win, actions) {
+    let settings, url, stopped = false, notice, noticeTimer;
+    const pending = new Map();
+    const active = () => !stopped && settings?.enabled && core.usesTags(settings) && !settings.tagWarning && !settings.groupSelectionInvalid;
+    function cancel(button) {
+      const job = pending.get(button);
+      if (!job) return;
+      win.clearTimeout(job.expiry); win.clearTimeout(job.settle); pending.delete(button);
+    }
+    function announce(text) {
+      if (stopped || !doc.body) return;
+      if (!notice) {
+        notice = doc.createElement("div"); notice.setAttribute(owned, ""); notice.setAttribute("role", "status");
+        notice.className = "hikikomori-note-shift-favorite-status"; doc.body.append(notice);
+      }
+      notice.textContent = text;
+      win.clearTimeout(noticeTimer);
+      noticeTimer = win.setTimeout(() => { notice?.remove(); notice = undefined; }, 4500);
+    }
+    function save(item, remove, sourceUrl) {
+      if (!active()) return Promise.resolve(false);
+      const pageUrl = url;
+      return Promise.resolve().then(() => actions.save({ item, remove, sourceUrl, pageUrl })).then(() => {
+        announce(remove ? "④の作者の仮登録を解除しました（他グループは変更しません）。" : "④への仮登録を確認しました（登録済みの項目は変更しません）。");
+        return true;
+      }, error => { announce(`お気に入りを保存できませんでした。${error.message || "設定画面で確認してください。"}`); return false; });
+    }
+    function state(button) {
+      const pressed = button.getAttribute("aria-pressed");
+      if (button.disabled || button.getAttribute("aria-disabled") === "true" || button.getAttribute("type") !== "button" || !["true", "false"].includes(pressed)) return null;
+      const label = pressed === "true" ? "スキを取り消す" : "スキ";
+      return [...button.querySelectorAll('svg[aria-label]')].some(svg => svg.getAttribute("aria-label") === label &&
+        svg.getAttribute("role") === "img" && svg.getAttribute("data-id") === "Icon") ? pressed === "true" : null;
+    }
+    function authorName(root, userId, avatar) {
+      const profileLabel = avatar?.getAttribute("aria-label") || "";
+      const labeledName = profileLabel.endsWith("のプロフィールへのリンク") ? profileLabel.slice(0, -"のプロフィールへのリンク".length) : "";
+      const nameLink = [...root.querySelectorAll("a[href]")].find(link => link.href === core.profileUrl(userId) && link.textContent.trim());
+      const name = nameLink?.querySelector('[class~="truncate"]')?.textContent.trim() ||
+        (nameLink?.querySelector("time") ? "" : nameLink?.textContent.trim());
+      const alt = avatar?.querySelector("img")?.getAttribute("alt") || "";
+      return core.authorName(labeledName || name || alt.replace(/(?:さんのプロフィール画像|のプロフィール画像| のアイコン)$/, ""));
+    }
+    function author(button) {
+      if (button.closest('[id="note-body"]') || button.closest('[id="note-paywall"]')) return null;
+      // 一覧カードは記事URLと作者アバターの対応を再利用する。コメント等へ広げない。
+      for (let card = button.parentElement; card; card = card.parentElement) {
+        if (card.tagName === "ARTICLE" || card.getAttribute("id") === "note-body") break;
+        if (!card.classList.contains("grid-rows-subgrid")) continue;
+        const links = [...card.querySelectorAll("a[href]")].filter(link => core.isArticle(link.href));
+        const addresses = new Set(links.map(link => core.articleAddress(link.href)?.articleId));
+        if (addresses.size !== 1 || !card.querySelector("h3")) return null;
+        const link = links[0], userId = cardCreatorId(card, link);
+        if (!userId) return null;
+        const avatar = [...card.querySelectorAll('a[data-name="avatar"]')].find(a => {
+          try { return core.authorId(a.href).toLowerCase() === userId.toLowerCase(); } catch { return false; }
+        });
+        const displayName = authorName(card, userId, avatar);
+        return { item: { type: "user", userId, displayName }, sourceUrl: link.href };
+      }
+      const article = button.closest("article"), address = core.articleAddress(url);
+      if (article?.getAttribute("id") !== "note-article" || !address) return null;
+      let articleReaction = false;
+      for (let group = button.parentElement, depth = 0; group && group !== article && depth < 3; group = group.parentElement, depth++) {
+        if (["flex", "items-center", "justify-center"].every(name => group.classList.contains(name)) &&
+            [...group.querySelectorAll('button[aria-label]')].some(count => /^\d[\d,.万億kKmM]*スキ この記事にスキをつけたユーザーを見る$/.test(count.getAttribute("aria-label")))) articleReaction = true;
+      }
+      // 本文・コメントのハートではなく、記事ヘッダ内または確認済みの記事スキ数と対になる操作。
+      const userId = core.authorId(new URL(address.url).pathname.split("/")[1]);
+      for (const time of article.querySelectorAll("time")) {
+        if (time.closest('[id="note-body"]')) continue;
+        let region = time.parentElement;
+        for (let depth = 0; region && region !== article && depth < 4; depth++, region = region.parentElement) {
+          if ((!articleReaction && !region.contains(button)) || region.querySelector('[id="note-body"]')) continue;
+          const avatar = [...region.querySelectorAll('[data-name="avatar"]')].find(a => a.closest("a")?.href === core.profileUrl(userId));
+          if (avatar) return { item: { type: "user", userId, displayName: authorName(region, userId, avatar) }, sourceUrl: address.url };
+        }
+      }
+      return null;
+    }
+    function sync(value, pageUrl) {
+      settings = value;
+      const changed = url !== pageUrl; url = pageUrl;
+      for (const [button, job] of pending) {
+        if (!active() || changed || !button.isConnected) { cancel(button); continue; }
+        if (state(button) !== job.next) { win.clearTimeout(job.settle); job.settle = undefined; continue; }
+        if (job.settle !== undefined) continue;
+        job.settle = win.setTimeout(() => {
+          if (!pending.has(button)) return;
+          let current;
+          try { current = button.isConnected && author(button); } catch { /* DOMの再利用や不明な作者は保存しない */ }
+          const valid = active() && current && core.favoriteKey(current.item) === core.favoriteKey(job.item) &&
+            current.sourceUrl === job.sourceUrl && state(button) === job.next && url === job.url;
+          cancel(button);
+          if (valid) save(job.item, !job.next, job.sourceUrl);
+        }, 600);
+      }
+    }
+    function click(event) {
+      const target = event.composedPath?.().find(node => node?.nodeType === 1) || event.target;
+      const button = target?.closest?.("button");
+      if (button) cancel(button); // 再クリックはShiftなしでも保留を取り消す。
+      if (!active() || event.isTrusted !== true || event.button !== 0 || !event.shiftKey || event.ctrlKey || event.metaKey || event.altKey ||
+          target?.closest?.(`[${owned}]`)) return;
+      if (button) {
+        const before = state(button);
+        if (before === null) return;
+        let candidate;
+        try { candidate = author(button); } catch { return; }
+        if (!candidate) return;
+        const job = { ...candidate, next: !before, url };
+        job.expiry = win.setTimeout(() => cancel(button), 5000); pending.set(button, job);
+        return;
+      }
+      const link = target?.closest?.("a"), page = link && core.pageKind(link.href);
+      if (page?.type === "tag" && event.cancelable) {
+        let tag;
+        try { tag = core.normalizeTag(page.tag); } catch { return; }
+        const destination = link.href, source = url;
+        event.preventDefault(); event.stopImmediatePropagation();
+        void save(tag, false, destination).then(saved => {
+          if (saved && active() && url === source) win.location.assign(destination);
+        });
+      }
+    }
+    return Object.freeze({ sync, click, stop() {
+      stopped = true; for (const button of pending.keys()) cancel(button);
+      win.clearTimeout(noticeTimer); notice?.remove(); notice = undefined;
+    } });
+  }
+  globalThis.HikikomoriNoteUi = Object.freeze({ create, createLikeVisibility, createShiftFavorites, isOfficialHeaderLogo });
 })();
