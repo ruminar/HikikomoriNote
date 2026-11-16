@@ -55,6 +55,11 @@
       const value = await platform.selectGroup(groupId);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
+    async followingFavoriteDrop(operation, selectionRevision) {
+      const before = revision;
+      const value = await platform.followingFavoriteDrop(operation, selectionRevision);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
+    },
     async refresh() {
       const before = revision;
       const value = await platform.load();

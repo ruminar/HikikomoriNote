@@ -232,6 +232,133 @@
       return value;
     }
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
+    let followingDrag;
+    function clearFollowingInsertion() {
+      for (const row of menu?.querySelectorAll('[data-favorite-insert]') || []) row.removeAttribute("data-favorite-insert");
+      for (const list of menu?.querySelectorAll('[data-favorite-list-end]') || []) list.removeAttribute("data-favorite-list-end");
+    }
+    function clearFollowingDrag() {
+      if (!followingDrag) return;
+      clearFollowingInsertion();
+      followingDrag.row.removeAttribute("data-favorite-dragging"); followingDrag = undefined;
+      for (const button of menu?.querySelectorAll('button[data-group-id]') || []) {
+        const id = button.getAttribute("data-group-id"), group = currentSettings?.tagGroups.find(group => group.id === id);
+        button.removeAttribute("data-favorite-drop"); button.removeAttribute("data-drag-over");
+        button.textContent = core.groupSymbols[core.groupIds.indexOf(id)];
+        if (group) { button.setAttribute("title", core.groupName(group)); button.setAttribute("aria-label", `${button.textContent} ${core.groupName(group)}`); }
+      }
+    }
+    function followingDragValid() {
+      return Boolean(followingDrag && !disposed && !adding && !uncertain && currentSettings?.enabled && core.usesTags(currentSettings) &&
+        !currentSettings.tagWarning && !currentSettings.groupSelectionInvalid && core.pageKind(currentUrl)?.type === "following" &&
+        followingDrag.url === currentUrl && followingDrag.row.isConnected && followingDrag.groupId === currentSettings.selectedTagGroupId &&
+        followingDrag.selectionRevision === currentSettings.groupSelectionRevision && followingDrag.groupsRevision === currentSettings.tagGroupsRevision &&
+        core.selectedGroup(currentSettings).tags.some(item => core.favoriteKey(item) === core.favoriteKey(followingDrag.tag)));
+    }
+    function followingDropTarget(groupId) {
+      if (!followingDragValid()) return null;
+      const group = core.availableGroups(currentSettings).find(group => group.id === groupId);
+      if (!group) return null;
+      const remove = group.id === followingDrag.groupId;
+      return { group, remove, duplicate: !remove && group.tags.some(item => core.favoriteKey(item) === core.favoriteKey(followingDrag.tag)) };
+    }
+    function paintFollowingDropTargets() {
+      for (const button of menu.querySelectorAll('button[data-group-id]')) {
+        const target = followingDropTarget(button.getAttribute("data-group-id"));
+        if (!target) continue;
+        button.setAttribute("data-favorite-drop", target.remove ? "delete" : target.duplicate ? "blocked" : "move");
+        if (target.remove) button.textContent = "🗑";
+        const label = target.remove ? `${core.favoriteLabel(followingDrag.tag)}をお気に入りから削除（ここへドロップ）` :
+          target.duplicate ? `${core.groupName(target.group)}には登録済みのため移動できません` : `${core.groupName(target.group)}へ移動（ここへドロップ）`;
+        button.setAttribute("title", label); button.setAttribute("aria-label", label);
+      }
+    }
+    async function dropFollowingFavorite(target, source) {
+      const operation = target.reorder ? { type: "MOVE_TAG", groupId: source.groupId, tag: source.tag, beforeTag: target.beforeTag } :
+        target.remove ? { type: "REMOVE_TAG", groupId: source.groupId, tag: source.tag } :
+        { type: "TRANSFER_TAG", groupId: source.groupId, targetGroupId: target.group.id, tag: source.tag };
+      adding = true; actionMessage = "保存中…"; repaint();
+      try {
+        await actions.followingFavoriteDrop(operation, source.selectionRevision);
+        if (currentUrl === source.url) actionMessage = target.reorder ? "お気に入りの順序を変更しました。" : target.remove ? `${core.favoriteLabel(source.tag)}をお気に入りから削除しました。` :
+          `${core.favoriteLabel(source.tag)}を${core.groupSymbols[core.groupIds.indexOf(target.group.id)]} ${core.groupName(target.group)}へ移動しました。`;
+      } catch (error) {
+        uncertain = error.code === "UNCONFIRMED"; actionMessage = error.message || "保存できませんでした。";
+      } finally { adding = false; repaint(); }
+    }
+    function dropFollowingOrder(beforeTag) {
+      if (!followingDragValid()) return;
+      const source = followingDrag, tags = core.selectedGroup(currentSettings).tags;
+      const index = tags.findIndex(tag => core.favoriteKey(tag) === core.favoriteKey(source.tag));
+      const before = beforeTag === null ? tags.length : tags.findIndex(tag => core.favoriteKey(tag) === core.favoriteKey(beforeTag));
+      clearFollowingDrag();
+      if (index < 0 || before < 0 || before === index || before === index + 1) return;
+      void dropFollowingFavorite({ reorder: true, beforeTag }, source);
+    }
+    function bindFollowingListDrop(list) {
+      list.setAttribute("data-following-favorite-list", "");
+      list.ondragover = event => {
+        if (!followingDragValid() || event.target?.closest('[data-following-favorite-item]')) return;
+        event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        clearFollowingInsertion(); list.setAttribute("data-favorite-list-end", "");
+      };
+      list.ondragleave = event => { if (!list.contains(event.relatedTarget)) clearFollowingInsertion(); };
+      list.ondrop = event => {
+        if (!followingDragValid() || event.target?.closest('[data-following-favorite-item]')) return;
+        event.preventDefault(); event.stopPropagation(); dropFollowingOrder(null);
+      };
+    }
+    function bindFollowingGroupDrop(button, groupId) {
+      button.ondragenter = button.ondragover = event => {
+        const target = followingDropTarget(groupId);
+        if (!target) return;
+        clearFollowingInsertion();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = target.duplicate ? "none" : "move";
+        button.setAttribute("data-drag-over", ""); if (!target.duplicate) event.preventDefault();
+      };
+      button.ondragleave = event => { if (!button.contains(event.relatedTarget)) button.removeAttribute("data-drag-over"); };
+      button.ondrop = event => {
+        const target = followingDropTarget(groupId), source = followingDrag;
+        if (!target) { clearFollowingDrag(); return; }
+        event.preventDefault(); event.stopPropagation(); clearFollowingDrag();
+        if (target.duplicate) { actionMessage = "移動先には既に登録されています。元の項目は変更していません。"; repaint(); return; }
+        void dropFollowingFavorite(target, source);
+      };
+    }
+    function bindFollowingFavoriteDrag(row, link, tag, groupId) {
+      row.setAttribute("data-following-favorite-item", "");
+      row.draggable = link.draggable = !adding && !uncertain && !currentSettings.tagWarning && !currentSettings.groupSelectionInvalid;
+      row.ondragstart = event => {
+        if (disposed || adding || uncertain || !currentSettings?.enabled || !core.usesTags(currentSettings) || currentSettings.tagWarning ||
+            currentSettings.groupSelectionInvalid || core.pageKind(currentUrl)?.type !== "following" || groupId !== currentSettings.selectedTagGroupId ||
+            !row.isConnected || !event.dataTransfer) { event.preventDefault(); return; }
+        clearFollowingDrag();
+        followingDrag = { row, tag, groupId, url: currentUrl, selectionRevision: currentSettings.groupSelectionRevision, groupsRevision: currentSettings.tagGroupsRevision };
+        row.setAttribute("data-favorite-dragging", "");
+        event.dataTransfer.setData("text/plain", core.favoriteKey(tag)); event.dataTransfer.effectAllowed = "move"; paintFollowingDropTargets();
+      };
+      row.ondragend = clearFollowingDrag;
+      const position = event => {
+        const tags = core.selectedGroup(currentSettings).tags, index = tags.findIndex(item => core.favoriteKey(item) === core.favoriteKey(tag));
+        if (index < 0) return null;
+        const rect = row.getBoundingClientRect(), after = Number.isFinite(event.clientY) && event.clientY > rect.top + rect.height / 2;
+        return { beforeTag: after ? tags[index + 1] ?? null : tags[index], after };
+      };
+      row.ondragover = event => {
+        if (!followingDragValid() || !row.isConnected) return;
+        const target = position(event); if (!target) return;
+        event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        clearFollowingInsertion();
+        for (const button of menu.querySelectorAll('[data-drag-over]')) button.removeAttribute("data-drag-over");
+        row.setAttribute("data-favorite-insert", target.after ? "after" : "before");
+      };
+      row.ondragleave = event => { if (!row.contains(event.relatedTarget)) row.removeAttribute("data-favorite-insert"); };
+      row.ondrop = event => {
+        if (!followingDragValid() || !row.isConnected) return;
+        const target = position(event); if (!target) return;
+        event.preventDefault(); event.stopPropagation(); dropFollowingOrder(target.beforeTag);
+      };
+    }
     const followingUrl = "https://note.com/following";
     const guestFollowingUrl = "https://note.com/search?q=&context=note&mode=search&sort=new";
     const followingLinks = new Map();
@@ -550,7 +677,7 @@
       finally { adding = false; repaint(); }
     }
     async function selectGroup(groupId) {
-      if (adding || uncertain || currentSettings.tagWarning || !actions.selectGroup) return;
+      if (followingDrag || adding || uncertain || currentSettings.tagWarning || !actions.selectGroup) return;
       adding = true; repaint();
       try { await actions.selectGroup(groupId); actionMessage = ""; }
       catch (error) { uncertain = error.code === "UNCONFIRMED"; actionMessage = error.message; }
@@ -1597,6 +1724,7 @@
       }
     }
     function restore() {
+      clearFollowingDrag();
       menu?.remove(); menu = undefined; host = undefined; signature = undefined;
       for (const element of originals) element.removeAttribute(hidden);
       originals.clear();
@@ -1631,11 +1759,13 @@
     }
     let mobile;
     function closeMobile(focus = false) {
+      clearFollowingDrag();
       if (!mobile) return;
       mobile.panel.hidden = true; mobile.button.setAttribute("aria-expanded", "false");
       if (focus) mobile.button.focus();
     }
     function removeMobile() {
+      clearFollowingDrag();
       if (!mobile) return;
       const focusInside = mobile.panel.contains(doc.activeElement) || doc.activeElement === mobile.button;
       mobile.button.remove(); mobile.panel.remove(); mobile.parent.removeAttribute("data-hikikomori-note-mobile-logo");
@@ -1657,7 +1787,10 @@
         button.className = "hikikomori-note-mobile-toggle"; button.textContent = "☰";
         button.setAttribute("aria-label", "ナビゲーションメニュー"); button.setAttribute("aria-expanded", "false");
         button.setAttribute("aria-controls", "hikikomori-note-mobile-navigation");
-        button.onclick = () => { panel.hidden = !panel.hidden; button.setAttribute("aria-expanded", String(!panel.hidden)); };
+        button.onclick = () => {
+          if (!panel.hidden) { closeMobile(); return; }
+          panel.hidden = false; button.setAttribute("aria-expanded", "true");
+        };
         const escape = event => { if (event.key === "Escape") { event.preventDefault(); closeMobile(true); } };
         button.onkeydown = escape; panel.onkeydown = escape;
         panel.onclick = event => { if (event.target?.closest("a[href]")) closeMobile(); };
@@ -1825,6 +1958,7 @@
       if ((core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag || core.searchedAuthor(currentUrl) !== core.searchedAuthor(url)) && !uncertain && !adding) actionMessage = "";
       if (currentUrl !== url || Boolean(currentSettings?.enabled) !== Boolean(settings.enabled)) followingLinksDirty = true;
       currentSettings = settings; currentUrl = url;
+      if (followingDrag && !followingDragValid()) clearFollowingDrag();
       syncFollowingLinks();
       prepareProfilePaidAllowance(settings, url);
       syncPinnedHeader(settings, url);
@@ -1866,7 +2000,8 @@
       const activeAuthor = core.searchedAuthor(url);
       const authorCard = !severe && activeAuthor ? searchAuthor(activeAuthor, settings) : null;
       const registeredAuthor = activeAuthor && group?.tags.some(item => core.favoriteKey(item) === `user:${activeAuthor.toLowerCase()}`);
-      const nextSignature = JSON.stringify([page, activeTag, activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.selectedTagGroupId, settings.groupSelectionRevision, settings.groupSelectionInvalid, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
+      const followingDropEnabled = page.type === "following" && Boolean(actions.followingFavoriteDrop);
+      const nextSignature = JSON.stringify([page, activeTag, activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.tagGroupsRevision, settings.selectedTagGroupId, settings.groupSelectionRevision, settings.groupSelectionInvalid, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
         menu.setAttribute(owned, "");
@@ -1877,6 +2012,7 @@
         else host.prepend(menu);
       }
       if (signature !== nextSignature) {
+        clearFollowingDrag();
         menu.replaceChildren();
         if (severe) {
           const profile = doc.createElement("a"), destination = core.profileUrl(settings.noteUserId);
@@ -1945,11 +2081,14 @@
               button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
               button.setAttribute("aria-pressed", String(item.id === group.id));
               button.disabled = adding || uncertain || Boolean(settings.tagWarning) || !actions.selectGroup;
-              button.onclick = () => { void selectGroup(item.id); }; selector.append(button);
+              button.onclick = () => { void selectGroup(item.id); };
+              if (followingDropEnabled) bindFollowingGroupDrop(button, item.id);
+              selector.append(button);
             });
             menu.append(selector);
             const name = doc.createElement("div"); name.className = "hikikomori-note-group-name"; name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); menu.append(name);
             const list = doc.createElement("ul"); menu.append(list);
+            if (followingDropEnabled) bindFollowingListDrop(list);
             for (const tag of group.tags) {
               const item = doc.createElement("li"), link = doc.createElement("a");
               const user = tag?.type === "user";
@@ -1964,6 +2103,7 @@
               }
               if (activeTag === tag || (user && activeAuthor?.toLowerCase() === tag.userId.toLowerCase())) link.setAttribute("aria-current", "page");
               item.append(link); list.append(item);
+              if (followingDropEnabled) bindFollowingFavoriteDrag(item, link, tag, group.id);
             }
           }
         }

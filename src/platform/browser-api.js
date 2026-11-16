@@ -48,6 +48,7 @@
     tag: operation => request("tag-operation", operation),
     addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision, pageUrl: globalThis.location.href }),
     selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),
+    followingFavoriteDrop: (operation, selectionRevision) => request("following-favorite-drop", { operation, selectionRevision, pageUrl: globalThis.location.href }),
     subscribe(listener) {
       const onChange = (changes, area) => {
         if (area === "local" && Object.hasOwn(changes, key)) listener(changes[key].newValue);
