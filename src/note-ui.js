@@ -455,7 +455,7 @@
       const targets = new Set(), page = core.pageKind(url);
       const height = Math.max(0, ...[...headers].map(header => header.getBoundingClientRect().height));
       if (headers.size && Number.isFinite(height) && height > 0 &&
-          (core.isHome(url) || ["following", "tag", "search", "topic"].includes(page?.type))) {
+          (core.isHome(url) || ["following", "tag", "search", "topic", "help"].includes(page?.type))) {
         for (const aside of new Set([...doc.querySelectorAll('aside[class~="w-[11.375rem]"]'), ...navigationSidebars(doc)])) {
           if (hasClasses(aside, ["sticky", "top-3", "max-h-screen", "overflow-y-auto"]) &&
               !aside.closest("article") && !aside.closest(`[${owned}]`)) targets.add(aside);
@@ -547,6 +547,53 @@
     const products = new Set();
     const recommendations = new Set();
     const sidebarRoots = new Set();
+    const accountMenuHidden = "data-hikikomori-note-account-menu-hidden", accountMenuTargets = new Set();
+    let accountMenuDirty = true, accountMenuSignature;
+    function syncAccountMenu(settings) {
+      const paid = settings.enabled && settings.hidePaidArticles === true;
+      const recommendations = settings.enabled && settings.hideArticleRecommendations === true;
+      const signature = `${Boolean(paid)}:${Boolean(recommendations)}`;
+      if (!accountMenuDirty && signature === accountMenuSignature) return;
+      accountMenuDirty = false; accountMenuSignature = signature;
+      const targets = new Set();
+      const isLink = (link, origin, path) => {
+        try { const address = new URL(link.href); return address.origin === origin && !address.username && !address.password && address.pathname === path; }
+        catch { return false; }
+      };
+      if (paid || recommendations) for (const root of doc.querySelectorAll('div[class~="min-w-[262px]"]')) {
+        if (!hasClasses(root, ["py-6", "md:py-0"]) || root.closest("article") || root.closest('[id="note-body"]') || root.closest(`[${owned}]`)) continue;
+        const links = [...root.querySelectorAll("a[href]")];
+        if (!root.querySelector('[data-name="avatar"]') ||
+            !links.some(a => isLink(a, "https://note.com", "/settings/account")) ||
+            !links.some(a => isLink(a, "https://note.com", "/logout") && a.textContent.trim() === "ログアウト")) continue;
+        const sectionOf = element => [...root.children].find(section => section.contains(element) && hasClasses(section, ["border-border-weak", "border-t"]));
+        for (const link of links) {
+          if (paid && isLink(link, "https://note.com", "/settings/point_history") && link.querySelector('svg[aria-label="所持noteポイント"]')) {
+            const row = link.parentElement, section = sectionOf(row);
+            const rowLinks = [...row.querySelectorAll("a[href]")];
+            if (section && row.tagName === "DIV" && row.classList.contains("relative") && row.children.length === 2 && row.children[0] === link && rowLinks.length === 2 &&
+                rowLinks.some(a => isLink(a, "https://note.com", "/settings/point_purchase") && a.textContent.trim() === "チャージ")) {
+              targets.add(section.children.length === 1 && section.children[0] === row ? section : row);
+            }
+          }
+          if (!recommendations) continue;
+          const item = link.parentElement;
+          if (isLink(link, "https://premium.lp-note.com", "/") && link.getAttribute("data-name") === "Button" &&
+              link.textContent.trim() === "noteプレミアムサービス" && item.tagName === "LI" &&
+              item.parentElement?.tagName === "UL" && item.parentElement.classList.contains("px-6") && sectionOf(item)) targets.add(item.children.length === 1 ? item : link);
+          if (isLink(link, "https://note.com", "/help") && link.textContent.trim() === "note活用術" &&
+              hasClasses(item, ["flex", "items-center", "justify-center", "px-6"]) && sectionOf(item)) {
+            targets.add(link);
+            const children = [...item.children];
+            if (children.length === 3 && children[0] === link && children[1].tagName === "SPAN" && children[1].textContent.trim() === "/" &&
+                isLink(children[2], "https://help-note.com", "/hc/ja") && children[2].textContent.trim() === "ヘルプ") targets.add(children[1]);
+          }
+        }
+      }
+      for (const target of accountMenuTargets) if (!targets.has(target)) target.removeAttribute(accountMenuHidden);
+      accountMenuTargets.clear();
+      for (const target of targets) { if (!target.hasAttribute(accountMenuHidden)) target.setAttribute(accountMenuHidden, ""); accountMenuTargets.add(target); }
+    }
     const notificationTitles = new Map();
     let notificationTitlesDirty = true, notificationRules, notificationEnabled;
     function restoreNotificationTitle(button, state) {
@@ -588,7 +635,7 @@
     function prepareSidebar(url, settings) {
       if (disposed) return;
       const active = (settings?.enabled && core.modeOf(settings) !== "social") &&
-        ["following", "tag", "search", "topic"].includes(core.pageKind(url)?.type);
+        ["following", "tag", "search", "topic", "help"].includes(core.pageKind(url)?.type);
       for (const root of sidebarRoots) {
         if (!active || !root.isConnected || !isSidebarGrid(root)) {
           root.classList.remove(rootClass); root.classList.remove(followingRootClass); sidebarRoots.delete(root);
@@ -1745,6 +1792,7 @@
     function update(settings, url) {
       if (disposed) return;
       likeVisibility.update(settings, url);
+      syncAccountMenu(settings);
       syncNotificationTitles(settings);
       const profilePage = core.pageKind(url);
       if (profileLayout && (profilePage?.type !== "profile" || profilePage.user !== profileLayout.userId ||
@@ -1779,7 +1827,7 @@
       syncProfilePromotions(settings, url);
       if (core.isArticle(url) || core.isPreviewArticle(url)) { restore(); pruneProfileLayout(); return; }
       if (!settings.enabled || !page || core.membershipPage(url) || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.modeOf(settings) !== "social")) { removeMobile(); restore(); pruneProfileLayout(); return; }
-      const common = ["following", "tag", "search", "topic"].includes(page.type);
+      const common = ["following", "tag", "search", "topic", "help"].includes(page.type);
       const officialAside = common && (navigationSidebars(doc)[0] || [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky")));
       const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);
       const mobileHost = syncMobile(compact, url);
@@ -1910,6 +1958,7 @@
     return Object.freeze({
       update, prepareSidebar,
       invalidatePaidCards() {
+        accountMenuDirty = true;
         notificationTitlesDirty = true;
         followingLinksDirty = true;
         searchAuthorDirty = true;
@@ -1924,6 +1973,8 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        for (const target of accountMenuTargets) target.removeAttribute(accountMenuHidden);
+        accountMenuTargets.clear();
         for (const [button, state] of notificationTitles) restoreNotificationTitle(button, state);
         notificationTitles.clear();
         clearQuestionAuthor();

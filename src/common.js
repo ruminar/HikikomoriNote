@@ -210,12 +210,13 @@
       if (/^\/following\/?$/.test(parsed.pathname)) return { type: "following" };
       if (/^\/search\/?$/.test(parsed.pathname)) return { type: "search" };
       if (/^\/topic\/[^/]+(?:\/[^/]+)*\/?$/.test(parsed.pathname)) return { type: "topic" };
+      if (/^\/help(?:\/pg\/[^/]+(?:\/[^/]+)*)?\/?$/.test(parsed.pathname)) return { type: "help" };
       const match = /^\/(?:tag|hashtag)\/([^/]+)\/?$/.exec(parsed.pathname);
       if (match) return { type: "tag", tag: decodeURIComponent(match[1]) };
       const magazine = /^\/([a-zA-Z0-9_]+)\/m\/(m[a-zA-Z0-9]+)(?:\/(?:archive|hashtag))?\/?$/.exec(parsed.pathname);
       if (magazine && pageKind(`https://note.com/${magazine[1]}`)?.type === "profile") return { type: "magazine", user: magazine[1], magazineId: magazine[2] };
       const profile = /^\/([a-zA-Z0-9_]+)(?:\/(?:all|magazines|membership|likes|archives|followings|followers)(?:\/[^/]+)*)?\/?$/.exec(parsed.pathname) ?? /^\/([a-zA-Z0-9_]+)\/store\/?$/.exec(parsed.pathname);
-      const reserved = new Set(["dashboard", "settings", "login", "signup", "api", "notes", "following", "tag", "hashtag", "search", "trend", "contests", "topic", "terms", "notifications", "messages", "new"]);
+      const reserved = new Set(["dashboard", "settings", "login", "signup", "api", "notes", "following", "tag", "hashtag", "search", "trend", "contests", "topic", "help", "terms", "notifications", "messages", "new"]);
       if (profile && !reserved.has(profile[1])) return { type: "profile", user: profile[1] };
     } catch { /* 壊れたURLは対象外 */ }
     return null;

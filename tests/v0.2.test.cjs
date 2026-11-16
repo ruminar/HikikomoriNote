@@ -233,6 +233,57 @@ test('上下ボタンとドラッグの移動を保存し、キーボードで�
 function uiFixture(html,actions){const doc=documentFromHtml(html);const win={matchMedia:query=>({matches:query.includes("max-width")?!win.wide:win.wide}),wide:true,getComputedStyle:()=>({display:'block'})};const context=vm.createContext({URL,console});vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/note-ui.js'),context);return {doc,win,core:context.HikikomoriNote,isLogo:context.HikikomoriNoteUi.isOfficialHeaderLogo,ui:context.HikikomoriNoteUi.create(doc,win,{settingsUrl:()=>"chrome-extension://self/home.html",...actions})};}
 const sidebarHtml='<aside class="sticky w-[11.375rem]"><div><nav aria-label="急上昇"></nav></div></aside><main><article></article></main>';
 
+const accountMenuHtml='<div id="account-menu" class="min-w-[262px] py-6 md:py-0"><div class="border-border-weak border-t"><a href="/sample"><span data-name="avatar"></span></a><a href="https://note.com/settings/account"></a></div><div id="account-points" class="border-border-weak border-t py-2"><div class="relative"><a href="https://note.com/settings/point_history"><svg aria-label="所持noteポイント"></svg></a><div><a id="account-charge" href="https://note.com/settings/point_purchase"></a></div></div></div><div class="border-border-weak border-t"><a id="account-purchased" href="/notes/purchased"></a><a href="/membership/settings"></a><a href="/magazines/all"></a></div><div class="border-border-weak border-t"><a id="account-logout" href="https://note.com/logout"></a></div><div class="border-border-weak border-t border-none"><ul class="px-6"><li id="account-premium-item"><a id="account-premium" data-name="Button" href="https://premium.lp-note.com/"></a></li></ul><div class="flex items-center justify-center px-6"><a id="account-guide" href="/help"></a><span id="account-slash"></span><a id="account-help" href="https://help-note.com/hc/ja"></a></div></div></div>';
+function accountMenuFixture(html=accountMenuHtml){
+ const f=uiFixture(html);
+ for(const [id,text] of Object.entries({'account-charge':'チャージ','account-logout':'ログアウト','account-premium':'noteプレミアムサービス','account-guide':'note活用術','account-slash':'/','account-help':'ヘルプ'}))f.doc.getElementById(id).textContent=text;
+ return f;
+}
+const accountHidden='data-hikikomori-note-account-menu-hidden';
+test('アカウントメニューは有料非表示とおすすめ非表示を個別に適用し、全モードで履歴・ヘルプ・ログアウトを残す',()=>{
+ for(const mode of ['normal','normal-double','social','severe'])for(const paid of [false,true])for(const recommendations of [false,true]){
+  const f=accountMenuFixture(),settings=f.core.readSettings({...groups(),mode,hidePaidArticles:paid,hideArticleRecommendations:recommendations});f.ui.update(settings,'https://note.com/search');
+  assert.equal(f.doc.getElementById('account-points').hasAttribute(accountHidden),paid);
+  for(const id of ['account-premium-item','account-guide','account-slash'])assert.equal(f.doc.getElementById(id).hasAttribute(accountHidden),recommendations);
+  for(const id of ['account-help','account-purchased','account-logout','account-menu'])assert.equal(f.doc.getElementById(id).hasAttribute(accountHidden),false);
+  f.ui.update({...settings,enabled:false},'https://note.com/search');assert.equal(f.doc.querySelectorAll(`[${accountHidden}]`).length,0);
+ }
+});
+test('メニューの後挿入・交換・設定変更・停止で非表示を更新し、初期メニューのない画面でも再検出する',()=>{
+ const f=accountMenuFixture(),root=f.doc.getElementById('account-menu'),s=f.core.readSettings({...groups(),hidePaidArticles:true,hideArticleRecommendations:true}),url='https://note.com/following';
+ root.remove();f.ui.update(s,url);f.doc.root.append(root);f.ui.invalidatePaidCards();f.ui.update(s,url);assert.equal(f.doc.getElementById('account-points').hasAttribute(accountHidden),true);
+ f.ui.update({...s,hidePaidArticles:false},url);assert.equal(f.doc.getElementById('account-points').hasAttribute(accountHidden),false);assert.equal(f.doc.getElementById('account-guide').hasAttribute(accountHidden),true);
+ root.remove();f.ui.invalidatePaidCards();f.ui.update(s,url);assert.equal(f.doc.getElementById('account-guide').hasAttribute(accountHidden),false);
+ f.doc.root.append(root);f.ui.invalidatePaidCards();f.ui.update(s,url);f.ui.stop();assert.equal(f.doc.querySelectorAll(`[${accountHidden}]`).length,0);
+});
+test('本文・拡張所有・未知のメニューや外部の同名リンクを隠さず、ポイント欄に別機能があればその機能を残す',()=>{
+ for(const wrapper of ['article','owned','unknown']){
+  const f=accountMenuFixture(),root=f.doc.getElementById('account-menu');
+  if(wrapper==='unknown')root.className='other';else{const block=f.doc.createElement(wrapper==='article'?'article':'div');if(wrapper==='owned')block.setAttribute('data-hikikomori-note-owned','');f.doc.root.append(block);block.append(root);}
+  f.ui.update(f.core.readSettings({...groups(),hidePaidArticles:true,hideArticleRecommendations:true}),'https://note.com/following');assert.equal(f.doc.querySelectorAll(`[${accountHidden}]`).length,0);
+ }
+ const f=accountMenuFixture(),s=f.core.readSettings({...groups(),hidePaidArticles:true,hideArticleRecommendations:true});
+ f.doc.getElementById('account-premium').href='https://other.test/';f.doc.getElementById('account-guide').href='https://other.test/help';
+ const extra=f.doc.createElement('button');f.doc.getElementById('account-points').append(extra);f.ui.update(s,'https://note.com/following');
+ assert.equal(f.doc.getElementById('account-points').hasAttribute(accountHidden),false);assert.equal(extra.hasAttribute(accountHidden),false);
+ assert.equal(f.doc.getElementById('account-points').children[0].hasAttribute(accountHidden),true);assert.equal(f.doc.getElementById('account-premium-item').hasAttribute(accountHidden),false);assert.equal(f.doc.getElementById('account-guide').hasAttribute(accountHidden),false);
+});
+test('helpとhelp/pg配下を共通メニューとして認識し、外部ヘルプと未知パスを作者扱いしない',()=>{
+ const {core}=fixture();
+ for(const path of ['/help','/help/','/help/pg/event','/help/pg/membership/?a=1','/help/pg/event/details'])assert.equal(core.pageKind('https://note.com'+path)?.type,'help',path);
+ for(const url of ['https://help-note.com/hc/ja','https://other.test/help','https://note.com/help/all','https://note.com/help/unknown','https://note.com/help/pg/'])assert.equal(core.pageKind(url),null,url);
+});
+test('活用術も通常・2段のグループと重度の自己リンクを共用し、本文タブを保ち狭幅と社会復帰に追従する',()=>{
+ for(const mode of ['normal','normal-double','severe'])for(const path of ['/help','/help/pg/event']){
+  const f=uiFixture(logoHeaderHtml+categorySidebarHtml),settings=f.core.readSettings({...groups(['Sample']),mode,noteUserId:'sample'}),url='https://note.com'+path;
+  const main=f.doc.getElementById('category-main'),tabs=f.doc.createElement('nav');main.append(tabs);f.ui.update(settings,url);
+  const menu=()=>f.doc.querySelector('[class="hikikomori-note-navigation"]');assert.ok(menu());assert.equal(main.contains(tabs),true);assert.equal(tabs.hasAttribute('data-hikikomori-note-menu-hidden'),false);
+  assert.equal(menu().querySelectorAll('[data-group-id]').length,mode==='severe'?0:mode==='normal-double'?8:4);
+  f.doc.getElementById('category-sidebar').width=0;f.win.wide=false;f.ui.update(settings,url);const panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');assert.ok(panel.contains(menu()));
+  f.ui.update({...settings,mode:'social'},url);assert.equal(menu(),null);assert.equal(main.contains(tabs),true);
+ }
+});
+
 test('2段版の共通メニューは8個、通常版は4個。幅変更でも同じデータと選択を使う',()=>{
  const f=uiFixture(logoHeaderHtml+sidebarHtml),settings=f.core.readSettings({...eightGroups(['Last']),mode:'normal-double',selectedTagGroupId:'group8'}),url='https://note.com/following';
  const selector=()=>f.doc.querySelector('[class="hikikomori-note-group-selector"]');
@@ -1248,7 +1299,7 @@ test('noteのグループ選択は現在の共通メニュー対象URLとトッ�
  const context=vm.createContext({URL,chrome:{runtime:{id:'self',getURL:file=>'chrome-extension://self/'+file},tabs:{get:async()=>tab}}});
  vm.runInContext(source('src/common.js'),context);vm.runInContext(source('src/platform/browser-api.js'),context);
  const check=context.HikikomoriNoteBackgroundPlatform.currentMenuPage,sender={id:'self',frameId:0,tab:{id:1},url:'https://note.com/ruminar'};
- for(const url of ['https://note.com/following','https://note.com/tag/AI','https://note.com/search?q=AI','https://note.com/topic/education_learning']){tab={url};assert.ok(await check(sender,url));}
+ for(const url of ['https://note.com/following','https://note.com/tag/AI','https://note.com/search?q=AI','https://note.com/topic/education_learning','https://note.com/help','https://note.com/help/pg/event']){tab={url};assert.ok(await check(sender,url));}
  for(const url of ['https://note.com/ruminar','https://note.com/ruminar/n/n123','https://other.test/search']){tab={url};assert.equal(await check(sender,url),null);}
  tab={url:'https://note.com/search'};
  for(const patch of [{id:'other'},{frameId:1}])assert.equal(await check({...sender,...patch},tab.url),null);

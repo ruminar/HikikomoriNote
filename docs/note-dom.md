@@ -1,5 +1,11 @@
 # 0.2.0のDOM確認記録
 
+## 0.3.4・ユーザーメニューと活用術
+
+2026-11-16。利用者提供outerHTMLでは、メニュー本体がdiv.min-w-[262px].py-6.md:py-0で、直属にborder-border-weak/border-tの区画が並ぶ。アバター・/settings/account・/logoutを照合してメニューを識別。/settings/point_historyと所持noteポイントSVG、/settings/point_purchaseの「チャージ」が並ぶrelative行は、有料記事非表示で区画ごと隠す。区画に他機能があれば既知の行だけに留める。premium.lp-note.comの「noteプレミアムサービス」専用ボタンと/helpの「note活用術」はおすすめ非表示で隠す。後者の行の「／」も隠し、help-note.com/hc/jaへのヘルプは残す。本文や未知の同名リンクは対象外。既存のDOM通知を共用する。
+
+確認用ブラウザでは未ログインのためメニューを取得できなかった。一方、/helpから「安心創作勉強会」を開き/help/pg/eventへのSPA遷移を確認。両ページに既知のmin-h-screen/lg:grid/lg:grid-cols-[202px_minmax(0,1fr)]とsticky/w-[11.375rem]の左カラム、aria-labelがカテゴリナビゲーションの縦並びnavがある。これを既存メニューの対象に追加し、本文内のページ切替navは維持する。実拡張での表示確認とは区別する。
+
 ## 0.3.3・条件付き無料の割引記事（2026-11-16）
 
 利用者提供DOMではgrid-rows-subgridの記事カードの価格行（flex/items-center/gap-2）に、text-text-successのDIVと、その中の同色span「¥0〜」、直属のbg-surface-offer/rounded-fullのspan「割引あり」が並ぶ。記事本体は確認用ブラウザで定価300円と拡散による無料の選択肢を確認済み。価格の0は無条件無料を示していなかった。
