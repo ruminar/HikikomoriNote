@@ -844,6 +844,8 @@
     }
     function usesModernArticleCards(url) {
       if (core.isHome(url)) return true;
+      // タグ一覧も同じカードへ移行し、外枠のgrid-rows-subgridを持たなくなった。
+      if (core.pageKind(url)?.type === "tag") return true;
       try {
         const page = new URL(url);
         return page.origin === "https://note.com" && /^\/notes\/viewed\/?$/.test(page.pathname);

@@ -2506,6 +2506,37 @@ test('質問箱の自分リンクも狭幅・余白不足・作者未確認・OF
 // /notes/viewed の提供DOMを再現。ホームと同じカードに価格・作者・スキ操作がある。
 const viewedCardHtml='<main><div id="viewed-list"><div id="viewed-card" class="relative w-full border-b-0 py-0"><div class="flex w-full rounded md:rounded-lg bg-surface-normal [grid-row:2] min-w-0 flex-col items-stretch justify-normal gap-0"><a id="viewed-article" class="absolute inset-0" aria-label="記事" title="記事" href="https://note.com/yeku/n/n3d8afae640a0"></a><div class="block basis-auto overflow-visible mt-3"><div><h3></h3><p id="viewed-description"></p></div><div class="mt-2 flex items-center gap-2 text-sm empty:hidden"><div class="flex items-center gap-1 text-text-success"><span id="viewed-price" class="text-text-success text-sm"><span class="text-sm"></span></span></div></div><div class="pointer-events-none relative mt-2"><div class="relative flex items-start justify-between flex-col justify-start gap-2"><div class="pointer-events-auto flex w-full"><a id="viewed-avatar" data-name="avatar" href="https://note.com/yeku"></a></div><div class="pointer-events-auto flex h-6 items-center gap-3"><button id="viewed-heart" type="button" aria-pressed="false"><svg data-id="Icon" aria-label="スキ" role="img"></svg></button></div></div></div></div></div></div><div id="viewed-free"></div></div></main>';
 function viewedFixture(){const f=uiFixture(viewedCardHtml);f.doc.getElementById('viewed-price').textContent='¥200';return f;}
+function tagModernPaidFixture(){
+ const f=viewedFixture(),card=f.doc.getElementById('viewed-card'),price=f.doc.getElementById('viewed-price');
+ card.className='relative w-full border-b border-b-border-default border-b-solid py-2 sm:border-b-0 sm:py-0';
+ card.children[0].className='flex w-full rounded md:rounded-lg bg-surface-normal [grid-row:2] min-w-0 flex-row items-start justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-normal sm:gap-0';
+ price.textContent='';const yen=f.doc.createElement('span'),amount=f.doc.createElement('span');yen.textContent='¥';amount.textContent='300';price.append(yen,amount);return f;
+}
+test('タグの新構造の300円カードを全モード・tagとhashtagで隠し、無料枠・OFF・停止を保持',()=>{
+ for(const mode of ['normal','normal-double','severe','social'])for(const url of ['https://note.com/tag/Tag','https://note.com/hashtag/Tag?sort=new#top']){
+  const f=tagModernPaidFixture(),card=f.doc.getElementById('viewed-card'),free=f.doc.getElementById('viewed-free'),settings=f.core.readSettings({...groups(),hidePaidArticles:true,mode});
+  f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),true);assert.equal(free.hasAttribute(paidMarker),false);assert.equal(f.doc.getElementById('viewed-heart').isConnected,true);
+  for(const patch of [{enabled:false},{hidePaidArticles:false}]){f.ui.update({...settings,...patch},url);assert.equal(card.hasAttribute(paidMarker),false);f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),true);}
+  f.ui.update(settings,'https://note.com/notes/purchased');assert.equal(card.hasAttribute(paidMarker),false);f.ui.update(settings,url);f.ui.stop();assert.equal(card.hasAttribute(paidMarker),false);
+ }
+});
+test('タグの新カードでも作者の表示許可と解除を反映し、作者不一致には許可を流用しない',()=>{
+ const f=tagModernPaidFixture(),card=f.doc.getElementById('viewed-card'),url='https://note.com/tag/Tag',settings=f.core.readSettings({...groups(),hidePaidArticles:true,noteUserId:'ruminar',authorDisplayRevision:0,authorDisplayRules:[{userId:'yeku',displayName:'Sample',action:'allow'}]});
+ f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),false);
+ f.ui.update({...settings,authorDisplayRules:[]},url);assert.equal(card.hasAttribute(paidMarker),true);
+ f.doc.getElementById('viewed-avatar').href='https://note.com/other';f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(card.hasAttribute(paidMarker),true);
+});
+test('タグの新カードの後挿入と価格変化に追従し、contentsの1件枠を余白ごと隠す',()=>{
+ const f=tagModernPaidFixture(),card=f.doc.getElementById('viewed-card'),list=card.parentElement,slot=f.doc.createElement('div'),url='https://note.com/tag/Tag',settings=f.core.readSettings({...groups(),hidePaidArticles:true});slot.className='contents';slot.append(card);
+ f.ui.update(settings,url);list.append(slot);f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(slot.hasAttribute(paidMarker),true);assert.equal(list.hasAttribute(paidMarker),false);
+ f.doc.getElementById('viewed-price').textContent='¥0';f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(slot.hasAttribute(paidMarker),false);
+ f.doc.getElementById('viewed-price').textContent='¥300';f.ui.invalidatePaidCards();f.ui.update(settings,url);assert.equal(slot.hasAttribute(paidMarker),true);
+});
+test('タグの本文・未知構造・外部記事・見出し内だけの価格を誤って隠さない',()=>{
+ for(const change of [f=>{f.doc.getElementById('viewed-card').className='unknown';},f=>{f.doc.getElementById('viewed-article').href='https://evil.test/yeku/n/n123';},f=>{f.doc.getElementById('viewed-article').removeAttribute('title');},f=>{f.doc.getElementById('viewed-card').setAttribute('id','note-body');},f=>{const p=f.doc.getElementById('viewed-price');p.className='text-sm';f.doc.querySelector('h3').append(p);}]){
+  const f=tagModernPaidFixture(),card=f.doc.getElementById('viewed-card');change(f);f.ui.update(f.core.readSettings({...groups(),hidePaidArticles:true}),'https://note.com/tag/Tag');assert.equal(card.hasAttribute(paidMarker),false);
+ }
+});
 test('閲覧履歴の新構造の有料カードを全モードで隠し、一覧・無料枠・OFFと購入済みを保持',()=>{
  for(const mode of ['normal','social','severe'])for(const url of ['https://note.com/notes/viewed','https://note.com/notes/viewed/?sort=new#top']){
   const f=viewedFixture(),settings=f.core.readSettings({...groups(),mode,hidePaidArticles:true}),card=f.doc.getElementById('viewed-card');f.doc.getElementById('viewed-price').textContent='¥200';
