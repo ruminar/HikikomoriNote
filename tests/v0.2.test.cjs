@@ -1348,6 +1348,28 @@ test('コンテンツ操作はクリック時のURLを送信し、次のSPA遷�
 
 const tipHtml='<div class="mx-4 mt-6 mb-4 empty:hidden"><div><section class="flex flex-col bg-surface-quaternary"><h2></h2><div><span></span></div><button type="button" data-name="Button"><span></span></button></section></div></div>';
 function tipFixture(){const f=uiFixture(tipHtml);f.doc.querySelector('h2').textContent='いいなと思ったら応援しよう！';f.doc.querySelector('button').textContent='チップで応援する';return f;}
+test('新しいdiv内ボタンのチップ枠も全モードで余白ごと隠し、OFF・離脱・停止で戻す',()=>{
+ for(const mode of ['normal','normal-double','social','severe']){
+  const f=tipFixture(),section=f.doc.querySelector('section'),button=f.doc.querySelector('button'),wrapper=f.doc.createElement('div');wrapper.append(button);section.append(wrapper);
+  const outer=f.doc.root.children[0],marker='data-hikikomori-note-tip-hidden',url='https://note.com/sample_author/n/n123',settings=f.core.readSettings({...groups(),hidePaidArticles:true,mode});
+  f.ui.update(settings,url);assert.equal(outer.hasAttribute(marker),true);assert.equal(button.isConnected,true);
+  for(const patch of [{hidePaidArticles:false},{enabled:false}]){f.ui.update({...settings,...patch},url);assert.equal(outer.hasAttribute(marker),false);f.ui.update(settings,url);assert.equal(outer.hasAttribute(marker),true);}
+  f.ui.update(settings,'https://note.com/search');assert.equal(outer.hasAttribute(marker),false);f.ui.update(settings,url);f.ui.stop();assert.equal(outer.hasAttribute(marker),false);
+ }
+});
+test('新チップ枠の後挿入を隠し、本文内・深い入れ子・他要素を含むラッパーは対象外',()=>{
+ const marker='data-hikikomori-note-tip-hidden',url='https://note.com/sample_author/n/n123';
+ for(const kind of ['known','body','deep','siblings','other']){
+  const f=tipFixture(),section=f.doc.querySelector('section'),button=f.doc.querySelector('button'),wrapper=f.doc.createElement('div'),outer=f.doc.root.children[0];wrapper.append(button);section.append(wrapper);
+  if(kind==='body'){const body=f.doc.createElement('div');body.setAttribute('id','note-body');body.append(outer);f.doc.root.append(body);}
+  if(kind==='deep'){const inner=f.doc.createElement('div');inner.append(button);wrapper.append(inner);}
+  if(kind==='siblings')wrapper.append(f.doc.createElement('span'));
+  if(kind==='other')button.textContent='別の操作';
+  const settings=f.core.readSettings({...groups(),hidePaidArticles:true});
+  if(kind==='known'){outer.remove();f.ui.update(settings,url);f.doc.root.append(outer);f.ui.invalidatePaidCards();}
+  f.ui.update(settings,url);assert.equal(outer.hasAttribute(marker),kind==='known',kind);assert.equal(section.hasAttribute(marker),false);
+ }
+});
 test('有料記事非表示でチップ枠も両モードで余白ごと隠し、設定解除・OFF・画面移動・停止で復元',()=>{
  for(const mode of ["normal","severe","social"]){
   const f=tipFixture(),container=f.doc.root.children[0],marker='data-hikikomori-note-tip-hidden',url='https://note.com/ichigo_mon/n/n123';

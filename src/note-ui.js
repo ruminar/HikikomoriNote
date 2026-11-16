@@ -1569,8 +1569,12 @@
           !section.classList.contains("flex-col")) return null;
       const heading = [...section.children].find(child => child.tagName === "H2");
       if (heading?.textContent.trim() !== "いいなと思ったら応援しよう！" ||
-          ![...section.children].some(child => child.tagName === "BUTTON" && child.getAttribute("data-name") === "Button" &&
-            child.getAttribute("type") === "button" && child.textContent.trim() === "チップで応援する")) return null;
+          ![...section.children].some(child => {
+            // 2026-11-17：公式のボタンが単独のdiv内へ移動。旧構造も維持する。
+            const button = child.tagName === "DIV" && child.children.length === 1 ? child.children[0] : child;
+            return button.tagName === "BUTTON" && button.getAttribute("data-name") === "Button" &&
+              button.getAttribute("type") === "button" && button.textContent.trim() === "チップで応援する";
+          })) return null;
       const inner = section.parentElement, outer = inner?.parentElement;
       return inner?.tagName === "DIV" && inner.children.length === 1 && outer?.tagName === "DIV" && outer.children.length === 1 &&
         ["mx-4", "mt-6", "mb-4"].every(name => outer.classList.contains(name)) ? outer : section;
