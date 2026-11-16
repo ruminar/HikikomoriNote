@@ -43,7 +43,7 @@ footer { font-size: 13px; color: var(--muted); margin-top: 24px; }
 .tag-form label { width: 100%; margin-bottom: 0; }
 .tag-form input { flex: 1 1 220px; min-width: 0; }
 .tag-editor { list-style: none; padding: 0 0 24px; min-height: 48px; }
-.tag-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.tag-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .tag-row[draggable="true"] { cursor: grab; }
 .tag-name { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
 .tag-row button { padding: 6px 10px; }
@@ -55,7 +55,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
 .tag-groups button { padding: 6px 12px; background: transparent; color: var(--link); }
 .tag-groups button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
 .tag-groups span { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.tag-row select { max-width: 140px; font: inherit; padding: 6px; border-radius: 6px; }
+
 
 @media(max-width: 680px) { .home-layout { grid-template-columns: 1fr; gap: 20px; } .home-sidebar { position: static; } .page-links { margin-top: 12px; padding-top: 12px; } }
 
@@ -69,3 +69,28 @@ input, select, textarea { color: var(--text); background: var(--surface); }
 .transfer-report { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 14px; max-height: 22rem; overflow-y: auto; }
 dialog { box-sizing: border-box; width: min(92vw, 560px); max-height: 85vh; overflow-y: auto; color: var(--text); background: var(--surface); border: 1px solid var(--input-border); border-radius: 12px; padding: 24px; }
 dialog::backdrop { background: rgb(0 0 0 / .5); }
+
+/* 設定のお気に入り整理。一覧だけをスクロールする。 */
+#panel-tags { display: flex; flex-direction: column; height: max(480px, calc(100dvh - 64px)); }
+#panel-tags > :not(.favorites-scroll) { flex-shrink: 0; }
+.favorite-transfer-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; margin: 12px 0; }
+.favorite-transfer-toolbar label { margin: 0; }
+#favorite-destination { max-width: 100%; width: 240px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; font: inherit; }
+#favorite-operation-status:empty { display: none; }
+#favorite-operation-status { overflow-wrap: anywhere; }
+.favorites-scroll { flex: 1; min-height: 100px; overflow: auto; scrollbar-gutter: stable; }
+.favorites-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.favorite-row-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.favorite-row-actions button { white-space: nowrap; }
+.favorite-row-actions .favorite-transfer { margin-left: 8px; }
+@media(max-width: 520px) {
+  #panel-tags { height: max(480px, calc(100dvh - 48px)); }
+  .tag-row { flex-wrap: wrap; }
+  .tag-name { flex-basis: 100%; }
+  .favorite-row-actions { justify-content: flex-end; width: 100%; }
+}
+@media(max-width: 360px) {
+  .favorite-row-actions { gap: 4px; }
+  .favorite-row-actions button { padding-inline: 8px; }
+  .favorite-row-actions .favorite-transfer { margin-left: 4px; }
+}

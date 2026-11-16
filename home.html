@@ -42,14 +42,16 @@
             <input id="group-name" type="text" autocomplete="off" disabled>
             <button id="save-group-name" type="submit" disabled>名前を保存</button>
           </form>
-          <p class="muted">追加・削除・並べ替えは操作ごとに保存します。ドラッグ、または上下ボタンで並べ替えできます。</p>
-          <form id="tag-form" class="tag-form">
-            <label for="tag-input">タグ名</label>
-            <input id="tag-input" type="text" autocomplete="off" placeholder="例：ComfyUI" disabled>
-            <button id="add-tag" type="submit" disabled>追加</button>
-          </form>
-          <p id="tags-empty" class="muted">お気に入りは未登録です。タグ名を入力するか、作者・マガジン・メンバーシップ・記事ページから追加できます。</p>
-          <ul id="edit-tags" class="tag-editor"></ul>
+          <p class="muted">削除・移動・並べ替えは操作ごとに保存します。ドラッグ、または上下ボタンで並べ替えできます。</p>
+          <div class="favorite-transfer-toolbar">
+            <label for="favorite-destination">移動先</label>
+            <select id="favorite-destination" disabled><option value="">移動先を選択</option></select>
+          </div>
+          <p id="favorite-operation-status" class="muted" role="status"></p>
+          <div id="favorite-list" class="favorites-scroll" tabindex="0" role="region" aria-label="お気に入り項目の一覧">
+            <p id="tags-empty" class="muted">お気に入りは未登録です。noteのタグ・作者・マガジン・メンバーシップ・記事のページから登録できます。</p>
+            <ul id="edit-tags" class="tag-editor"></ul>
+          </div>
         </section>
         <section id="panel-settings" aria-labelledby="settings-heading" hidden>
           <h2 id="settings-heading">設定</h2>

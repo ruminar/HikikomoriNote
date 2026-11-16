@@ -56,7 +56,7 @@ test('JSONのグループ間重複は省略された現在値を優先し、全�
  const full=f.core.inspectSettingsImport(JSON.stringify({tagGroups:[{id:'group1',items:[item]},{id:'group2',items:[item]}]}));assert.deepEqual(plain(full.settings.tagGroups[0].tags),[item]);assert.deepEqual(plain(full.settings.tagGroups[1].tags),[]);
 });
 test('設定画面は&タイトルを安全に表示し、既存の削除・並べ替え・移動ボタンを使う',async()=>{
- const f=backend({tagSchemaVersion:6});f.state.tagGroups[0].tags=['Tag',{...item,title:'<script>text</script>'}];const h=homeFixture({hash:'#tags',state:f.state});await flush();const rows=h.nodes.get('edit-tags').children;assert.equal(rows[1].querySelector('a').textContent,'&<script>text</script>');assert.equal(rows[1].querySelector('a').href,item.url);assert.equal(rows[1].querySelector('a').getAttribute('target'),'_self');assert.equal(rows[1].querySelector('script'),null);assert.ok(rows[1].querySelector('select'));assert.ok(rows[1].querySelectorAll('button').length>=3);
+ const f=backend({tagSchemaVersion:6});f.state.tagGroups[0].tags=['Tag',{...item,title:'<script>text</script>'}];const h=homeFixture({hash:'#tags',state:f.state});await flush();const rows=h.nodes.get('edit-tags').children;assert.equal(rows[1].querySelector('a').textContent,'&<script>text</script>');assert.equal(rows[1].querySelector('a').href,item.url);assert.equal(rows[1].querySelector('a').getAttribute('target'),'_self');assert.equal(rows[1].querySelector('script'),null);assert.equal(rows[1].querySelector('select'),null);assert.ok(h.nodes.get('favorite-destination'));assert.ok(rows[1].querySelectorAll('button').length>=3);
 });
 test('記事ページの&はTLの前、4グループから登録して本文を保存せず登録済みになる',async()=>{
  const f=articleUi();assert.equal(f.toggle.textContent,'&');assert.equal(f.toggle.parentElement.children[0],f.toggle);assert.equal(f.block.hidden,true);f.toggle.onclick();assert.equal(f.block.hidden,false);assert.equal(f.toggle.getAttribute('aria-expanded'),'true');assert.equal(f.select.children.length,5);
@@ -97,7 +97,7 @@ test('記事のお気に入りはnoteメニューで別タブの元記事リン�
 });
 test('設定画面の既存操作から記事を上下移動・別グループへ移動・削除できる',async()=>{
  const f=backend({tagSchemaVersion:6});f.state.tagGroups[0].tags=['Tag',item];const h=homeFixture({hash:'#tags',state:f.state});await flush();const rows=()=>h.nodes.get('edit-tags').children;rows()[1].querySelectorAll('button')[0].onclick();await flush();assert.deepEqual(h.state.tagGroups[0].tags,[item,'Tag']);
- rows()[0].querySelector('select').value='group3';rows()[0].querySelectorAll('button').find(b=>b.textContent==='移動').onclick();await flush();assert.deepEqual(h.state.tagGroups[2].tags,[item]);assert.deepEqual(h.state.tagGroups[0].tags,['Tag']);
+ h.nodes.get('favorite-destination').value='group3';h.nodes.get('favorite-destination').fire('change');rows()[0].querySelectorAll('button').find(b=>b.textContent==='移動').onclick();await flush();assert.deepEqual(h.state.tagGroups[2].tags,[item]);assert.deepEqual(h.state.tagGroups[0].tags,['Tag']);
  const groupButtons=h.document.querySelectorAll('button[data-group-id="group3"]');groupButtons[0].onclick();await flush();rows()[0].querySelectorAll('button').find(b=>b.textContent==='削除').onclick();await flush();assert.deepEqual(h.state.tagGroups[2].tags,[]);
 });
 
