@@ -56,7 +56,43 @@
     });
   }
   let state, selected = location.hash === "#authors" ? "authors" : location.hash === "#tags" ? "tags" : "settings", busy = false, uncertain = false, pendingState = false, dragTag = null, revision = 0;
+  function clearFavoriteDrag() {
+    dragTag = null;
+    for (const button of byId("edit-groups").querySelectorAll("button")) {
+      const id = button.getAttribute("data-group-id"), group = state?.tagGroups.find(group => group.id === id);
+      button.removeAttribute("data-favorite-drop"); button.removeAttribute("data-drag-over");
+      button.textContent = core.groupSymbols[core.groupIds.indexOf(id)];
+      if (group) {
+        button.setAttribute("title", core.groupName(group));
+        button.setAttribute("aria-label", `${button.textContent} ${core.groupName(group)}`);
+      }
+    }
+  }
+  function favoriteDragValid() {
+    return Boolean(dragTag && state && !busy && !uncertain && core.usesTags(state) && !state.tagWarning && !state.groupSelectionInvalid &&
+      dragTag.groupId === state.selectedTagGroupId && dragTag.selectionRevision === state.groupSelectionRevision &&
+      core.selectedGroup(state).tags.some(item => core.favoriteKey(item) === core.favoriteKey(dragTag.tag)));
+  }
+  function favoriteDropTarget(groupId) {
+    if (!favoriteDragValid()) return null;
+    const group = core.availableGroups(state).find(group => group.id === groupId);
+    if (!group) return null;
+    const remove = group.id === dragTag.groupId;
+    return { group, remove, duplicate: !remove && group.tags.some(item => core.favoriteKey(item) === core.favoriteKey(dragTag.tag)) };
+  }
+  function paintFavoriteDropTargets() {
+    for (const button of byId("edit-groups").querySelectorAll("button")) {
+      const target = favoriteDropTarget(button.getAttribute("data-group-id"));
+      if (!target) continue;
+      button.setAttribute("data-favorite-drop", target.remove ? "delete" : target.duplicate ? "blocked" : "move");
+      if (target.remove) button.textContent = "🗑";
+      const description = target.remove ? `${core.favoriteLabel(dragTag.tag)}をお気に入りから削除（ここへドロップ）` :
+        target.duplicate ? `${core.groupName(target.group)}には登録済みのため移動できません` : `${core.groupName(target.group)}へ移動（ここへドロップ）`;
+      button.setAttribute("title", description); button.setAttribute("aria-label", description);
+    }
+  }
   function selectView(name, focus = false) {
+    if (dragTag) clearFavoriteDrag();
     if (!state && name !== "settings") return;
     selected = state && !core.usesTags(state) && name === "tags" ? (core.modeOf(state) === "severe" ? "intro" : "settings") : name;
     for (const view of views) {
@@ -71,6 +107,7 @@
   function controls() {
     const blocked = !state || busy || uncertain;
     const tagBlocked = blocked || (state && !core.usesTags(state)) || Boolean(state?.tagWarning) || Boolean(state?.groupSelectionInvalid);
+    if (tagBlocked && dragTag) clearFavoriteDrag();
     for (const id of ["normal", "save"]) byId(id).disabled = blocked;
     for (const id of Object.values(fields)) byId(id).disabled = !state || uncertain || (busy && ["settings", "import"].includes(pendingState));
     byId("favorite-destination").disabled = tagBlocked;
@@ -90,6 +127,7 @@
     transferControls();
   }
   function renderTags() {
+    if (dragTag) clearFavoriteDrag();
     const editor = byId("edit-tags"), scroll = byId("favorite-list");
     if (renderedGroupId) favoriteScrolls.set(renderedGroupId, scroll.scrollTop);
     editor.replaceChildren();
@@ -111,7 +149,28 @@
         const button = document.createElement("button"); button.type = "button"; button.textContent = core.groupSymbols[index];
         button.setAttribute("data-group-id", item.id); button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
         button.setAttribute("aria-pressed", String(item.id === group.id)); button.setAttribute("title", core.groupName(item));
-        button.onclick = () => { void perform(() => platform.tag({ type: "SELECT_TAG_GROUP", groupId: item.id }), { focusGroup: [id, item.id] }); };
+        button.onclick = () => { if (!dragTag) void perform(() => platform.tag({ type: "SELECT_TAG_GROUP", groupId: item.id }), { focusGroup: [id, item.id] }); };
+        button.ondragenter = button.ondragover = event => {
+          const target = favoriteDropTarget(item.id);
+          if (!target) return;
+          if (event.dataTransfer) event.dataTransfer.dropEffect = target.duplicate ? "none" : "move";
+          button.setAttribute("data-drag-over", "");
+          if (!target.duplicate) event.preventDefault();
+        };
+        button.ondragleave = event => { if (!button.contains(event.relatedTarget)) button.removeAttribute("data-drag-over"); };
+        button.ondrop = event => {
+          const target = favoriteDropTarget(item.id), source = dragTag;
+          if (!target) { if (dragTag) clearFavoriteDrag(); return; }
+          event.preventDefault(); event.stopPropagation(); clearFavoriteDrag();
+          if (target.duplicate) { byId("favorite-operation-status").textContent = "移動先には既に登録されています。元の項目は変更していません。"; return; }
+          const operation = target.remove ? { type: "REMOVE_TAG", groupId: source.groupId, tag: source.tag } :
+            { type: "TRANSFER_TAG", groupId: source.groupId, targetGroupId: target.group.id, tag: source.tag };
+          void mutateTag(operation, {
+            successMessage: target.remove ? `${core.favoriteLabel(source.tag)}をお気に入りから削除しました。` :
+              `${core.favoriteLabel(source.tag)}を${core.groupSymbols[core.groupIds.indexOf(target.group.id)]} ${core.groupName(target.group)}へ移動しました。`,
+            focusFavorite: { key: core.favoriteKey(source.tag), index: source.index, action: target.remove ? "remove" : "transfer" }
+          });
+        };
         container.append(button);
       });
       const name = document.createElement("span"); name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); container.append(name);
@@ -152,20 +211,22 @@
         });
       }; actions.append(transfer);
       row.ondragstart = event => {
-        if (busy || uncertain || !core.usesTags(state) || state.tagWarning) { event.preventDefault(); return; }
-        dragTag = { tag, groupId: group.id }; event.dataTransfer.setData("text/plain", core.favoriteKey(tag)); event.dataTransfer.effectAllowed = "move";
+        if (busy || uncertain || !core.usesTags(state) || state.tagWarning || state.groupSelectionInvalid || group.id !== state.selectedTagGroupId || !event.dataTransfer) { event.preventDefault(); return; }
+        clearFavoriteDrag(); dragTag = { tag, groupId: group.id, index, selectionRevision: state.groupSelectionRevision };
+        event.dataTransfer.setData("text/plain", core.favoriteKey(tag)); event.dataTransfer.effectAllowed = "move";
+        paintFavoriteDropTargets();
       };
-      row.ondragover = event => { if (dragTag && !busy && !uncertain) event.preventDefault(); };
+      row.ondragover = event => { if (favoriteDragValid()) event.preventDefault(); };
       row.ondrop = event => {
-        if (!dragTag || busy || uncertain) return;
-        event.preventDefault(); event.stopPropagation(); const source = dragTag; dragTag = null;
+        if (!favoriteDragValid()) return;
+        event.preventDefault(); event.stopPropagation(); const source = dragTag; clearFavoriteDrag();
         const rect = row.getBoundingClientRect();
         const beforeTag = Number.isFinite(event.clientY) && event.clientY > rect.top + rect.height / 2
           ? tags[index + 1] ?? null : tag;
         if (source.groupId !== state.selectedTagGroupId) return;
         void mutateTag({ type: "MOVE_TAG", groupId: source.groupId, tag: source.tag, beforeTag });
       };
-      row.ondragend = () => { dragTag = null; };
+      row.ondragend = clearFavoriteDrag;
       editor.append(row);
     });
     renderedGroupId = group.id; scroll.scrollTop = favoriteScrolls.get(group.id) ?? 0;
@@ -320,10 +381,10 @@
     favoriteDestination = core.availableGroups(state).some(group => group.id === value && group.id !== state.selectedTagGroupId) ? value : "";
     byId("favorite-destination").value = favoriteDestination; controls();
   };
-  byId("edit-tags").ondragover = event => { if (dragTag && !busy && !uncertain) event.preventDefault(); };
+  byId("edit-tags").ondragover = event => { if (favoriteDragValid()) event.preventDefault(); };
   byId("edit-tags").ondrop = event => {
-    if (!dragTag || busy || uncertain) return;
-    event.preventDefault(); const tag = dragTag; dragTag = null;
+    if (!favoriteDragValid()) return;
+    event.preventDefault(); const tag = dragTag; clearFavoriteDrag();
     if (tag.groupId !== state.selectedTagGroupId) return;
     void mutateTag({ type: "MOVE_TAG", groupId: tag.groupId, tag: tag.tag, beforeTag: null });
   };

@@ -232,6 +232,133 @@
       return value;
     }
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
+    let menuFavoriteDrag;
+    function clearMenuFavoriteInsertion() {
+      for (const row of menu?.querySelectorAll('[data-favorite-insert]') || []) row.removeAttribute("data-favorite-insert");
+      for (const list of menu?.querySelectorAll('[data-favorite-list-end]') || []) list.removeAttribute("data-favorite-list-end");
+    }
+    function clearMenuFavoriteDrag() {
+      if (!menuFavoriteDrag) return;
+      clearMenuFavoriteInsertion();
+      menuFavoriteDrag.row.removeAttribute("data-favorite-dragging"); menuFavoriteDrag = undefined;
+      for (const button of menu?.querySelectorAll('button[data-group-id]') || []) {
+        const id = button.getAttribute("data-group-id"), group = currentSettings?.tagGroups.find(group => group.id === id);
+        button.removeAttribute("data-favorite-drop"); button.removeAttribute("data-drag-over");
+        button.textContent = core.groupSymbols[core.groupIds.indexOf(id)];
+        if (group) { button.setAttribute("title", core.groupName(group)); button.setAttribute("aria-label", `${button.textContent} ${core.groupName(group)}`); }
+      }
+    }
+    function menuFavoriteDragValid() {
+      return Boolean(menuFavoriteDrag && !disposed && !adding && !uncertain && currentSettings?.enabled && core.usesTags(currentSettings) &&
+        !currentSettings.tagWarning && !currentSettings.groupSelectionInvalid && core.hasFavoriteMenu(currentUrl) &&
+        menuFavoriteDrag.url === currentUrl && menuFavoriteDrag.row.isConnected && menuFavoriteDrag.groupId === currentSettings.selectedTagGroupId &&
+        menuFavoriteDrag.selectionRevision === currentSettings.groupSelectionRevision && menuFavoriteDrag.groupsRevision === currentSettings.tagGroupsRevision &&
+        core.selectedGroup(currentSettings).tags.some(item => core.favoriteKey(item) === core.favoriteKey(menuFavoriteDrag.tag)));
+    }
+    function menuFavoriteDropTarget(groupId) {
+      if (!menuFavoriteDragValid()) return null;
+      const group = core.availableGroups(currentSettings).find(group => group.id === groupId);
+      if (!group) return null;
+      const remove = group.id === menuFavoriteDrag.groupId;
+      return { group, remove, duplicate: !remove && group.tags.some(item => core.favoriteKey(item) === core.favoriteKey(menuFavoriteDrag.tag)) };
+    }
+    function paintMenuFavoriteDropTargets() {
+      for (const button of menu.querySelectorAll('button[data-group-id]')) {
+        const target = menuFavoriteDropTarget(button.getAttribute("data-group-id"));
+        if (!target) continue;
+        button.setAttribute("data-favorite-drop", target.remove ? "delete" : target.duplicate ? "blocked" : "move");
+        if (target.remove) button.textContent = "🗑";
+        const label = target.remove ? `${core.favoriteLabel(menuFavoriteDrag.tag)}をお気に入りから削除（ここへドロップ）` :
+          target.duplicate ? `${core.groupName(target.group)}には登録済みのため移動できません` : `${core.groupName(target.group)}へ移動（ここへドロップ）`;
+        button.setAttribute("title", label); button.setAttribute("aria-label", label);
+      }
+    }
+    async function dropMenuFavorite(target, source) {
+      const operation = target.reorder ? { type: "MOVE_TAG", groupId: source.groupId, tag: source.tag, beforeTag: target.beforeTag } :
+        target.remove ? { type: "REMOVE_TAG", groupId: source.groupId, tag: source.tag } :
+        { type: "TRANSFER_TAG", groupId: source.groupId, targetGroupId: target.group.id, tag: source.tag };
+      adding = true; actionMessage = "保存中…"; repaint();
+      try {
+        await actions.menuFavoriteDrop(operation, source.selectionRevision, source.url);
+        if (currentUrl === source.url) actionMessage = target.reorder ? "お気に入りの順序を変更しました。" : target.remove ? `${core.favoriteLabel(source.tag)}をお気に入りから削除しました。` :
+          `${core.favoriteLabel(source.tag)}を${core.groupSymbols[core.groupIds.indexOf(target.group.id)]} ${core.groupName(target.group)}へ移動しました。`;
+      } catch (error) {
+        uncertain = error.code === "UNCONFIRMED"; actionMessage = error.message || "保存できませんでした。";
+      } finally { adding = false; repaint(); }
+    }
+    function dropMenuFavoriteOrder(beforeTag) {
+      if (!menuFavoriteDragValid()) return;
+      const source = menuFavoriteDrag, tags = core.selectedGroup(currentSettings).tags;
+      const index = tags.findIndex(tag => core.favoriteKey(tag) === core.favoriteKey(source.tag));
+      const before = beforeTag === null ? tags.length : tags.findIndex(tag => core.favoriteKey(tag) === core.favoriteKey(beforeTag));
+      clearMenuFavoriteDrag();
+      if (index < 0 || before < 0 || before === index || before === index + 1) return;
+      void dropMenuFavorite({ reorder: true, beforeTag }, source);
+    }
+    function bindMenuFavoriteListDrop(list) {
+      list.setAttribute("data-menu-favorite-list", "");
+      list.ondragover = event => {
+        if (!menuFavoriteDragValid() || event.target?.closest('[data-menu-favorite-item]')) return;
+        event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        clearMenuFavoriteInsertion(); list.setAttribute("data-favorite-list-end", "");
+      };
+      list.ondragleave = event => { if (!list.contains(event.relatedTarget)) clearMenuFavoriteInsertion(); };
+      list.ondrop = event => {
+        if (!menuFavoriteDragValid() || event.target?.closest('[data-menu-favorite-item]')) return;
+        event.preventDefault(); event.stopPropagation(); dropMenuFavoriteOrder(null);
+      };
+    }
+    function bindMenuFavoriteGroupDrop(button, groupId) {
+      button.ondragenter = button.ondragover = event => {
+        const target = menuFavoriteDropTarget(groupId);
+        if (!target) return;
+        clearMenuFavoriteInsertion();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = target.duplicate ? "none" : "move";
+        button.setAttribute("data-drag-over", ""); if (!target.duplicate) event.preventDefault();
+      };
+      button.ondragleave = event => { if (!button.contains(event.relatedTarget)) button.removeAttribute("data-drag-over"); };
+      button.ondrop = event => {
+        const target = menuFavoriteDropTarget(groupId), source = menuFavoriteDrag;
+        if (!target) { clearMenuFavoriteDrag(); return; }
+        event.preventDefault(); event.stopPropagation(); clearMenuFavoriteDrag();
+        if (target.duplicate) { actionMessage = "移動先には既に登録されています。元の項目は変更していません。"; repaint(); return; }
+        void dropMenuFavorite(target, source);
+      };
+    }
+    function bindMenuFavoriteDrag(row, link, tag, groupId) {
+      row.setAttribute("data-menu-favorite-item", "");
+      row.draggable = link.draggable = !adding && !uncertain && !currentSettings.tagWarning && !currentSettings.groupSelectionInvalid;
+      row.ondragstart = event => {
+        if (disposed || adding || uncertain || !currentSettings?.enabled || !core.usesTags(currentSettings) || currentSettings.tagWarning ||
+            currentSettings.groupSelectionInvalid || !core.hasFavoriteMenu(currentUrl) || groupId !== currentSettings.selectedTagGroupId ||
+            !row.isConnected || !event.dataTransfer) { event.preventDefault(); return; }
+        clearMenuFavoriteDrag();
+        menuFavoriteDrag = { row, tag, groupId, url: currentUrl, selectionRevision: currentSettings.groupSelectionRevision, groupsRevision: currentSettings.tagGroupsRevision };
+        row.setAttribute("data-favorite-dragging", "");
+        event.dataTransfer.setData("text/plain", core.favoriteKey(tag)); event.dataTransfer.effectAllowed = "move"; paintMenuFavoriteDropTargets();
+      };
+      row.ondragend = clearMenuFavoriteDrag;
+      const position = event => {
+        const tags = core.selectedGroup(currentSettings).tags, index = tags.findIndex(item => core.favoriteKey(item) === core.favoriteKey(tag));
+        if (index < 0) return null;
+        const rect = row.getBoundingClientRect(), after = Number.isFinite(event.clientY) && event.clientY > rect.top + rect.height / 2;
+        return { beforeTag: after ? tags[index + 1] ?? null : tags[index], after };
+      };
+      row.ondragover = event => {
+        if (!menuFavoriteDragValid() || !row.isConnected) return;
+        const target = position(event); if (!target) return;
+        event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+        clearMenuFavoriteInsertion();
+        for (const button of menu.querySelectorAll('[data-drag-over]')) button.removeAttribute("data-drag-over");
+        row.setAttribute("data-favorite-insert", target.after ? "after" : "before");
+      };
+      row.ondragleave = event => { if (!row.contains(event.relatedTarget)) row.removeAttribute("data-favorite-insert"); };
+      row.ondrop = event => {
+        if (!menuFavoriteDragValid() || !row.isConnected) return;
+        const target = position(event); if (!target) return;
+        event.preventDefault(); event.stopPropagation(); dropMenuFavoriteOrder(target.beforeTag);
+      };
+    }
     const followingUrl = "https://note.com/following";
     const guestFollowingUrl = "https://note.com/search?q=&context=note&mode=search&sort=new";
     const followingLinks = new Map();
@@ -550,7 +677,7 @@
       finally { adding = false; repaint(); }
     }
     async function selectGroup(groupId) {
-      if (adding || uncertain || currentSettings.tagWarning || !actions.selectGroup) return;
+      if (menuFavoriteDrag || adding || uncertain || currentSettings.tagWarning || !actions.selectGroup) return;
       adding = true; repaint();
       try { await actions.selectGroup(groupId); actionMessage = ""; }
       catch (error) { uncertain = error.code === "UNCONFIRMED"; actionMessage = error.message; }
@@ -1597,6 +1724,7 @@
       }
     }
     function restore() {
+      clearMenuFavoriteDrag();
       menu?.remove(); menu = undefined; host = undefined; signature = undefined;
       for (const element of originals) element.removeAttribute(hidden);
       originals.clear();
@@ -1631,11 +1759,13 @@
     }
     let mobile;
     function closeMobile(focus = false) {
+      clearMenuFavoriteDrag();
       if (!mobile) return;
       mobile.panel.hidden = true; mobile.button.setAttribute("aria-expanded", "false");
       if (focus) mobile.button.focus();
     }
     function removeMobile() {
+      clearMenuFavoriteDrag();
       if (!mobile) return;
       const focusInside = mobile.panel.contains(doc.activeElement) || doc.activeElement === mobile.button;
       mobile.button.remove(); mobile.panel.remove(); mobile.parent.removeAttribute("data-hikikomori-note-mobile-logo");
@@ -1657,7 +1787,10 @@
         button.className = "hikikomori-note-mobile-toggle"; button.textContent = "☰";
         button.setAttribute("aria-label", "ナビゲーションメニュー"); button.setAttribute("aria-expanded", "false");
         button.setAttribute("aria-controls", "hikikomori-note-mobile-navigation");
-        button.onclick = () => { panel.hidden = !panel.hidden; button.setAttribute("aria-expanded", String(!panel.hidden)); };
+        button.onclick = () => {
+          if (!panel.hidden) { closeMobile(); return; }
+          panel.hidden = false; button.setAttribute("aria-expanded", "true");
+        };
         const escape = event => { if (event.key === "Escape") { event.preventDefault(); closeMobile(true); } };
         button.onkeydown = escape; panel.onkeydown = escape;
         panel.onclick = event => { if (event.target?.closest("a[href]")) closeMobile(); };
@@ -1825,6 +1958,7 @@
       if ((core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag || core.searchedAuthor(currentUrl) !== core.searchedAuthor(url)) && !uncertain && !adding) actionMessage = "";
       if (currentUrl !== url || Boolean(currentSettings?.enabled) !== Boolean(settings.enabled)) followingLinksDirty = true;
       currentSettings = settings; currentUrl = url;
+      if (menuFavoriteDrag && !menuFavoriteDragValid()) clearMenuFavoriteDrag();
       syncFollowingLinks();
       prepareProfilePaidAllowance(settings, url);
       syncPinnedHeader(settings, url);
@@ -1849,7 +1983,7 @@
       syncProfilePromotions(settings, url);
       if (core.isArticle(url) || core.isPreviewArticle(url)) { restore(); pruneProfileLayout(); return; }
       if (!settings.enabled || !page || core.membershipPage(url) || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.modeOf(settings) !== "social")) { removeMobile(); restore(); pruneProfileLayout(); return; }
-      const common = ["following", "tag", "search", "topic", "help"].includes(page.type);
+      const common = core.hasFavoriteMenu(url);
       const officialAside = common && (navigationSidebars(doc)[0] || [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky")));
       const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);
       const mobileHost = syncMobile(compact, url);
@@ -1866,7 +2000,8 @@
       const activeAuthor = core.searchedAuthor(url);
       const authorCard = !severe && activeAuthor ? searchAuthor(activeAuthor, settings) : null;
       const registeredAuthor = activeAuthor && group?.tags.some(item => core.favoriteKey(item) === `user:${activeAuthor.toLowerCase()}`);
-      const nextSignature = JSON.stringify([page, activeTag, activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.selectedTagGroupId, settings.groupSelectionRevision, settings.groupSelectionInvalid, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
+      const menuFavoriteDropEnabled = common && Boolean(actions.menuFavoriteDrop);
+      const nextSignature = JSON.stringify([page, activeTag, activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.tagGroupsRevision, settings.selectedTagGroupId, settings.groupSelectionRevision, settings.groupSelectionInvalid, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
         menu.setAttribute(owned, "");
@@ -1877,6 +2012,7 @@
         else host.prepend(menu);
       }
       if (signature !== nextSignature) {
+        clearMenuFavoriteDrag();
         menu.replaceChildren();
         if (severe) {
           const profile = doc.createElement("a"), destination = core.profileUrl(settings.noteUserId);
@@ -1945,11 +2081,14 @@
               button.setAttribute("aria-label", `${button.textContent} ${core.groupName(item)}`);
               button.setAttribute("aria-pressed", String(item.id === group.id));
               button.disabled = adding || uncertain || Boolean(settings.tagWarning) || !actions.selectGroup;
-              button.onclick = () => { void selectGroup(item.id); }; selector.append(button);
+              button.onclick = () => { void selectGroup(item.id); };
+              if (menuFavoriteDropEnabled) bindMenuFavoriteGroupDrop(button, item.id);
+              selector.append(button);
             });
             menu.append(selector);
             const name = doc.createElement("div"); name.className = "hikikomori-note-group-name"; name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); menu.append(name);
             const list = doc.createElement("ul"); menu.append(list);
+            if (menuFavoriteDropEnabled) bindMenuFavoriteListDrop(list);
             for (const tag of group.tags) {
               const item = doc.createElement("li"), link = doc.createElement("a");
               const user = tag?.type === "user";
@@ -1964,6 +2103,7 @@
               }
               if (activeTag === tag || (user && activeAuthor?.toLowerCase() === tag.userId.toLowerCase())) link.setAttribute("aria-current", "page");
               item.append(link); list.append(item);
+              if (menuFavoriteDropEnabled) bindMenuFavoriteDrag(item, link, tag, group.id);
             }
           }
         }
