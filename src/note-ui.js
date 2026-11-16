@@ -526,6 +526,22 @@
         actionMessage = error.message || "保存できませんでした。";
       } finally { adding = false; repaint(); }
     }
+    async function addSearchedUser(userId) {
+      if (adding || uncertain || !currentSettings?.enabled || !core.usesTags(currentSettings) || !actions.addSearchedUser ||
+          currentSettings.tagWarning || currentSettings.groupSelectionInvalid || core.searchedAuthor(currentUrl)?.toLowerCase() !== userId.toLowerCase()) return;
+      const group = core.selectedGroup(currentSettings), key = `user:${userId.toLowerCase()}`;
+      if (!group || group.tags.some(item => core.favoriteKey(item) === key)) return;
+      const source = currentUrl, selectionRevision = currentSettings.groupSelectionRevision;
+      const name = searchAuthor(userId, currentSettings).name || "";
+      adding = true; actionMessage = "保存中…"; repaint();
+      try {
+        await actions.addSearchedUser(group.id, selectionRevision, userId, name);
+        if (currentUrl === source) actionMessage = `${name || userId}を${core.groupSymbols[core.groupIds.indexOf(group.id)]} ${core.groupName(group)}に追加しました。`;
+      } catch (error) {
+        uncertain = error.code === "UNCONFIRMED";
+        actionMessage = error.message || "保存できませんでした。";
+      } finally { adding = false; repaint(); }
+    }
     async function refreshTags() {
       if (adding) return;
       adding = true; repaint();
@@ -1800,7 +1816,7 @@
         profileLayout.root.remove(); profileLayout = undefined; authorControls.invalidate();
       }
       prepareSidebar(url, settings);
-      if (core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag && !uncertain && !adding) actionMessage = "";
+      if ((core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag || core.searchedAuthor(currentUrl) !== core.searchedAuthor(url)) && !uncertain && !adding) actionMessage = "";
       if (currentUrl !== url || Boolean(currentSettings?.enabled) !== Boolean(settings.enabled)) followingLinksDirty = true;
       currentSettings = settings; currentUrl = url;
       syncFollowingLinks();
@@ -1843,7 +1859,8 @@
       const activeTag = selectedTag(page, url);
       const activeAuthor = core.searchedAuthor(url);
       const authorCard = !severe && activeAuthor ? searchAuthor(activeAuthor, settings) : null;
-      const nextSignature = JSON.stringify([page, activeTag, activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.selectedTagGroupId, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
+      const registeredAuthor = activeAuthor && group?.tags.some(item => core.favoriteKey(item) === `user:${activeAuthor.toLowerCase()}`);
+      const nextSignature = JSON.stringify([page, activeTag, activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.selectedTagGroupId, settings.groupSelectionRevision, settings.groupSelectionInvalid, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
         menu.setAttribute(owned, "");
@@ -1868,6 +1885,15 @@
           if (page.type === "profile" && favoriteProfile) {
             const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
             row.append(favoriteProfile.toggle, following); menu.append(row);
+          } else if (activeAuthor && !registeredAuthor && actions.addSearchedUser) {
+            const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
+            const add = doc.createElement("button"); add.type = "button"; add.textContent = "＠";
+            add.className = "hikikomori-note-favorite-toggle"; add.setAttribute("data-author-search-add", "");
+            const label = `${authorCard.name || activeAuthor}を${core.groupSymbols[core.groupIds.indexOf(group.id)]} ${core.groupName(group)}に追加`;
+            add.setAttribute("aria-label", label); add.setAttribute("title", label);
+            add.disabled = adding || uncertain || Boolean(settings.tagWarning) || Boolean(settings.groupSelectionInvalid);
+            add.onclick = () => { void addSearchedUser(activeAuthor); };
+            row.append(add, following); menu.append(row);
           } else menu.append(following);
           if (activeAuthor) {
             const profile = doc.createElement("a"); profile.className = "hikikomori-note-navigation-profile";
@@ -1882,7 +1908,7 @@
             menu.append(profile);
           }
           if (page.type !== "profile") {
-            let registered = false;
+            let registered = Boolean(registeredAuthor);
             if (page.type === "tag") {
               let normalized;
               try { normalized = core.normalizeTag(page.tag); } catch { /* 空タグ等は登録不可 */ }

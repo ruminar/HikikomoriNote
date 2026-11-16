@@ -202,6 +202,7 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
   flex: 0 0 40px; width: 40px; min-height: 40px; margin: 0; padding: 4px; font-size: 22px; line-height: 1;
 }
 .hikikomori-note-profile-actions .hikikomori-note-navigation-following { flex: 1; min-width: 0; width: auto; min-height: 40px; }
+.hikikomori-note-navigation > .hikikomori-note-profile-actions + .hikikomori-note-navigation-profile { margin-top: 8px; }
 .hikikomori-note-favorite-toggle[aria-expanded="true"] { background: rgba(128,128,128,.18); }
 .hikikomori-note-magazine-toggle, .hikikomori-note-membership-toggle {
   box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center;

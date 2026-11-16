@@ -42,6 +42,7 @@
     currentAuthor: (operation, source) => request("current-author-operation", { operation, source, pageUrl: globalThis.location.href }),
     addCurrentArticle: (groupId, articleId, url, title) => request("add-current-article", { groupId, articleId, url, title, pageUrl: globalThis.location.href }),
     addCurrentUser: (groupId, userId, displayName) => request("add-current-user", { groupId, userId, displayName, pageUrl: globalThis.location.href }),
+    addSearchedUser: (groupId, selectionRevision, userId, displayName) => request("add-searched-user", { groupId, selectionRevision, userId, displayName, pageUrl: globalThis.location.href }),
     addCurrentMagazine: (groupId, userId, magazineId, displayName) => request("add-current-magazine", { groupId, userId, magazineId, displayName, pageUrl: globalThis.location.href }),
     addCurrentMembership: (groupId, userId, displayName) => request("add-current-membership", { groupId, userId, displayName, pageUrl: globalThis.location.href }),
     tag: operation => request("tag-operation", operation),

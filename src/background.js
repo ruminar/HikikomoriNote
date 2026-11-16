@@ -34,8 +34,20 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (!["select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "add-current-article", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    if (!["add-searched-user", "select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "add-current-article", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
     operation = (async () => {
+      if (message.type === "add-searched-user") {
+        const patch = message.patch, page = await port.currentMenuPage(sender, patch?.pageUrl);
+        const userId = globalThis.HikikomoriNote.searchedAuthor(patch?.pageUrl);
+        if (page?.type !== "search" || !userId || typeof patch?.userId !== "string" || userId.toLowerCase() !== patch.userId.toLowerCase() ||
+            !Number.isSafeInteger(patch.selectionRevision) || patch.selectionRevision < 0) throw Object.assign(new Error("検索中の作者と選択グループを確認できません。"), { code: "CONFLICT" });
+        return controller.tag({ type: "ADD_USER", groupId: patch.groupId, userId, displayName: patch.displayName }, {
+          requireEnabled: true, currentUser: userId, selectionRevision: patch.selectionRevision, validateCurrent: async () => {
+            const current = await port.currentMenuPage(sender, patch.pageUrl);
+            return current?.type === "search" && globalThis.HikikomoriNote.searchedAuthor(patch.pageUrl)?.toLowerCase() === userId.toLowerCase();
+          }
+        });
+      }
       if (message.type === "add-current-article") {
         const patch = message.patch, page = await port.currentArticlePage(sender, patch?.pageUrl);
         if (!page || page.articleId !== patch?.articleId || page.url !== patch?.url) throw Object.assign(new Error("現在の記事を確認できません。"), { code: "CONFLICT" });

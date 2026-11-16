@@ -35,6 +35,11 @@
       const value = await platform.addCurrentUser(groupId, userId, displayName);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
+    async addSearchedUser(groupId, selectionRevision, userId, displayName) {
+      const before = revision;
+      const value = await platform.addSearchedUser(groupId, selectionRevision, userId, displayName);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
+    },
     async setAuthor(operation, source) {
       const before = revision;
       const value = await platform.currentAuthor(operation, source);
