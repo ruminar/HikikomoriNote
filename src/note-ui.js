@@ -644,7 +644,7 @@
     function repaint() { if (!disposed && currentSettings) update(currentSettings, currentUrl); }
     async function addTag(tag) {
       if (adding || uncertain || !currentSettings?.enabled || !core.usesTags(currentSettings) ||
-          currentSettings.tagWarning || core.pageKind(currentUrl)?.tag !== tag) return;
+          currentSettings.tagWarning || core.addableTag(currentUrl) !== tag) return;
       adding = true; actionMessage = "保存中…"; repaint();
       const groupId = currentSettings.selectedTagGroupId, selectionRevision = currentSettings.groupSelectionRevision;
       try { await actions.addCurrentTag(groupId, selectionRevision); actionMessage = `# ${tag}を${core.groupName(currentSettings.tagGroups.find(group => group.id === groupId))}に追加しました。`; }
@@ -1955,7 +1955,7 @@
         profileLayout.root.remove(); profileLayout = undefined; authorControls.invalidate();
       }
       prepareSidebar(url, settings);
-      if ((core.pageKind(currentUrl)?.tag !== core.pageKind(url)?.tag || core.searchedAuthor(currentUrl) !== core.searchedAuthor(url)) && !uncertain && !adding) actionMessage = "";
+      if ((core.addableTag(currentUrl) !== core.addableTag(url) || core.searchedAuthor(currentUrl) !== core.searchedAuthor(url)) && !uncertain && !adding) actionMessage = "";
       if (currentUrl !== url || Boolean(currentSettings?.enabled) !== Boolean(settings.enabled)) followingLinksDirty = true;
       currentSettings = settings; currentUrl = url;
       if (menuFavoriteDrag && !menuFavoriteDragValid()) clearMenuFavoriteDrag();
@@ -2051,19 +2051,20 @@
           }
           if (page.type !== "profile") {
             let registered = Boolean(registeredAuthor);
-            if (page.type === "tag") {
+            const addableTag = core.addableTag(url);
+            if (addableTag !== null) {
               let normalized;
-              try { normalized = core.normalizeTag(page.tag); } catch { /* 空タグ等は登録不可 */ }
+              try { normalized = core.normalizeTag(addableTag); } catch { /* 空タグ等は登録不可 */ }
               registered = group.tags.includes(normalized);
               if (!registered) {
                 const button = doc.createElement("button"); button.type = "button";
                 button.textContent = "＃";
                 button.className = "hikikomori-note-favorite-toggle";
-                const label = `# ${page.tag}：${adding ? "保存中…" : "タグをお気に入りに追加"}`;
+                const label = `# ${addableTag}：${adding ? "保存中…" : "タグをお気に入りに追加"}`;
                 button.setAttribute("aria-label", label); button.setAttribute("title", label);
                 button.disabled = !normalized || adding || uncertain || Boolean(settings.tagWarning) || settings.groupSelectionInvalid || !actions.addCurrentTag;
                 button.setAttribute("data-tag-add", "");
-                button.onclick = () => { void addTag(page.tag); };
+                button.onclick = () => { void addTag(addableTag); };
                 const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
                 row.append(button, following); menu.prepend(row);
               }

@@ -104,7 +104,8 @@ port.onMessage((message, sender, respond) => {
         } });
       }
       const page = await port.currentMenuPage(sender, message.patch?.pageUrl);
-      if (!page || (message.type === "add-current-tag" && page.type !== "tag")) {
+      const tag = page?.type === "tag" ? page.tag : page?.type === "search" && message.type === "add-current-tag" ? globalThis.HikikomoriNote.addableTag(message.patch?.pageUrl) : null;
+      if (!page || (message.type === "add-current-tag" && tag === null)) {
         throw Object.assign(new Error("表示中のページを確認できません。ページの読み込みが完了してから、もう一度お試しください。"), { code: "CONFLICT" });
       }
       if (message.type === "select-tag-group") {
@@ -113,7 +114,13 @@ port.onMessage((message, sender, respond) => {
       if (!Number.isSafeInteger(message.patch?.selectionRevision) || message.patch.selectionRevision < 0) {
         throw Object.assign(new Error("選択グループを再確認してください。"), { code: "CONFLICT" });
       }
-      return controller.tag({ type: "ADD_TAG", tag: page.tag, groupId: message.patch?.groupId }, { requireEnabled: true, selectionRevision: message.patch.selectionRevision });
+      return controller.tag({ type: "ADD_TAG", tag, groupId: message.patch?.groupId }, {
+        requireEnabled: true, selectionRevision: message.patch.selectionRevision,
+        ...(page.type === "search" ? { validateCurrent: async () => {
+          const current = await port.currentMenuPage(sender, message.patch.pageUrl);
+          return current?.type === "search" && globalThis.HikikomoriNote.addableTag(message.patch.pageUrl) === tag;
+        } } : {})
+      });
     })();
   }
   operation.then(settings => respond({ ok: true, settings }),

@@ -386,7 +386,7 @@ test('お気に入りの#検索は全検索対象でハイライトを維持し�
   f.ui.update(settings,`https://note.com/search?context=${context}&q=${encodeURIComponent('#るみなー先生')}`);assert.equal(current().textContent,'# るみなー先生');assert.equal(f.doc.querySelector('[data-tag-add]'),null);
  }
  for(const url of ['https://note.com/search?q=ComfyUI&context=note','https://note.com/search?q=ComfyUI&context=user','https://note.com/search?q=%23ComfyUI%20%23AI&context=note','https://note.com/search?q=%23Other&context=note']){
-  f.ui.update(settings,url);assert.equal(current(),null);assert.equal(f.doc.querySelector('[data-tag-add]'),null);
+  f.ui.update(settings,url);assert.equal(current(),null);assert.equal(Boolean(f.doc.querySelector('[data-tag-add]')),url.includes('q=%23Other'));
  }
  f.ui.update(settings,'https://note.com/tag/ComfyUI');assert.equal(current().textContent,'# ComfyUI');
 });
@@ -855,13 +855,13 @@ test('検索URLは検索語・対象・並び順・末尾スラッシュに関�
  for(const url of ['https://note.com/search/other','https://note.com/searching/child','https://other.test/search?q=AI'])assert.equal(core.pageKind(url),null);
 });
 
-test('検索の左メニューだけを差し替え、検索フォーム・結果タブを維持。タグ追加なし、OFFと社会復帰で復帰',()=>{
+test('検索の左メニューだけを差し替え、検索フォーム・結果タブを維持。単一語だけタグ追加、OFFと社会復帰で復帰',()=>{
  const f=uiFixture(sidebarHtml+'<form id="search-form"><input></form><nav id="search-tabs"><a href="/search?context=user"></a></nav>'),settings=f.core.readSettings({...groups(),...groups(['AI'])});
  const aside=f.doc.querySelector('aside'),original=aside.children[0],form=f.doc.getElementById('search-form'),tabs=f.doc.getElementById('search-tabs'),article=f.doc.querySelector('article');
  for(const url of ['https://note.com/search','https://note.com/search?q=きのころ&context=note&mode=search']){
   f.ui.update(settings,url);assert.equal(aside.children.length,2);assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),true);
   const links=aside.children[0].querySelectorAll('a');assert.equal(links[0].textContent,'フォロー中のTL');assert.equal(links[1].href,'https://note.com/search?q=%23AI&context=note&mode=search&sort=new');
-  assert.equal(aside.querySelector('[data-tag-add]'),null);assert.equal(form.isConnected,true);assert.equal(tabs.isConnected,true);assert.equal(article.isConnected,true);
+  assert.equal(Boolean(aside.querySelector('[data-tag-add]')),url.includes('q='));assert.equal(form.isConnected,true);assert.equal(tabs.isConnected,true);assert.equal(article.isConnected,true);
   assert.equal(tabs.hasAttribute('data-hikikomori-note-menu-hidden'),false);
   for(const patch of [{enabled:false},{mode:'social'}]){f.ui.update({...settings,...patch},url);assert.equal(aside.children.length,1);assert.equal(original.hasAttribute('data-hikikomori-note-menu-hidden'),false);}
  }
@@ -2884,4 +2884,29 @@ test('検索作者追加はブラウザAPIで現在URLと選択リビジョン�
  vm.runInContext(source('src/platform/browser-api.js'),c);await c.HikikomoriNotePlatform.addSearchedUser('group3',8,'sample_author','Sample');
  assert.deepEqual(requests,[{type:'add-searched-user',patch:{groupId:'group3',selectionRevision:8,userId:'sample_author',displayName:'Sample',pageUrl:page}}]);
  await c.HikikomoriNotePlatform.addCurrentUser('group1','sample_author','Sample');assert.equal(requests[1].type,'add-current-user');assert.equal(Object.hasOwn(requests[1].patch,'selectionRevision'),false);
+});
+
+
+test('単一語検索ではタグ追加を表示し、複合条件は登録せずタグとして再訪する',async()=>{
+ let calls=0;const f=uiFixture(sidebarHtml,{async addCurrentTag(){calls++;}}),settings=f.core.readSettings({...groups()});
+ for(const q of ['恋愛小説','#恋愛小説',' 恋愛小説 ']){
+  const url='https://note.com/search?context=note&q='+encodeURIComponent(q);f.ui.update(settings,url);
+  assert.equal(f.core.addableTag(url),'恋愛小説');const add=f.doc.querySelector('[data-tag-add]');assert.equal(add.textContent,'＃');
+  assert.match(add.getAttribute('title'),/恋愛小説/);await add.onclick();await flush();
+ }
+ assert.equal(calls,3);assert.match(f.core.tagUrl('恋愛小説'),/q=%23/);
+ for(const q of ['', '恋愛 小説','恋愛　小説','from:@ruminar','-恋愛小説','"恋愛小説"','#恋愛 #小説','##恋愛小説']){
+  const url='https://note.com/search?q='+encodeURIComponent(q);f.ui.update(settings,url);assert.equal(f.core.addableTag(url),null);assert.equal(f.doc.querySelector('[data-tag-add]'),null);
+ }
+ f.ui.update(f.core.readSettings({...groups(['恋愛小説'])}),'https://note.com/search?q='+encodeURIComponent('恋愛小説'));assert.equal(f.doc.querySelector('[data-tag-add]'),null);
+});
+
+test('背景処理は確認済み検索URLの単一語だけをタグとして登録する',async()=>{
+ const f=fixture();let handler,current='https://note.com/search?q='+encodeURIComponent('恋愛小説');
+ const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:()=>false,isNoteSender:()=>true,currentMenuPage:async(sender,url)=>url===current?{type:'search'}:null};
+ const context=vm.createContext({console,HikikomoriNote:f.core,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>f.controller}});vm.runInContext(source('src/background.js'),context);await flush();
+ let answer;const send=async(url)=>{handler({type:'add-current-tag',patch:{pageUrl:url,groupId:'group1',selectionRevision:0,tag:'偽タグ'}},{},value=>{answer=value;});await flush();return answer;};
+ assert.equal((await send(current)).ok,true);assert.deepEqual(f.stored.tagGroups[0].tags,['恋愛小説']);
+ for(const q of ['from:@ruminar','恋愛 小説','']){current='https://note.com/search?q='+encodeURIComponent(q);assert.equal((await send(current)).code,'CONFLICT');}
+ assert.equal((await send('https://note.com/search?q=other')).code,'CONFLICT');assert.deepEqual(f.stored.tagGroups[0].tags,['恋愛小説']);
 });
