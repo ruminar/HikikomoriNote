@@ -2910,3 +2910,28 @@ test('背景処理は確認済み検索URLの単一語だけをタグとして�
  for(const q of ['from:@ruminar','恋愛 小説','']){current='https://note.com/search?q='+encodeURIComponent(q);assert.equal((await send(current)).code,'CONFLICT');}
  assert.equal((await send('https://note.com/search?q=other')).code,'CONFLICT');assert.deepEqual(f.stored.tagGroups[0].tags,['恋愛小説']);
 });
+
+
+const searchMembershipTabsHtml='<main id="main-content"><ul id="search-types"><li id="search-note"><a data-id="NavigationItem" href="/search?context=note&q=AI">記事</a></li><li id="search-magazine"><a data-id="NavigationItem" href="/search?context=magazine&q=AI">マガジン</a></li><li id="search-user"><a data-id="NavigationItem" href="/search?context=user&q=AI">クリエイター</a></li><li id="search-circle"><a data-id="NavigationItem" href="/search?context=circle&q=AI">メンバーシップ</a></li></ul><section id="membership-result"><a href="/author/membership">メンバーシップ結果</a><a href="/search?context=circle&q=AI">メンバーシップ検索リンク</a></section></main>';
+const searchTabHidden='data-hikikomori-note-search-membership-tab-hidden';
+test('有料非表示は検索メンバーシップタブだけ隠し、直接URLの結果と他タブを維持',()=>{
+ for(const mode of ['normal','normal-double','social','severe']){
+  const f=uiFixture(searchMembershipTabsHtml),settings=f.core.readSettings({...groups(),mode,hidePaidArticles:true});
+  const url='https://note.com/search?context=circle&q=AI';f.ui.update(settings,url);
+  assert.equal(f.doc.getElementById('search-circle').hasAttribute(searchTabHidden),true);
+  for(const id of ['search-note','search-magazine','search-user','membership-result'])assert.equal(f.doc.getElementById(id).hasAttribute(searchTabHidden),false);
+  assert.equal(f.doc.getElementById('membership-result').isConnected,true);assert.equal(f.doc.querySelectorAll(`[${searchTabHidden}]`).length,1);
+  for(const patch of [{enabled:false},{hidePaidArticles:false}]){f.ui.update({...settings,...patch},url);assert.equal(f.doc.querySelectorAll(`[${searchTabHidden}]`).length,0);f.ui.update(settings,url);}
+  f.ui.update(settings,'https://note.com/author');assert.equal(f.doc.querySelectorAll(`[${searchTabHidden}]`).length,0);
+  f.ui.update(settings,url);f.ui.stop();assert.equal(f.doc.querySelectorAll(`[${searchTabHidden}]`).length,0);
+ }
+});
+test('検索タブの遅延追加と再描画を反映し、本文リンク・外部リンク・未知構造は隠さない',()=>{
+ const f=uiFixture(searchMembershipTabsHtml),settings=f.core.readSettings({...groups(),hidePaidArticles:true}),url='https://note.com/search?q=AI';
+ const late=f.doc.querySelector('main');late.remove();f.ui.update(settings,url);f.doc.root.append(late);f.ui.update(settings,url);
+ const old=f.doc.getElementById('search-circle');assert.equal(old.hasAttribute(searchTabHidden),true);old.remove();
+ const item=f.doc.createElement('li'),link=f.doc.createElement('a');link.setAttribute('data-id','NavigationItem');link.setAttribute('href','https://other.test/search?context=circle');item.append(link);f.doc.getElementById('search-types').append(item);f.ui.update(settings,url);
+ assert.equal(old.hasAttribute(searchTabHidden),false);assert.equal(item.hasAttribute(searchTabHidden),false);
+ link.setAttribute('href','/search?context=circle');f.ui.update(settings,url);assert.equal(item.hasAttribute(searchTabHidden),true);
+ f.doc.getElementById('search-note').remove();f.ui.update(settings,url);assert.equal(item.hasAttribute(searchTabHidden),false);
+});

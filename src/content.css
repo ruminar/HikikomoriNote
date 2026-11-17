@@ -288,3 +288,5 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-article-mobile > .hikikomori-note-article-following-row { position: static; display: flex; grid-column: 1 / -1; width: 100%; }
 .hikikomori-note-article-mobile > .hikikomori-note-article-favorite-profile { position: static; display: block; grid-column: 1 / -1; width: 100%; max-height: none; }
 .hikikomori-note-article-following-row .hikikomori-note-favorite-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+
+[data-hikikomori-note-search-membership-tab-hidden] { display: none !important; }

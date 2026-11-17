@@ -206,6 +206,33 @@
     }
     const authorControls = createAuthorControls(doc, win, actions, profileSlot);
     let host, menu, signature;
+    const searchMembershipTabs = new Set();
+    const searchMembershipTabHidden = "data-hikikomori-note-search-membership-tab-hidden";
+    function syncSearchMembershipTab(settings, url) {
+      const targets = new Set();
+      if (settings.enabled && settings.hidePaidArticles === true && core.pageKind(url)?.type === "search") {
+        const contextOf = link => {
+          try {
+            const target = new URL(link.getAttribute("href"), url);
+            return target.origin === "https://note.com" && /^\/search\/?$/.test(target.pathname) ? target.searchParams.get("context") : null;
+          } catch { return null; }
+        };
+        for (const link of doc.querySelectorAll('a[data-id="NavigationItem"]')) {
+          if (link.closest(`[${owned}]`) || contextOf(link) !== "circle") continue;
+          const item = link.parentElement, list = item?.parentElement;
+          if (item?.tagName !== "LI" || list?.tagName !== "UL") continue;
+          const hasArticles = [...list.querySelectorAll('a[data-id="NavigationItem"]')].some(sibling =>
+            sibling.parentElement?.parentElement === list && contextOf(sibling) === "note");
+          if (hasArticles) targets.add(item);
+        }
+      }
+      for (const item of searchMembershipTabs) if (!targets.has(item)) item.removeAttribute(searchMembershipTabHidden);
+      searchMembershipTabs.clear();
+      for (const item of targets) {
+        if (!item.hasAttribute(searchMembershipTabHidden)) item.setAttribute(searchMembershipTabHidden, "");
+        searchMembershipTabs.add(item);
+      }
+    }
     let articleFollowing, articleActions, articleActionsKey, articleAdjacentState, articleMobile, articleRow;
     let articleAuthor, articleAuthorSearch, authorSignature;
     let questionFollowing, questionAuthor, questionSelf, questionAuthorSignature;
@@ -1974,6 +2001,7 @@
       syncProducts(settings.enabled && core.usesFollowing(settings) && page?.type === "tag");
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncNotesPromotions(settings, url);
+      syncSearchMembershipTab(settings, url);
       syncMembershipExamples(settings, url);
       syncMagazinePromotions(settings, url);
       syncHomeBanners(settings, url);
@@ -2184,6 +2212,8 @@
         syncRecommendations(false);
         for (const root of notesPromotionRoots) root.removeAttribute(notesPromotionRoot);
         notesPromotionRoots.clear();
+        for (const item of searchMembershipTabs) item.removeAttribute(searchMembershipTabHidden);
+        searchMembershipTabs.clear();
         for (const target of membershipExamples) target.removeAttribute(membershipExamplesHidden);
         membershipExamples.clear();
         for (const target of magazinePromotions) target.removeAttribute(magazinePromotionHidden);
