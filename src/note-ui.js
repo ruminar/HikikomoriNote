@@ -2057,11 +2057,15 @@
               registered = group.tags.includes(normalized);
               if (!registered) {
                 const button = doc.createElement("button"); button.type = "button";
-                button.textContent = adding ? "保存中…" : "タグをお気に入りに追加";
-                button.setAttribute("aria-label", `# ${page.tag}：${button.textContent}`);
+                button.textContent = "＃";
+                button.className = "hikikomori-note-favorite-toggle";
+                const label = `# ${page.tag}：${adding ? "保存中…" : "タグをお気に入りに追加"}`;
+                button.setAttribute("aria-label", label); button.setAttribute("title", label);
                 button.disabled = !normalized || adding || uncertain || Boolean(settings.tagWarning) || settings.groupSelectionInvalid || !actions.addCurrentTag;
                 button.setAttribute("data-tag-add", "");
-                button.onclick = () => { void addTag(page.tag); }; menu.append(button);
+                button.onclick = () => { void addTag(page.tag); };
+                const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
+                row.append(button, following); menu.prepend(row);
               }
             }
             const status = doc.createElement("span"); status.className = "hikikomori-note-tag-status";

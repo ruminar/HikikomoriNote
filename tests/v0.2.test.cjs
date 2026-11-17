@@ -1198,6 +1198,9 @@ test('表示中の日本語タグを左メニューで追加し、二重クリ�
  const f=uiFixture(sidebarHtml,{async addCurrentTag(){calls++;await new Promise(resolve=>{complete=resolve;});settings=f.core.readSettings({...groups(),...groups(['みじんこ123'])});f.ui.update(settings,url);}});
  let settings=f.core.readSettings({...groups(),});f.ui.update(settings,url);
  const button=f.doc.querySelector('[data-tag-add]');assert.match(button.getAttribute('aria-label'),/みじんこ123/);assert.equal(button.disabled,false);
+ assert.equal(button.textContent,'＃');assert.equal(button.getAttribute('title'),button.getAttribute('aria-label'));
+ const row=button.parentElement;assert.equal(row.className,'hikikomori-note-profile-actions');
+ assert.equal(row.children[0],button);assert.equal(row.children[1].className,'hikikomori-note-navigation-following');
  button.onclick();button.onclick();assert.equal(calls,1);assert.equal(f.doc.querySelector('[data-tag-add]').disabled,true);
  complete();await flush();assert.equal(f.doc.querySelector('[data-tag-add]'),null);
  assert.equal(f.doc.querySelector('[aria-current="page"]').href,'https://note.com/search?q=%23%E3%81%BF%E3%81%98%E3%82%93%E3%81%93123&context=note&mode=search&sort=new');
