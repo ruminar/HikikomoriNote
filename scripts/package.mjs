@@ -18,9 +18,15 @@ export async function createManifest(browser) {
   }
   return manifest;
 }
+export function validateHomeVersion(html, version) {
+  const header = /<span\b[^>]*\bid="version"[^>]*>\s*(\d+\.\d+\.\d+)\s*<\/span>/.exec(html)?.[1];
+  const footer = /<footer>[^<]*?\b(\d+\.\d+\.\d+)\b/.exec(html)?.[1];
+  if (header !== version || footer !== version) throw new Error(`設定画面の版番号がmanifestと一致しません（manifest: ${version}、右上: ${header ?? "不明"}、フッター: ${footer ?? "不明"}）。`);
+}
 export async function buildPackage(browser, outputRoot = path.join(root, "dist")) {
   const manifest = await createManifest(browser);
   if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) throw new Error("版番号を確認してください。");
+  validateHomeVersion(await fs.readFile(path.join(root, "home.html"), "utf8"), manifest.version);
   const parent = path.resolve(outputRoot);
   const output = path.resolve(parent, `HikikomoriNote-${manifest.version}-${browser}`);
   // 再生成時に削除する対象が出力先直下の成果物だけであることを確認。

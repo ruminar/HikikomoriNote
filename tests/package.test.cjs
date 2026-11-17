@@ -9,6 +9,31 @@ const { pathToFileURL } = require("node:url");
 const root = path.resolve(__dirname, "..");
 const packager = () => import(pathToFileURL(path.join(root, "scripts/package.mjs")).href);
 const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test("設定画面の右上・フッターはmanifestと一致し、互換説明の旧版番号は維持する", async () => {
+  const { createManifest, validateHomeVersion } = await packager(), html = await fs.readFile(path.join(root, "home.html"), "utf8");
+  for (const browser of ["chromium", "firefox"]) {
+    const manifest = await createManifest(browser); assert.doesNotThrow(() => validateHomeVersion(html, manifest.version));
+  }
+  assert.ok(html.includes("0.3.3以降"));
+});
+test("画面の片方だけ古い版・両方古い版・表記欠落ではパッケージ検証を拒否", async () => {
+  const { createManifest, validateHomeVersion } = await packager(), version = (await createManifest("firefox")).version;
+  const html = await fs.readFile(path.join(root, "home.html"), "utf8");
+  for (const bad of [html.replace(/(id="version"[^>]*>)[^<]+/, "$10.0.1"), html.replace(/(<footer>[^<]*?)\d+\.\d+\.\d+/, "$10.0.1"),
+    html.replaceAll(version, "0.0.1"), html.replace('id="version"', 'id="missing-version"'), html.replace("<footer>", "<div>")]) {
+    assert.throws(() => validateHomeVersion(bad, version), /版番号がmanifestと一致しません/);
+  }
+});
+test("配布物の全ランタイムファイルは現在のソースと一致し、左メニューのドラッグ処理も含む", async t => {
+  const { buildPackage, runtimeFiles } = await packager(), temp = await fs.mkdtemp(path.join(os.tmpdir(), "hikikomori-note-runtime-check-"));
+  assert.equal(path.dirname(temp), path.resolve(os.tmpdir())); t.after(() => fs.rm(temp, { recursive: true, force: true }));
+  for (const browser of ["chromium", "firefox"]) {
+    const output = await buildPackage(browser, temp);
+    for (const file of runtimeFiles) assert.deepEqual(await fs.readFile(path.join(output, file)), await fs.readFile(path.join(root, file)), file);
+    for (const file of ["src/content.js", "src/note-ui.js", "src/platform/browser-api.js"]) assert.match(await fs.readFile(path.join(output, file), "utf8"), /menuFavoriteDrop/);
+  }
+});
 test("両ブラウザの日本語メタデータが既存表示のまま解決でき、配布物にも含まれる", async t => {
   const { createManifest, buildPackage } = await packager();
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "hikikomori-note-locale-test-"));
