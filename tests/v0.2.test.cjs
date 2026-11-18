@@ -2981,3 +2981,27 @@ test('関連領域の後挿入を待たずルートの子孫CSSを有効化し�
  f.ui.update(s,url);f.ui.update(s,'https://note.com/following');assert.equal(f.doc.root.hasAttribute(state),false);
  f.ui.update(s,url);f.ui.stop();assert.equal(f.doc.root.hasAttribute(state),false);
 });
+
+
+const searchFilterHtml='<main id="main-content"><div id="filter-row"><div role="group" aria-label="検索結果の並び順" id="filter-sort"><button></button></div><div class="w-36 shrink-0" id="paid-filter-box"><div data-name="Field"><div aria-hidden="true"><label><select id="paid-filter-native"><option value="note"></option><option value="note_for_sale"></option></select></label></div><button data-name="FieldButton" aria-label="記事の絞り込み" id="paid-filter-button"></button></div></div></div><article id="filter-results"><button aria-label="記事の絞り込み" id="body-filter"></button></article></main>';
+const searchFilterMarker='data-hikikomori-note-search-filter-hidden',searchFilterRoot='data-hikikomori-note-search-paid-filter-hidden';
+test('有料非表示は検索の有料/すべて絞り込みを裏側selectごと隠し、並び順・本文・結果を残す',()=>{
+ for(const mode of ['normal','normal-double','social','severe']){
+  const f=uiFixture(searchFilterHtml),s=f.core.readSettings({...groups(),mode,hidePaidArticles:true}),url='https://note.com/search?q=AI&context=note';f.ui.update(s,url);
+  const box=f.doc.getElementById('paid-filter-box');assert.equal(box.hasAttribute(searchFilterMarker),true);assert.equal(f.doc.root.hasAttribute(searchFilterRoot),true);
+  assert.equal(box.contains(f.doc.getElementById('paid-filter-native')),true);assert.equal(box.contains(f.doc.getElementById('paid-filter-button')),true);
+  for(const id of ['filter-sort','body-filter','filter-results'])assert.equal(f.doc.getElementById(id).hasAttribute(searchFilterMarker),false);
+  for(const patch of [{enabled:false},{hidePaidArticles:false}]){f.ui.update({...s,...patch},url);assert.equal(box.hasAttribute(searchFilterMarker),false);assert.equal(f.doc.root.hasAttribute(searchFilterRoot),false);f.ui.update(s,url);}
+  f.ui.update(s,'https://note.com/following');assert.equal(box.hasAttribute(searchFilterMarker),false);assert.equal(f.doc.root.hasAttribute(searchFilterRoot),false);
+  f.ui.update(s,url);f.ui.stop();assert.equal(box.hasAttribute(searchFilterMarker),false);assert.equal(f.doc.root.hasAttribute(searchFilterRoot),false);
+ }
+});
+test('検索の絞り込みは後挿入へ先行CSSを適用し、再描画・未知の選択欄を区別する',()=>{
+ const f=uiFixture(searchFilterHtml),s=f.core.readSettings({...groups(),hidePaidArticles:true}),url='https://note.com/search?q=AI',box=f.doc.getElementById('paid-filter-box');box.remove();f.ui.update(s,url);
+ assert.equal(f.doc.root.hasAttribute(searchFilterRoot),true);f.doc.getElementById('filter-row').append(box);assert.equal(box.hasAttribute(searchFilterMarker),false);f.ui.update(s,url);assert.equal(box.hasAttribute(searchFilterMarker),true);
+ box.remove();f.ui.update(s,url);assert.equal(box.hasAttribute(searchFilterMarker),false);
+ for(const change of [g=>g.doc.getElementById('paid-filter-button').setAttribute('aria-label','別の絞り込み'),g=>g.doc.getElementById('paid-filter-box').className='other',g=>g.doc.getElementById('paid-filter-native').remove(),g=>g.doc.getElementById('filter-results').append(g.doc.getElementById('paid-filter-box'))]){
+  const g=uiFixture(searchFilterHtml);change(g);g.ui.update(s,url);assert.equal(g.doc.querySelectorAll(`[${searchFilterMarker}]`).length,0);
+ }
+ const css=source('src/content.css');assert.ok(css.includes('[data-hikikomori-note-search-paid-filter-hidden] main#main-content'));assert.ok(css.includes('option[value="note_for_sale"]'));
+});

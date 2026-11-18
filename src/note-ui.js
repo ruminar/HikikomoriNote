@@ -303,6 +303,34 @@
       paintRelatedTopics();
     }
     const searchMembershipTabs = new Set();
+    const searchArticleFilters = new Set();
+    let searchArticleFilterRoot;
+    const searchFilterHidden = "data-hikikomori-note-search-filter-hidden", searchFilterActive = "data-hikikomori-note-search-paid-filter-hidden";
+    function syncSearchArticleFilter(settings, url) {
+      const active = settings.enabled && settings.hidePaidArticles === true && core.pageKind(url)?.type === "search";
+      const root = doc.documentElement || doc.root, targets = new Set();
+      if (searchArticleFilterRoot && (!active || searchArticleFilterRoot !== root)) {
+        searchArticleFilterRoot.removeAttribute(searchFilterActive); searchArticleFilterRoot = undefined;
+      }
+      if (active && root) {
+        if (!root.hasAttribute(searchFilterActive)) root.setAttribute(searchFilterActive, "");
+        searchArticleFilterRoot = root;
+        for (const button of doc.querySelectorAll('button[aria-label="記事の絞り込み"]')) {
+          if (button.getAttribute("data-name") !== "FieldButton" || button.closest("article") || button.closest(`[${owned}]`)) continue;
+          const main = button.closest('main[id="main-content"]'), field = button.closest('div[data-name="Field"]'), wrapper = field?.parentElement;
+          if (!main || wrapper?.tagName !== "DIV" || !hasClasses(wrapper, ["w-36", "shrink-0"]) || wrapper.children.length !== 1) continue;
+          if (!field.querySelector('option[value="note"]') || !field.querySelector('option[value="note_for_sale"]')) continue;
+          if (!wrapper.parentElement?.querySelector('[aria-label="検索結果の並び順"]')) continue;
+          targets.add(wrapper);
+        }
+      }
+      for (const target of searchArticleFilters) if (!targets.has(target)) target.removeAttribute(searchFilterHidden);
+      searchArticleFilters.clear();
+      for (const target of targets) {
+        if (!target.hasAttribute(searchFilterHidden)) target.setAttribute(searchFilterHidden, "");
+        searchArticleFilters.add(target);
+      }
+    }
     const searchMembershipTabHidden = "data-hikikomori-note-search-membership-tab-hidden";
     function syncSearchMembershipTab(settings, url) {
       const targets = new Set();
@@ -2117,6 +2145,7 @@
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncNotesPromotions(settings, url);
       syncSearchMembershipTab(settings, url);
+      syncSearchArticleFilter(settings, url);
       syncRelatedTopics(settings, url);
       syncMembershipExamples(settings, url);
       syncMagazinePromotions(settings, url);
@@ -2295,6 +2324,7 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        syncSearchArticleFilter({ enabled: false }, currentUrl);
         clearRelatedTopics(); relatedSearchKey = undefined; relatedOpen = false;
         syncRelatedRoot(false);
         tagDialog?.dispose();

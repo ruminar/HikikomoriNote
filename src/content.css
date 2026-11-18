@@ -309,6 +309,8 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-article-following-row .hikikomori-note-favorite-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
 
 [data-hikikomori-note-search-membership-tab-hidden] { display: none !important; }
+[data-hikikomori-note-search-paid-filter-hidden] main#main-content div[class~="w-36"][class~="shrink-0"]:has(> div[data-name="Field"] button[data-name="FieldButton"][aria-label="記事の絞り込み"]):has(> div[data-name="Field"] option[value="note_for_sale"]):not(article *):not([data-hikikomori-note-owned] *),
+[data-hikikomori-note-search-filter-hidden] { display: none !important; }
 [data-hikikomori-note-search-related-state="closed"] main#main-content section[aria-labelledby="aicn-banner-title"]:not(article *):not([data-hikikomori-note-owned] *),
 [data-hikikomori-note-related-hidden] { display: none !important; }
 [data-hikikomori-note-related-row] { justify-content: flex-start !important; flex-wrap: wrap; }
