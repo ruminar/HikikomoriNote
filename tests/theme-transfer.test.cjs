@@ -72,6 +72,28 @@ test('旧形式1〜7はtags・legacyModeの変換を維持し、省略フラグ�
   const f=backend({theme:'dark',hideLikeCounts:true,keepNoteHeaderVisible:true,mode:'social'}),settings={tagGroups:[{id:'group1',name:'',...(version<5?{tags:['Old']}:{items:[{type:'tag',tag:'Old'}]})}],...(version<3?{legacyMode:true}:{mode:'normal'})};await f.load({format:'hikikomori-note-settings',schemaVersion:version,settings});assert.equal(f.state.mode,version<3?'severe':'normal');assert.equal(f.state.theme,'dark');assert.equal(f.state.hideLikeCounts,true);assert.equal(f.state.keepNoteHeaderVisible,true);assert.deepEqual(f.state.tagGroups[0].tags,['Old']);
  }
 });
+test('おしゃべりnoteの2段設定を取り込み、グループ8の中身と選択を保存・再出力する',async()=>{
+ const f=backend();
+ const settings={...sample.settings,favoriteGroupDisplay:'double',selectedTagGroupId:'group8',tagGroups:[...sample.settings.tagGroups,{id:'group8',name:'Eight',items:[tag]}]};
+ const result=await f.load({...sample,settings});
+ assert.ok(result.importReport.applied.includes('favoriteGroupDisplay'));
+ assert.equal(f.state.mode,'normal-double');
+ assert.equal(f.state.selectedTagGroupId,'group8');
+ assert.deepEqual(f.state.tagGroups[7],{id:'group8',name:'Eight',tags:['SampleTag']});
+ const exported=JSON.parse(f.core.exportSettings(f.core.readSettings(f.state)));
+ assert.equal(exported.settings.mode,'normal-double');
+ assert.equal(exported.settings.selectedTagGroupId,'group8');
+ assert.deepEqual(exported.settings.tagGroups[7],{id:'group8',name:'Eight',items:[tag]});
+});
+test('1段・不正な表示設定はモードを変更せず、明示された動作モードを優先する',async()=>{
+ for(const patch of [{favoriteGroupDisplay:'normal'},{favoriteGroupDisplay:false},{favoriteGroupDisplay:'double',mode:'social'},{favoriteGroupDisplay:'double',legacyMode:true}]){
+  const f=backend({mode:'social'});
+  const result=await f.load({...patch,theme:'dark'});
+  assert.equal(f.state.mode,patch.legacyMode?'severe':'social');
+  assert.equal(f.state.theme,'dark');
+  assert.ok(result.importReport.ignored.some(item=>item.path==='favoriteGroupDisplay'));
+ }
+});
 test('mode明示時はlegacyModeを使わず、不正modeも現在値を維持',async()=>{
  for(const mode of ['normal','invalid']){const f=backend({mode:'social'});await f.load({mode,legacyMode:true});assert.equal(f.state.mode,mode==='normal'?'normal':'social');}
 });

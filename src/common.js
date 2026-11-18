@@ -416,6 +416,19 @@
     for (const key of Object.keys(source)) {
       const value = source[key];
       if (metadata.has(key)) continue;
+      if (key === "favoriteGroupDisplay") {
+        if (!["normal", "double"].includes(value)) {
+          skip(key, "normal・doubleのいずれかにしてください。");
+        } else if (Object.hasOwn(source, "mode") || Object.hasOwn(source, "legacyMode")) {
+          skip(key, "動作モードが指定されているため使用しません。");
+        } else if (value === "double") {
+          settings.mode = "normal-double";
+          accept(key);
+        } else {
+          skip(key, "1段の指定では現在の動作モードを維持します。");
+        }
+        continue;
+      }
       if (scalar.has(key)) {
         try {
           if (key === "legacyMode" && Object.hasOwn(source, "mode")) { skip(key, "modeが指定されているため使用しません。"); continue; }
