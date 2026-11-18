@@ -15,6 +15,7 @@ class Element {
   remove(){if(this.parentElement){const parent=this.parentElement;parent.children.splice(parent.children.indexOf(this),1);this.parentElement=null;}}
   append(...children){for(const child of children){child.remove();child.parentElement=this;this.children.push(child);}}
   prepend(child){child.remove();child.parentElement=this;this.children.unshift(child);}
+  after(child){if(!this.parentElement)return;const parent=this.parentElement;child.remove();child.parentElement=parent;parent.children.splice(parent.children.indexOf(this)+1,0,child);}
   replaceChildren(...children){for(const child of this.children)child.parentElement=null;this.children=[];this._text="";this.append(...children);}
   contains(child){return child===this||this.children.some(node=>node.contains(child));}
   matches(selector){const match=/^([\w-]+)?(?:\[([\w-]+)(?:(~?=)"([^"]*)")?\])?$/.exec(selector);return !!match&&(!match[1]||this.tagName===match[1].toUpperCase())&&(!match[2]||(this.hasAttribute(match[2])&&(match[4]===undefined||(match[3]==='~='?this.getAttribute(match[2]).split(/\s+/).includes(match[4]):this.getAttribute(match[2])===match[4]))));}

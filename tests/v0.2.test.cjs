@@ -2935,3 +2935,49 @@ test('検索タブの遅延追加と再描画を反映し、本文リンク・�
  link.setAttribute('href','/search?context=circle');f.ui.update(settings,url);assert.equal(item.hasAttribute(searchTabHidden),true);
  f.doc.getElementById('search-note').remove();f.ui.update(settings,url);assert.equal(item.hasAttribute(searchTabHidden),false);
 });
+
+
+const relatedTopicsHtml='<main id="main-content"><section aria-labelledby="aicn-banner-title" id="related-test-region"><h2 id="aicn-banner-title"></h2><div id="related-card"><a href="/tag/SpaceSF"></a></div><ul id="related-chips"><li><a href="/tag/Other"></a></li></ul><hr></section><div id="sort-row"><div data-name="ButtonGroup" role="group" aria-label="検索結果の並び順" id="sort-group"><button data-name="ButtonGroupItem" data-key="popular" id="sort-popular" aria-pressed="false"></button><button data-name="ButtonGroupItem" data-key="hot"></button><button data-name="ButtonGroupItem" data-key="new" id="sort-new" aria-pressed="true"></button></div><div id="search-filter"><button></button></div></div><article id="search-result"></article></main>';
+const relatedMarker='data-hikikomori-note-related-hidden';
+function relatedFixture(){const f=uiFixture(relatedTopicsHtml);f.doc.getElementById('aicn-banner-title').textContent='関連する話題';f.doc.getElementById('sort-new').textContent='新着';return f;}
+const relatedToggle=f=>f.doc.querySelector('[class="hikikomori-note-related-toggle"]');
+test('検索の関連は初期OFFで新着の隣。公式の並び順と結果を保ち、開閉を切り替える',()=>{
+ for(const mode of ['normal','normal-double','social','severe'])for(const hideArticleRecommendations of [true,false]){
+  const f=relatedFixture(),s=f.core.readSettings({...groups(),mode,hideArticleRecommendations}),url='https://note.com/search?q=%23SpaceSF&context=note&sort=new';f.ui.update(s,url);
+  const region=f.doc.getElementById('related-test-region'),button=relatedToggle(f),row=f.doc.getElementById('sort-row'),sort=f.doc.getElementById('sort-group');
+  assert.equal(region.hasAttribute(relatedMarker),true);assert.equal(button.getAttribute('aria-pressed'),'false');assert.equal(button.getAttribute('aria-expanded'),'false');assert.equal(button.getAttribute('aria-controls'),'related-test-region');
+  assert.equal(row.children[0],sort);assert.equal(row.children[1],button);assert.equal(row.children[2],f.doc.getElementById('search-filter'));assert.equal(sort.children.length,3);
+  button.onclick();assert.equal(region.hasAttribute(relatedMarker),false);assert.equal(button.getAttribute('aria-pressed'),'true');assert.equal(f.doc.getElementById('sort-new').getAttribute('aria-pressed'),'true');assert.equal(f.doc.getElementById('sort-popular').getAttribute('aria-pressed'),'false');
+  button.onclick();assert.equal(region.hasAttribute(relatedMarker),true);assert.equal(f.doc.getElementById('search-result').isConnected,true);assert.equal(f.doc.getElementById('related-chips').isConnected,true);
+ }
+});
+test('関連の開閉は同じ検索の並び順・DOM更新で維持し、検索語・対象変更とOFF・停止で解除',()=>{
+ const f=relatedFixture(),s=f.core.readSettings({...groups()}),url='https://note.com/search?q=SpaceSF&context=note&sort=new';const region=f.doc.getElementById('related-test-region');region.removeAttribute('id');f.ui.update(s,url);
+ const originalId=region.getAttribute('id'),old=relatedToggle(f);assert.ok(originalId.startsWith('hikikomori-note-related-topics-'));old.onclick();f.ui.update(s,url.replace('sort=new','sort=popular'));assert.equal(region.hasAttribute(relatedMarker),false);assert.equal(relatedToggle(f),old);
+ old.remove();f.ui.update(s,url);assert.equal(region.hasAttribute(relatedMarker),false);assert.notEqual(relatedToggle(f),old);assert.equal(region.getAttribute('id')!==null,true);
+ f.ui.update(s,url.replace('SpaceSF','Other'));assert.equal(region.hasAttribute(relatedMarker),true);relatedToggle(f).onclick();f.ui.update(s,url.replace('context=note','context=magazine'));assert.equal(region.hasAttribute(relatedMarker),true);
+ f.ui.update({...s,enabled:false},url);assert.equal(region.hasAttribute(relatedMarker),false);assert.equal(region.hasAttribute('id'),false);assert.equal(relatedToggle(f),null);assert.equal(f.doc.getElementById('sort-row').hasAttribute('data-hikikomori-note-related-row'),false);
+ f.ui.update(s,url);relatedToggle(f).onclick();f.ui.update(s,'https://note.com/following');assert.equal(region.hasAttribute(relatedMarker),false);assert.equal(relatedToggle(f),null);
+ f.ui.update(s,url);f.ui.stop();assert.equal(region.hasAttribute(relatedMarker),false);assert.equal(relatedToggle(f),null);old.onclick();assert.equal(region.hasAttribute(relatedMarker),false);
+});
+test('関連領域は遅延挿入に追従し、不明な見出し・本文・並び順不明では変更しない',()=>{
+ const f=relatedFixture(),s=f.core.readSettings({...groups()}),url='https://note.com/search?q=SpaceSF';const region=f.doc.getElementById('related-test-region');region.remove();f.ui.update(s,url);assert.equal(relatedToggle(f),null);
+ f.doc.getElementById('main-content').prepend(region);f.ui.update(s,url);assert.equal(region.hasAttribute(relatedMarker),true);
+ region.remove();f.ui.update(s,url);assert.equal(region.hasAttribute(relatedMarker),false);assert.equal(relatedToggle(f),null);
+ for(const change of [g=>{g.doc.getElementById('aicn-banner-title').textContent='別の話題';},g=>{g.doc.getElementById('sort-new').remove();},g=>{g.doc.getElementById('search-result').append(g.doc.getElementById('related-test-region'));}]){
+  const g=relatedFixture();change(g);g.ui.update(s,url);assert.equal(relatedToggle(g),null);assert.equal(g.doc.querySelectorAll(`[${relatedMarker}]`).length,0);
+ }
+});
+test('関連領域の後挿入を待たずルートの子孫CSSを有効化し、開閉・離脱・OFF・停止で同期する',()=>{
+ const f=relatedFixture(),s=f.core.readSettings({...groups()}),url='https://note.com/search?q=SpaceSF',state='data-hikikomori-note-search-related-state';
+ const region=f.doc.getElementById('related-test-region');region.remove();f.ui.update(s,url);
+ assert.equal(f.doc.root.getAttribute(state),'closed');assert.equal(relatedToggle(f),null);
+ f.doc.getElementById('main-content').prepend(region);
+ // この時点では要素個別の属性はなくても、既存のルート属性による子孫CSSが適用される。
+ assert.equal(region.hasAttribute(relatedMarker),false);assert.equal(f.doc.root.getAttribute(state),'closed');
+ const css=source('src/content.css');assert.ok(css.includes('[data-hikikomori-note-search-related-state="closed"] main#main-content section[aria-labelledby="aicn-banner-title"]:not(article *):not([data-hikikomori-note-owned] *)'));
+ f.ui.update(s,url);relatedToggle(f).onclick();assert.equal(f.doc.root.getAttribute(state),'open');relatedToggle(f).onclick();assert.equal(f.doc.root.getAttribute(state),'closed');
+ f.ui.update({...s,enabled:false},url);assert.equal(f.doc.root.hasAttribute(state),false);
+ f.ui.update(s,url);f.ui.update(s,'https://note.com/following');assert.equal(f.doc.root.hasAttribute(state),false);
+ f.ui.update(s,url);f.ui.stop();assert.equal(f.doc.root.hasAttribute(state),false);
+});

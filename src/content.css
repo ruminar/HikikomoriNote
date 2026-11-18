@@ -290,3 +290,10 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-article-following-row .hikikomori-note-favorite-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
 
 [data-hikikomori-note-search-membership-tab-hidden] { display: none !important; }
+[data-hikikomori-note-search-related-state="closed"] main#main-content section[aria-labelledby="aicn-banner-title"]:not(article *):not([data-hikikomori-note-owned] *),
+[data-hikikomori-note-related-hidden] { display: none !important; }
+[data-hikikomori-note-related-row] { justify-content: flex-start !important; flex-wrap: wrap; }
+[data-hikikomori-note-related-row] > :last-child:not(.hikikomori-note-related-toggle) { margin-left: auto; }
+.hikikomori-note-related-toggle { box-sizing: border-box; flex: 0 0 auto; min-width: 48px; min-height: 36px; padding: 8px 12px; border: 1px solid var(--color-border-default, GrayText); border-radius: 999px; background: var(--color-surface-normal, Canvas); color: var(--color-text-primary, CanvasText); font: bold 12px/1.4 system-ui, sans-serif; cursor: pointer; }
+.hikikomori-note-related-toggle[aria-pressed="true"] { background: var(--color-surface-tertiary, Highlight); color: var(--color-text-invert, HighlightText); }
+.hikikomori-note-related-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

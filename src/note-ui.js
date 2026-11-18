@@ -212,6 +212,82 @@
     }
     const authorControls = createAuthorControls(doc, win, actions, profileSlot);
     let host, menu, signature;
+    let relatedTopics, relatedSearchKey, relatedOpen = false, relatedId = 0, relatedEarlyRoot;
+    const relatedHidden = "data-hikikomori-note-related-hidden", relatedRow = "data-hikikomori-note-related-row";
+    const relatedState = "data-hikikomori-note-search-related-state";
+    function syncRelatedRoot(active) {
+      const root = doc.documentElement || doc.root;
+      if (relatedEarlyRoot && (!active || relatedEarlyRoot !== root)) {
+        relatedEarlyRoot.removeAttribute(relatedState); relatedEarlyRoot = undefined;
+      }
+      if (active && root) {
+        const value = relatedOpen ? "open" : "closed";
+        if (root.getAttribute(relatedState) !== value) root.setAttribute(relatedState, value);
+        relatedEarlyRoot = root;
+      }
+    }
+    function clearRelatedTopics() {
+      if (!relatedTopics) return;
+      const { region, button, row, generatedId } = relatedTopics;
+      region.removeAttribute(relatedHidden); row.removeAttribute(relatedRow); button.remove();
+      if (generatedId && region.getAttribute("id") === generatedId) region.removeAttribute("id");
+      relatedTopics = undefined;
+    }
+    function paintRelatedTopics() {
+      syncRelatedRoot(relatedSearchKey !== undefined);
+      if (!relatedTopics) return;
+      const { region, button } = relatedTopics;
+      if (relatedOpen) region.removeAttribute(relatedHidden);
+      else if (!region.hasAttribute(relatedHidden)) region.setAttribute(relatedHidden, "");
+      const expanded = String(relatedOpen);
+      if (button.getAttribute("aria-expanded") !== expanded) button.setAttribute("aria-expanded", expanded);
+      if (button.getAttribute("aria-pressed") !== expanded) button.setAttribute("aria-pressed", expanded);
+      button.setAttribute("title", relatedOpen ? "関連する話題を非表示にする" : "関連する話題を表示する");
+    }
+    function syncRelatedTopics(settings, url) {
+      let key;
+      if (settings.enabled && core.pageKind(url)?.type === "search") {
+        const params = new URL(url).searchParams;
+        key = JSON.stringify([params.get("q") || "", params.get("context") || "note"]);
+      }
+      if (key !== relatedSearchKey || key === undefined) relatedOpen = false;
+      relatedSearchKey = key;
+      // sectionや並び順UIの完成より先に、後挿入DOMへ効く子孫CSSを有効にする。
+      syncRelatedRoot(key !== undefined);
+      if (key === undefined) { clearRelatedTopics(); return; }
+      const mains = [...doc.querySelectorAll('main[id="main-content"]')];
+      const main = mains.length === 1 ? mains[0] : null;
+      const regions = main ? [...main.querySelectorAll('section[aria-labelledby="aicn-banner-title"]')].filter(region =>
+        !region.closest("article") && !region.closest(`[${owned}]`) && [...region.children].some(heading =>
+          heading.tagName === "H2" && heading.getAttribute("id") === "aicn-banner-title" && heading.textContent.trim() === "関連する話題")) : [];
+      const groups = main ? [...main.querySelectorAll('[aria-label="検索結果の並び順"]')].filter(group =>
+        group.getAttribute("data-name") === "ButtonGroup" && group.getAttribute("role") === "group" && !group.closest("article") && !group.closest(`[${owned}]`) &&
+        [...group.children].some(button => button.tagName === "BUTTON" && button.getAttribute("data-name") === "ButtonGroupItem" && button.getAttribute("data-key") === "new" && button.textContent.trim() === "新着")) : [];
+      if (regions.length !== 1 || groups.length !== 1) { clearRelatedTopics(); return; }
+      const region = regions[0], group = groups[0], row = group.parentElement;
+      if (!row || row === main || region.contains(row)) { clearRelatedTopics(); return; }
+      if (relatedTopics && (relatedTopics.region !== region || relatedTopics.group !== group || relatedTopics.button.parentElement !== row)) clearRelatedTopics();
+      if (!relatedTopics) {
+        const button = doc.createElement("button"); button.type = "button"; button.textContent = "関連";
+        button.className = "hikikomori-note-related-toggle"; button.setAttribute(owned, "");
+        button.setAttribute("aria-label", "関連する話題の表示切り替え");
+        let generatedId;
+        if (!region.getAttribute("id")) {
+          do { generatedId = `hikikomori-note-related-topics-${++relatedId}`; } while (doc.getElementById(generatedId));
+          region.setAttribute("id", generatedId);
+        }
+        button.setAttribute("aria-controls", region.getAttribute("id"));
+        button.onclick = () => {
+          if (!relatedTopics || relatedTopics.button !== button || !currentSettings?.enabled || !button.isConnected) return;
+          syncRelatedTopics(currentSettings, win.location?.href || currentUrl);
+          if (relatedTopics?.button !== button) return;
+          relatedOpen = !relatedOpen; paintRelatedTopics();
+        };
+        group.after(button); row.setAttribute(relatedRow, "");
+        relatedTopics = { region, group, row, button, generatedId };
+      }
+      paintRelatedTopics();
+    }
     const searchMembershipTabs = new Set();
     const searchMembershipTabHidden = "data-hikikomori-note-search-membership-tab-hidden";
     function syncSearchMembershipTab(settings, url) {
@@ -2026,6 +2102,7 @@
       syncRecommendations(settings.enabled && settings.hideArticleRecommendations === true && core.isArticle(url));
       syncNotesPromotions(settings, url);
       syncSearchMembershipTab(settings, url);
+      syncRelatedTopics(settings, url);
       syncMembershipExamples(settings, url);
       syncMagazinePromotions(settings, url);
       syncHomeBanners(settings, url);
@@ -2202,6 +2279,8 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        clearRelatedTopics(); relatedSearchKey = undefined; relatedOpen = false;
+        syncRelatedRoot(false);
         tagDialog?.dispose();
         for (const target of accountMenuTargets) target.removeAttribute(accountMenuHidden);
         accountMenuTargets.clear();
