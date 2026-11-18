@@ -2901,6 +2901,18 @@ test('単一語検索ではタグ追加を表示し、複合条件は登録せ�
  f.ui.update(f.core.readSettings({...groups(['恋愛小説'])}),'https://note.com/search?q='+encodeURIComponent('恋愛小説'));assert.equal(f.doc.querySelector('[data-tag-add]'),null);
 });
 
+test('SPAで単一検索語を変更するとタグ追加ボタンの表示と登録対象も更新する',async()=>{
+ const calls=[],f=uiFixture(sidebarHtml,{async addCurrentTag(...args){calls.push(args);}}),settings=f.core.readSettings({...groups()});
+ f.ui.update(settings,'https://note.com/search?q=Tea&context=note');
+ assert.match(f.doc.querySelector('[data-tag-add]').getAttribute('title'),/Tea/);
+ f.ui.update(settings,'https://note.com/search?q=Space&context=note');
+ const add=f.doc.querySelector('[data-tag-add]');assert.match(add.getAttribute('title'),/Space/);assert.doesNotMatch(add.getAttribute('title'),/Tea/);
+ await add.onclick();await flush();assert.equal(calls.length,1);
+ for(const q of ['Space Tea','']){
+  f.ui.update(settings,'https://note.com/search?context=note&q='+encodeURIComponent(q));assert.equal(f.doc.querySelector('[data-tag-add]'),null);
+ }
+});
+
 test('背景処理は確認済み検索URLの単一語だけをタグとして登録する',async()=>{
  const f=fixture();let handler,current='https://note.com/search?q='+encodeURIComponent('恋愛小説');
  const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:()=>false,isNoteSender:()=>true,currentMenuPage:async(sender,url)=>url===current?{type:'search'}:null};

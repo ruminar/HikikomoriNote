@@ -2174,7 +2174,7 @@
       const authorCard = !severe && activeAuthor ? searchAuthor(activeAuthor, settings) : null;
       const registeredAuthor = activeAuthor && group?.tags.some(item => core.favoriteKey(item) === `user:${activeAuthor.toLowerCase()}`);
       const menuFavoriteDropEnabled = common && Boolean(actions.menuFavoriteDrop);
-      const nextSignature = JSON.stringify([page, activeTag, activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.tagGroupsRevision, settings.selectedTagGroupId, settings.groupSelectionRevision, settings.groupSelectionInvalid, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
+      const nextSignature = JSON.stringify([page, activeTag, core.addableTag(url), activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.tagGroupsRevision, settings.selectedTagGroupId, settings.groupSelectionRevision, settings.groupSelectionInvalid, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);
       if (!menu) {
         menu = doc.createElement(page.type === "profile" ? "div" : "nav");
         menu.setAttribute(owned, "");
