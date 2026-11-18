@@ -133,6 +133,7 @@
     byId("nav-transfer").disabled = !state;
     byId("nav-discovery").disabled = !state;
     byId("tag-discovery-check").disabled = blocked || !discovery;
+    byId("tag-discovery-clear").disabled = blocked || copyingPrompt;
     byId("tag-discovery-copy").disabled = blocked || copyingPrompt || !discovery || Boolean(state?.tagWarning);
     byId("nav-authors").disabled = !state;
     const authorBlocked = blocked || !state?.noteUserId || Boolean(state?.authorWarning);
@@ -479,6 +480,12 @@
       byId("tag-discovery-status").textContent = tags.length ? "" : discovery.emptyMessage;
       if (tags.length) tagDialog.open(tags, state);
     } catch (error) { byId("tag-discovery-status").textContent = error.message; }
+  };
+  byId("tag-discovery-clear").onclick = () => {
+    if (byId("tag-discovery-clear").disabled) return;
+    byId("tag-discovery-text").value = "";
+    byId("tag-discovery-status").textContent = "";
+    byId("tag-discovery-text").focus();
   };
   byId("tag-discovery-copy").onclick = async () => {
     if (byId("tag-discovery-copy").disabled) return;
