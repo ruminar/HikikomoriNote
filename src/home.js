@@ -490,7 +490,7 @@
   byId("tag-discovery-copy").onclick = async () => {
     if (byId("tag-discovery-copy").disabled) return;
     copyingPrompt = true; controls();
-    try { await navigator.clipboard.writeText(discovery.prompt(state)); byId("tag-discovery-status").textContent = "タグ提案用プロンプトをコピーしました。"; }
+    try { await navigator.clipboard.writeText(discovery.prompt(state)); byId("tag-discovery-status").textContent = "タグ提案用プロンプトをコピーしました。チャットAIに貼り付けてください。"; }
     catch { byId("tag-discovery-status").textContent = "プロンプトをコピーできませんでした。もう一度お試しください。"; }
     finally { copyingPrompt = false; controls(); }
   };
