@@ -237,3 +237,26 @@ test("実際のタブ照合も共通メニュー全種を扱い、未対応URL�
   tab = { url: "https://note.com/help" }; assert.equal(await check(sender, "https://note.com/tag/Tag"), null);
   for (const url of ["https://note.com/sample_author", "https://note.com/sample_author/n/n123", "https://note.com/help/unknown", "https://evil.test/tag/Tag"]) { tab = { url }; assert.equal(await check(sender, url), null); }
 });
+
+
+test("共通メニューは4/8グループを一覧スクロールの外に置き、PCとハンバーガーで切り替え可能",async()=>{
+ for(const mobile of [false,true])for(const mode of ['normal','normal-double']){
+  const f=await fixture({mode},{mobile}),menu=f.menu(),host=menu.parentElement,list=menu.querySelector('[data-hikikomori-note-favorite-scroll-list]'),selector=menu.querySelector('[class="hikikomori-note-group-selector"]');
+  assert.equal(host.hasAttribute('data-hikikomori-note-favorite-scroll-host'),true);assert.equal(host.scrollTop,0);assert.equal(menu.hasAttribute('data-hikikomori-note-favorite-scroll'),true);
+  assert.equal(list.parentElement,menu);assert.equal(selector.parentElement,menu);assert.equal(list.contains(selector),false);assert.equal(selector.children.length,mode==='normal-double'?8:4);
+  assert.equal(list.hasAttribute('data-menu-favorite-list'),true);list.scrollTop=240;f.update();assert.equal(list.scrollTop,240);
+  f.group('group2').onclick();await flush();assert.equal(f.state.selectedTagGroupId,'group2');assert.equal(f.group('group2').getAttribute('aria-pressed'),'true');
+  assert.equal(f.menu().parentElement,host);assert.equal(host.scrollTop,0);assert.equal(f.menu().querySelector('[data-hikikomori-note-favorite-scroll-list]').parentElement,f.menu());
+ }
+});
+test("スクロール用の外枠属性はモード変更・OFF・停止・メニュー移動で復元する",async()=>{
+ for(const change of [f=>f.changed({enabled:false}),f=>f.changed({mode:'severe'}),f=>f.changed({mode:'social'}),f=>f.ui.stop()]){
+  const f=await fixture(),host=f.menu().parentElement;change(f);assert.equal(host.hasAttribute('data-hikikomori-note-favorite-scroll-host'),false);
+ }
+ const f=await fixture(),host=f.menu().parentElement;f.win.wide=false;f.doc.getElementById('sidebar').width=0;f.update();
+ assert.equal(host.hasAttribute('data-hikikomori-note-favorite-scroll-host'),false);assert.equal(f.menu().parentElement.hasAttribute('data-hikikomori-note-favorite-scroll-host'),true);
+ const css=fs.readFileSync(path.join(__dirname,'../src/content.css'),'utf8');
+ assert.match(css,/\[data-hikikomori-note-favorite-scroll-host\] \{ overflow-y: hidden !important/);
+ assert.match(css,/ul\[data-hikikomori-note-favorite-scroll-list\][\s\S]*?overflow-y: auto/);
+ assert.match(css,/mobile-panel > \.hikikomori-note-navigation\[data-hikikomori-note-favorite-scroll\][^}]*max-height: none/);
+});

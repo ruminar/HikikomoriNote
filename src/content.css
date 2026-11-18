@@ -180,6 +180,25 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-navigation li[data-favorite-insert="after"],
 .hikikomori-note-navigation ul[data-favorite-list-end] { box-shadow: inset 0 -2px 0 currentColor; }
 .hikikomori-note-group-name { margin: 8px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+/* グループ切替を含む外側ではなく、お気に入り項目だけをスクロールする。 */
+[data-hikikomori-note-favorite-scroll-host] { overflow-y: hidden !important; }
+.hikikomori-note-navigation[data-hikikomori-note-favorite-scroll] {
+  display: flex; flex-direction: column; min-height: 0; margin-bottom: 0;
+  max-height: calc(100vh - var(--hikikomori-note-sidebar-top, 12px) - 16px);
+  max-height: calc(100dvh - var(--hikikomori-note-sidebar-top, 12px) - 16px);
+  overflow: hidden;
+}
+.hikikomori-note-navigation[data-hikikomori-note-favorite-scroll] > :not([data-hikikomori-note-favorite-scroll-list]) { flex-shrink: 0; }
+.hikikomori-note-navigation > ul[data-hikikomori-note-favorite-scroll-list] {
+  box-sizing: border-box; flex: 0 1 auto; min-height: 32px; overflow-y: auto;
+  overscroll-behavior-y: contain; scrollbar-gutter: stable;
+}
+.hikikomori-note-mobile-panel[data-hikikomori-note-favorite-scroll-host] {
+  display: flex; flex-direction: column;
+  max-height: min(65vh, calc(100dvh - var(--navbar-primary-height, 64px) - 12px));
+}
+.hikikomori-note-mobile-panel[data-hikikomori-note-favorite-scroll-host] > :not([data-hikikomori-note-favorite-scroll]) { flex-shrink: 0; }
+.hikikomori-note-mobile-panel > .hikikomori-note-navigation[data-hikikomori-note-favorite-scroll] { flex: 0 1 auto; max-height: none; }
 .hikikomori-note-profile-navigation a {
   box-sizing: border-box;
   display: flex;

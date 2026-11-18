@@ -211,7 +211,21 @@
       }
     }
     const authorControls = createAuthorControls(doc, win, actions, profileSlot);
-    let host, menu, signature;
+    let host, menu, signature, favoriteScrollHost;
+    const favoriteScroll = "data-hikikomori-note-favorite-scroll", favoriteScrollList = "data-hikikomori-note-favorite-scroll-list";
+    const favoriteScrollContainer = "data-hikikomori-note-favorite-scroll-host";
+    function syncFavoriteScroll() {
+      const list = menu?.querySelector(`[${favoriteScrollList}]`);
+      const next = list ? host : undefined;
+      if (favoriteScrollHost && favoriteScrollHost !== next) favoriteScrollHost.removeAttribute(favoriteScrollContainer);
+      favoriteScrollHost = next;
+      if (next) {
+        if (!next.hasAttribute(favoriteScrollContainer)) {
+          next.setAttribute(favoriteScrollContainer, ""); next.scrollTop = 0;
+        }
+        if (!menu.hasAttribute(favoriteScroll)) menu.setAttribute(favoriteScroll, "");
+      } else menu?.removeAttribute(favoriteScroll);
+    }
     let relatedTopics, relatedSearchKey, relatedOpen = false, relatedId = 0, relatedEarlyRoot;
     const relatedHidden = "data-hikikomori-note-related-hidden", relatedRow = "data-hikikomori-note-related-row";
     const relatedState = "data-hikikomori-note-search-related-state";
@@ -1850,6 +1864,7 @@
     }
     function restore() {
       clearMenuFavoriteDrag();
+      favoriteScrollHost?.removeAttribute(favoriteScrollContainer); favoriteScrollHost = undefined;
       menu?.remove(); menu = undefined; host = undefined; signature = undefined;
       for (const element of originals) element.removeAttribute(hidden);
       originals.clear();
@@ -2221,7 +2236,7 @@
             });
             menu.append(selector);
             const name = doc.createElement("div"); name.className = "hikikomori-note-group-name"; name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); menu.append(name);
-            const list = doc.createElement("ul"); menu.append(list);
+            const list = doc.createElement("ul"); list.setAttribute(favoriteScrollList, ""); menu.append(list);
             if (menuFavoriteDropEnabled) bindMenuFavoriteListDrop(list);
             for (const tag of group.tags) {
               const item = doc.createElement("li"), link = doc.createElement("a");
@@ -2243,6 +2258,7 @@
         }
         signature = nextSignature;
       }
+      syncFavoriteScroll();
       if (page.type === "profile" && favoriteProfile) {
         let row = menu.querySelector('[class="hikikomori-note-profile-actions"]');
         if (!row) {
