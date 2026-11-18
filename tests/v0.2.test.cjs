@@ -1568,7 +1568,7 @@ test('社会復帰でもプロフィールのTLだけ追加し公式情報と関
 
 test('設定メニューは設定を先頭に並べ、タグ直行は#tagsだけ。社会復帰と重度はタグを開かない',async()=>{
  const f=homeFixture();await flush();const n=f.nodes;
- assert.deepEqual(n.get('home-menu').children.map(x=>x.getAttribute('id')),['nav-settings','nav-tags','nav-authors','nav-transfer']);assert.equal(n.get('panel-settings').hidden,false);
+ assert.deepEqual(n.get('home-menu').children.map(x=>x.getAttribute('id')),['nav-settings','nav-tags','nav-discovery','nav-authors','nav-transfer']);assert.equal(n.get('panel-settings').hidden,false);
  n.get('home-menu').fire('keydown',{key:'ArrowDown'});assert.equal(n.get('panel-tags').hidden,false);n.get('home-menu').fire('keydown',{key:'Home'});assert.equal(n.get('panel-settings').hidden,false);
  for(const mode of ['normal','social','severe']){
   const direct=homeFixture({hash:'#tags',state:{mode}});await flush();assert.equal(direct.nodes.get('panel-tags').hidden,mode!=='normal');

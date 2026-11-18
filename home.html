@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ひきこもりnote</title>
   <link rel="stylesheet" href="src/home.css">
+  <link rel="stylesheet" href="src/tag-discovery.css">
   <script defer src="src/common.js"></script>
   <script defer src="src/platform/browser-api.js"></script>
+  <script defer src="src/tag-discovery.js"></script>
   <script defer src="src/home.js"></script>
 </head>
 <body>
@@ -20,6 +22,7 @@
         <nav id="home-menu" aria-label="専用ホーム" hidden>
           <button type="button" id="nav-settings" aria-controls="panel-settings">設定</button>
           <button type="button" id="nav-tags" aria-controls="panel-tags">お気に入り</button>
+          <button type="button" id="nav-discovery" aria-controls="panel-discovery">タグ登録支援</button>
           <button type="button" id="nav-authors" aria-controls="panel-authors">ユーザーの表示管理</button>
           <button type="button" id="nav-transfer" aria-controls="panel-transfer">設定の移行</button>
         </nav>
@@ -33,6 +36,16 @@
       <div class="home-content">
         <section id="panel-intro" aria-label="重度ひきこもりモード" hidden>
           <p class="catchphrase">枠を超えたら落選したので、殻を作りました。</p>
+        </section>
+        <section id="panel-discovery" aria-labelledby="discovery-heading" hidden>
+          <h2 id="discovery-heading">タグ登録支援</h2>
+          <label for="tag-discovery-text">タグ提案文</label>
+          <textarea id="tag-discovery-text" rows="8" placeholder="[#タグ名] や #タグ名 を含む提案文を貼り付けてください"></textarea>
+          <div class="settings-actions">
+            <button type="button" id="tag-discovery-check">確認</button>
+            <button type="button" id="tag-discovery-copy" class="secondary">タグ提案用プロンプトをコピー</button>
+          </div>
+          <p id="tag-discovery-status" role="status"></p>
         </section>
         <section id="panel-tags" aria-labelledby="tags-heading" hidden>
           <h2 id="tags-heading">お気に入り</h2>

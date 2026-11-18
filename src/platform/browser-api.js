@@ -46,6 +46,7 @@
     addCurrentMagazine: (groupId, userId, magazineId, displayName) => request("add-current-magazine", { groupId, userId, magazineId, displayName, pageUrl: globalThis.location.href }),
     addCurrentMembership: (groupId, userId, displayName) => request("add-current-membership", { groupId, userId, displayName, pageUrl: globalThis.location.href }),
     tag: operation => request("tag-operation", operation),
+    bulkAddTags: (groupId, tags, pageUrl) => request("bulk-add-tags", { groupId, tags, ...(pageUrl ? { pageUrl } : {}) }),
     addCurrentTag: (groupId, selectionRevision) => request("add-current-tag", { groupId, selectionRevision, pageUrl: globalThis.location.href }),
     selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),
     // SPA遷移直後に古いメニューを操作しても、ドラッグ開始元のURLで現在タブを検証する。

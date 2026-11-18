@@ -184,6 +184,12 @@
   }
   function create(doc, win, actions = {}) {
     const likeVisibility = createLikeVisibility(doc);
+    const discovery = globalThis.HikikomoriNoteTagDiscovery;
+    let discoveryUrl;
+    const tagDialog = discovery && actions.bulkAddTags ? discovery.createDialog(doc, {
+      save: (groupId, tags) => actions.bulkAddTags(groupId, tags, discoveryUrl),
+      refresh: actions.refreshTagDiscovery
+    }) : null;
     let profileLayout;
     // 見た目だけでなくTab移動・読み上げも同じ順序にする。各機能は自分の領域だけを更新する。
     function profileSlot(owner, name) {
@@ -1453,7 +1459,23 @@
         };
         wrapper.append(link);
       }
-      wrapper.append(copy, status); doc.body.append(wrapper); articleActions = wrapper;
+      wrapper.append(copy);
+      if (tagDialog) {
+        const tags = doc.createElement("button"); tags.type = "button"; tags.textContent = "記事タグを確認";
+        tags.setAttribute("data-hikikomori-note-article-tags", "");
+        tags.onclick = () => {
+          if (disposed || !currentSettings?.enabled || !wrapper.isConnected) return;
+          try {
+            const url = win.location?.href || currentUrl;
+            if (articles.page(url).url !== articles.page(currentUrl).url) throw new Error("現在の記事を確認してください。");
+            const candidates = discovery.articleTags(doc, url);
+            status.textContent = candidates.length ? "" : "この記事のタグはありません。";
+            if (candidates.length) { discoveryUrl = url; tagDialog.open(candidates, currentSettings); }
+          } catch (error) { status.textContent = error.message || "記事タグを取得できませんでした。"; }
+        };
+        wrapper.append(tags);
+      }
+      wrapper.append(status); doc.body.append(wrapper); articleActions = wrapper;
       syncArticleAdjacent(wrapper, url);
     }
     function syncArticleFollowing(settings, url) {
@@ -1984,7 +2006,9 @@
       prepareSidebar(url, settings);
       if ((core.addableTag(currentUrl) !== core.addableTag(url) || core.searchedAuthor(currentUrl) !== core.searchedAuthor(url)) && !uncertain && !adding) actionMessage = "";
       if (currentUrl !== url || Boolean(currentSettings?.enabled) !== Boolean(settings.enabled)) followingLinksDirty = true;
+      if (currentUrl !== url || !settings.enabled) tagDialog?.close();
       currentSettings = settings; currentUrl = url;
+      tagDialog?.update(settings);
       if (menuFavoriteDrag && !menuFavoriteDragValid()) clearMenuFavoriteDrag();
       syncFollowingLinks();
       prepareProfilePaidAllowance(settings, url);
@@ -2178,6 +2202,7 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        tagDialog?.dispose();
         for (const target of accountMenuTargets) target.removeAttribute(accountMenuHidden);
         accountMenuTargets.clear();
         for (const [button, state] of notificationTitles) restoreNotificationTitle(button, state);

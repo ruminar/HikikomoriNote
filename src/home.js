@@ -3,7 +3,20 @@
   const core = globalThis.HikikomoriNote;
   const platform = globalThis.HikikomoriNotePlatform;
   const byId = id => document.getElementById(id);
-  const views = ["settings", "tags", "authors", "transfer"];
+  const views = ["settings", "tags", "discovery", "authors", "transfer"];
+  const discovery = globalThis.HikikomoriNoteTagDiscovery;
+  const tagDialog = discovery?.createDialog(document, {
+    async save(groupId, tags) {
+      if (busy || uncertain) throw new Error("状態を再確認してから登録してください。");
+      busy = true; controls(); const before = revision;
+      try {
+        const result = await platform.bulkAddTags(groupId, tags);
+        if (before === revision) show(result);
+        return { ...state, bulkTagReport: result.bulkTagReport };
+      } finally { busy = false; controls(); }
+    },
+    async refresh() { const value = await platform.getState(); uncertain = false; show(value); return state; }
+  });
   const fields = { theme: "theme", hideLikeCounts: "hide-like-counts", hidePaidArticles: "hide-paid-articles", noteUserId: "note-user", dashboardDisabled: "dashboard-disabled", hideArticleRecommendations: "hide-article-recommendations", noteLogoBrowserBack: "note-logo-browser-back", keepNoteHeaderVisible: "keep-note-header-visible", mode: "operation-mode" };
   const modeNames = { normal: "ひとみしりモード（通常）", "normal-double": "ひとみしりモード（2段）", severe: "重度ひきこもりモード", social: "社会復帰モード" };
   function updateModeHelp() {
@@ -14,7 +27,7 @@
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();
-  let copying = false, parsedImport;
+  let copying = false, copyingPrompt = false, parsedImport;
   function renderImportReport(report, applied = false) {
     const lines = [`${applied ? "適用した項目" : "適用予定の項目"}（${report.applied.length}件）：`, ...report.applied.map(path => `・${path}`),
       `無視した項目（${report.ignored.length}件）：`, ...report.ignored.map(item => `・${item.path}：${item.reason}`)];
@@ -118,6 +131,9 @@
     for (const row of byId("edit-tags").children) row.draggable = !tagBlocked;
     byId("retry").disabled = busy;
     byId("nav-transfer").disabled = !state;
+    byId("nav-discovery").disabled = !state;
+    byId("tag-discovery-check").disabled = blocked || !discovery;
+    byId("tag-discovery-copy").disabled = blocked || copyingPrompt || !discovery || Boolean(state?.tagWarning);
     byId("nav-authors").disabled = !state;
     const authorBlocked = blocked || !state?.noteUserId || Boolean(state?.authorWarning);
     for (const id of ["authors-hidden", "authors-allowed"]) for (const button of byId(id).querySelectorAll("button")) {
@@ -304,7 +320,7 @@
     const warning = state.tagWarning || (state.groupSelectionInvalid ? "保存済みの選択に異常があります。グループを選び直してください。" : "");
     byId("tag-warning").hidden = !warning; byId("tag-warning").textContent = warning;
     selectView(selected, hiddenFocus);
-    renderTags(); renderAuthors(); controls();
+    renderTags(); renderAuthors(); controls(); tagDialog?.update(state);
   }
   async function refresh() {
     if (busy) return;
@@ -455,6 +471,21 @@
     const json = byId("settings-json").value, expectedToken = core.settingsToken(state), report = parsedImport;
     if (!await confirmChange(`有効な${report.applied.length}項目を適用します。指定のない項目と不正な項目の現在値は維持します。指定された一覧は有効な内容で置き換えます。お気に入りはタグ・作者・マガジン・メンバーシップ、作者の表示設定を含みます。明示された空配列は一覧を解除します。未保存の入力は破棄します。読み込みますか？`)) return;
     void perform(() => platform.importSettings({ json, expectedToken }), { kind: "import", importReport: report });
+  };
+  byId("tag-discovery-check").onclick = () => {
+    if (byId("tag-discovery-check").disabled) return;
+    try {
+      const tags = discovery.extract(byId("tag-discovery-text").value);
+      byId("tag-discovery-status").textContent = tags.length ? "" : discovery.emptyMessage;
+      if (tags.length) tagDialog.open(tags, state);
+    } catch (error) { byId("tag-discovery-status").textContent = error.message; }
+  };
+  byId("tag-discovery-copy").onclick = async () => {
+    if (byId("tag-discovery-copy").disabled) return;
+    copyingPrompt = true; controls();
+    try { await navigator.clipboard.writeText(discovery.prompt(state)); byId("tag-discovery-status").textContent = "タグ提案用プロンプトをコピーしました。"; }
+    catch { byId("tag-discovery-status").textContent = "プロンプトをコピーできませんでした。もう一度お試しください。"; }
+    finally { copyingPrompt = false; controls(); }
   };
   platform.subscribe(value => { revision++; show(value); });
   void refresh();

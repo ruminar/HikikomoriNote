@@ -24,8 +24,8 @@
     {
       "matches": ["https://note.com/*"],
       "exclude_matches": ["https://note.com/embed/notes/*"],
-      "js": ["src/common.js", "src/platform/browser-api.js", "src/articles.js", "src/note-ui.js", "src/content.js"],
-      "css": ["src/content.css"],
+      "js": ["src/common.js", "src/platform/browser-api.js", "src/articles.js", "src/tag-discovery.js", "src/note-ui.js", "src/content.js"],
+      "css": ["src/content.css", "src/tag-discovery.css"],
       "run_at": "document_start"
     },
     {

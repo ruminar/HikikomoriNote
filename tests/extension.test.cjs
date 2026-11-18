@@ -437,7 +437,7 @@ test("Manifest・専用HTMLの参照、権限と公開範囲が一致し、ホ�
   assert.deepEqual(m.host_permissions, ["https://note.com/*"]);
   assert.deepEqual(m.web_accessible_resources, [{ resources: ["home.html"], matches: ["https://note.com/*"] }]);
   assert.equal(m.content_scripts[0].run_at, "document_start");
-  assert.deepEqual(m.content_scripts[0].css, ["src/content.css"]);
+  assert.deepEqual(m.content_scripts[0].css, ["src/content.css", "src/tag-discovery.css"]);
   assert.equal(source("src/content.css").includes("> body"), false);
   for (const file of [m.background.service_worker, ...m.content_scripts[0].js, ...m.content_scripts[0].css, ...Object.values(m.icons), "home.html"]) assert.ok(fs.existsSync(path.join(root, file)));
   for (const match of source("home.html").matchAll(/(?:src|href)="([^"]+)"/g)) {

@@ -1,0 +1,22 @@
+.hikikomori-note-tag-dialog {
+  box-sizing: border-box; width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px);
+  overflow-y: auto; padding: 20px; border: 1px solid var(--color-border-default, var(--border, GrayText));
+  border-radius: 12px; color: var(--color-text-primary, var(--text, CanvasText));
+  background: var(--color-surface-normal, var(--surface, Canvas)); font: 16px/1.6 system-ui, sans-serif;
+}
+.hikikomori-note-tag-dialog[hidden] { display: none !important; }
+.hikikomori-note-tag-dialog::backdrop { background: rgba(0,0,0,.45); }
+.hikikomori-note-tag-dialog h2 { font: bold 20px/1.5 system-ui, sans-serif; margin: 0 0 16px; }
+.hikikomori-note-tag-dialog p { margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.hikikomori-note-tag-dialog button, .hikikomori-note-tag-dialog select {
+  box-sizing: border-box; min-height: 44px; max-width: 100%; padding: 8px 12px; border: 1px solid GrayText;
+  border-radius: 8px; background: var(--color-surface-normal, var(--surface, Canvas)); color: inherit; font: inherit; cursor: pointer;
+}
+.hikikomori-note-tag-dialog select { width: 100%; margin: 8px 0; }
+.hikikomori-note-tag-dialog option { color: var(--color-text-primary, var(--text, CanvasText)); background: var(--color-surface-normal, var(--surface, Canvas)); }
+.hikikomori-note-tag-dialog button:disabled, .hikikomori-note-tag-dialog select:disabled { opacity: .5; cursor: default; }
+.hikikomori-note-tag-dialog button[aria-pressed="true"] { background: var(--accent, #285e4c); color: var(--accent-text, #fff); border-color: currentColor; }
+.hikikomori-note-tag-dialog :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.hikikomori-note-tag-candidates, .hikikomori-note-tag-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.hikikomori-note-tag-candidates button { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+#tag-discovery-text { box-sizing: border-box; width: 100%; min-height: 180px; padding: 12px; border: 1px solid var(--input-border); border-radius: 6px; color: var(--text); background: var(--surface); font: inherit; resize: vertical; }

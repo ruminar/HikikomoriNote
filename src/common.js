@@ -104,6 +104,16 @@
     try { encodeURIComponent(tag); } catch { throw new Error("タグ名に使用できない文字が含まれています。"); }
     return tag;
   }
+  function normalizeTagCandidates(values) {
+    const tags = [], seen = new Set();
+    for (const value of values) {
+      try {
+        const tag = normalizeTag(value);
+        if (!seen.has(tag)) { seen.add(tag); tags.push(tag); }
+      } catch { /* 候補として解釈できない値は登録しない。 */ }
+    }
+    return tags;
+  }
   function favoriteUser(value) {
     if (!exactKeys(value, ["type", "userId", "displayName"]) || value.type !== "user") throw new Error("お気に入りユーザーの形式が正しくありません。");
     const userId = authorId(value.userId), displayName = authorName(value.displayName);
@@ -484,5 +494,5 @@
     modeOf, operationModes, availableGroups, selectedGroupId, groupSymbols, themeOf, usesTags, usesFollowing, usesLogoBack,
     exportSettings, parseSettingsExport, inspectSettingsImport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
     favorite, favoriteKey, favoriteLabel, favoriteUrl, authorSearchUrl, searchedAuthor, favoriteUser, favoriteMagazine, favoriteMembership, favoriteArticle, articleAddress, favoriteSchema, bookIconPath, membershipIconPath, membershipPage, questionPage,
-    normalizeTag, addableTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, hasFavoriteMenu, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
+    normalizeTag, normalizeTagCandidates, addableTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, hasFavoriteMenu, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();
