@@ -2447,16 +2447,16 @@
       const author = headerAuthor(article, userId);
       if (!author) return null;
       for (const block of root.querySelectorAll("section")) {
-        if (!["flex", "flex-col", "rounded-lg", "border", "border-border-strong", "px-4"].every(c => block.classList.contains(c)) || !visible(block)) continue;
+        if (!visible(block)) continue;
         const buttons = [...block.querySelectorAll('button[data-name="Button"]')].filter(b => b.getAttribute("type") === "button" && visible(b));
         const purchase = buttons.some(b => b.textContent.trim() === "購入手続きへ");
+        if (purchase && [...block.querySelectorAll("span")].some(n => /^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(n.textContent.trim()) && visible(n))) return author;
+        if (!["flex", "flex-col", "rounded-lg", "border", "border-border-strong", "px-4"].every(c => block.classList.contains(c))) continue;
         const join = buttons.some(b => b.textContent.trim() === "参加手続きへ");
-        const spans = [...block.querySelectorAll("span")];
-        const price = spans.some(n => /^¥\s*[1-9]\d*(?:,\d{3})*\s*$/.test(n.textContent.trim()));
         const membership = [...block.querySelectorAll("a[href]")].some(a => {
           try { const p = new URL(a.href); return p.origin === "https://note.com" && p.pathname === `/${userId}/membership`; } catch { return false; }
         });
-        if ((purchase && price && spans.some(n => n.textContent.trim() === "記事")) || (join && membership)) return author;
+        if (join && membership) return author;
       }
       return null;
     }

@@ -118,6 +118,20 @@ test('購入枠は記事・会員限定の両方を検出し、hidePaidArticles�
  for(const kind of ['purchase','membership']){const f=ui(articleHtml,{hidePaidArticles:true});fillArticle(f,kind);f.update();assert.ok(f.doc.querySelector('dialog'));assert.equal(f.doc.activeElement.textContent,'今回は何もしない');}
  for(const patch of [{hidePaidArticles:false},{enabled:false,hidePaidArticles:true},{noteUserId:'yeku',hidePaidArticles:true},{noteUserId:'',hidePaidArticles:true},{hidePaidArticles:true,authorDisplayRules:[{userId:'yeku',displayName:'',action:'allow'}]}]){const f=ui(articleHtml,patch);fillArticle(f);f.update();assert.equal(f.doc.querySelector('dialog'),null);}
 });
+test('ラベルや罫線がない公式の単品購入欄は、同じ欄に表示中の正の価格と購入ボタンがあるときだけ検出する',()=>{
+ for(const variant of ['paid','free','hiddenPrice','separatePrice','tip']){
+  const f=ui(articleHtml,{hidePaidArticles:true});fillArticle(f);
+  const offer=f.doc.getElementById('offer'),price=f.doc.getElementById('price');
+  offer.className='flex flex-col items-center gap-2 text-center sm:px-16';
+  f.doc.getElementById('article-label').remove();
+  if(variant==='free')price.textContent='¥0';
+  if(variant==='hiddenPrice')price.hidden=true;
+  if(variant==='separatePrice')offer.parentElement.append(price);
+  if(variant==='tip')f.doc.getElementById('buy').textContent='チップで応援する';
+  f.update();
+  assert.equal(Boolean(f.doc.querySelector('dialog')),variant==='paid',variant);
+ }
+});
 test('3択の非表示・表示許可でIDと表示名を保存し、選択なし・Escapeは保存しない',async()=>{
  for(const action of ['hide','allow']){const f=ui(articleHtml,{hidePaidArticles:true});fillArticle(f);f.update();const dialog=f.doc.querySelector('dialog');await dialog.querySelectorAll('button')[action==='hide'?0:1].onclick();await flush();assert.equal(f.backend.state.authorDisplayRules[0].action,action);assert.equal(f.backend.state.authorDisplayRules[0].userId,'yeku');assert.equal(f.backend.state.authorDisplayRules[0].displayName,'YeKu@「知る」を優しさに。');assert.equal(f.doc.querySelector('dialog'),null);}
  const f=ui(articleHtml,{hidePaidArticles:true});fillArticle(f);f.update();f.doc.querySelector('dialog').fire('cancel');assert.equal(f.doc.querySelector('dialog'),null);assert.equal(f.backend.writes,0);f.control.invalidatePaidCards();f.update();assert.equal(f.doc.querySelector('dialog'),null);
