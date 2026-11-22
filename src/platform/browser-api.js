@@ -46,7 +46,7 @@
     addCurrentMagazine: (groupId, userId, magazineId, displayName, position) => request("add-current-magazine", { groupId, userId, magazineId, displayName, position, pageUrl: globalThis.location.href }),
     addCurrentMembership: (groupId, userId, displayName, position) => request("add-current-membership", { groupId, userId, displayName, position, pageUrl: globalThis.location.href }),
     tag: operation => request("tag-operation", operation),
-    bulkAddTags: (groupId, tags, pageUrl) => request("bulk-add-tags", { groupId, tags, ...(pageUrl ? { pageUrl } : {}) }),
+    bulkAddTags: (groupId, tags, pageUrl, position) => request("bulk-add-tags", { groupId, tags, ...(pageUrl ? { pageUrl } : {}), ...(position === undefined ? {} : { position }) }),
     addCurrentTag: (groupId, selectionRevision, position) => request("add-current-tag", { groupId, selectionRevision, position, pageUrl: globalThis.location.href }),
     selectGroup: groupId => request("select-tag-group", { groupId, pageUrl: globalThis.location.href }),
     // SPA遷移直後に古いメニューを操作しても、ドラッグ開始元のURLで現在タブを検証する。

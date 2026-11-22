@@ -187,7 +187,7 @@
     const discovery = globalThis.HikikomoriNoteTagDiscovery;
     let discoveryUrl;
     const tagDialog = discovery && actions.bulkAddTags ? discovery.createDialog(doc, {
-      save: (groupId, tags) => actions.bulkAddTags(groupId, tags, discoveryUrl),
+      save: (groupId, tags, position) => actions.bulkAddTags(groupId, tags, discoveryUrl, position),
       refresh: actions.refreshTagDiscovery
     }) : null;
     let profileLayout;

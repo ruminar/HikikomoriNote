@@ -31,7 +31,7 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "import-settings") operation = controller.importSettings(message.patch);
     else if (message?.type === "author-operation") operation = controller.author(message.patch, { requireExisting: true });
     else if (message?.type === "tag-operation") operation = controller.tag(message.patch);
-    else if (message?.type === "bulk-add-tags") operation = controller.tag({ type: "ADD_TAGS", groupId: message.patch?.groupId, tags: message.patch?.tags });
+    else if (message?.type === "bulk-add-tags") operation = controller.tag({ type: "ADD_TAGS", groupId: message.patch?.groupId, tags: message.patch?.tags, position: message.patch?.position });
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
@@ -39,10 +39,10 @@ port.onMessage((message, sender, respond) => {
     operation = (async () => {
       if (message.type === "bulk-add-tags") {
         const patch = message.patch;
-        if (!patch || Object.keys(patch).some(key => !["groupId", "tags", "pageUrl"].includes(key))) throw new Error("タグの登録要求を確認してください。");
+        if (!patch || Object.keys(patch).some(key => !["groupId", "tags", "pageUrl", "position"].includes(key))) throw new Error("タグの登録要求を確認してください。");
         const page = await port.currentAuthorPage(sender, patch.pageUrl);
         if (page?.type !== "article") throw Object.assign(new Error("現在の記事ページを確認できません。"), { code: "CONFLICT" });
-        return controller.tag({ type: "ADD_TAGS", groupId: patch.groupId, tags: patch.tags }, {
+        return controller.tag({ type: "ADD_TAGS", groupId: patch.groupId, tags: patch.tags, position: patch.position }, {
           requireEnabled: true, validateCurrent: async () => (await port.currentAuthorPage(sender, patch.pageUrl))?.type === "article"
         });
       }

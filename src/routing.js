@@ -136,7 +136,7 @@
         if (!operation || ![...singleAddTypes, "ADD_TAGS", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
             Object.keys(operation).some(key => !["type", "tags", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "magazineId", "displayName", "articleId", "url", "title", "position"].includes(key)) ||
             !core.groupIds.includes(operation.groupId)) throw new Error("グループを指定して画面を再読み込みしてください。");
-        if (Object.hasOwn(operation, "position") && (!singleAddTypes.includes(operation.type) ||
+        if (Object.hasOwn(operation, "position") && (operation.type !== "ADD_TAGS" && !singleAddTypes.includes(operation.type) ||
             (operation.position !== undefined && !["start", "end"].includes(operation.position)))) throw new Error("お気に入りの追加位置を確認してください。");
         if (operation.type === "ADD_TAG") core.normalizeTag(operation.tag);
         if (operation.type === "ADD_TAGS" && (!Array.isArray(operation.tags) || !operation.tags.length || operation.tags.some(tag => typeof tag !== "string") || JSON.stringify(operation.tags).length > 1048576)) throw new Error("登録するタグ候補を確認してください（1,048,576文字以内）。");
@@ -173,14 +173,17 @@
           const normalized = operation.tags.flatMap(tag => { try { return [core.normalizeTag(tag)]; } catch { return []; } });
           const candidates = core.normalizeTagCandidates(normalized), report = { added: 0, duplicates: normalized.length - candidates.length, skipped: operation.tags.length - normalized.length };
           const seen = new Set(group.tags.filter(item => typeof item === "string"));
+          const added = [];
           let size = JSON.stringify({ ...storedValue(raw, settings), tagSchemaVersion: core.favoriteSchema(groups, settings.tagSchemaVersion), tagGroups: groups, tagGroupsRevision: increment(settings.tagGroupsRevision) }).length;
           for (const tag of candidates) {
             if (seen.has(tag)) { report.duplicates++; continue; }
-            const extra = JSON.stringify(tag).length + (group.tags.length ? 1 : 0);
+            const extra = JSON.stringify(tag).length + (group.tags.length || added.length ? 1 : 0);
             if (size + extra > 1048576) { report.skipped++; continue; }
-            group.tags.push(tag); seen.add(tag); size += extra; report.added++;
+            added.push(tag); seen.add(tag); size += extra;
           }
-          const saved = report.added ? await storeGroups() : settings;
+          report.added = added.length;
+          if (added.length) group.tags = operation.position === "start" ? added.concat(group.tags) : group.tags.concat(added);
+          const saved = added.length ? await storeGroups() : settings;
           return { ...saved, bulkTagReport: report };
         }
         if (operation.type === "SELECT_TAG_GROUP") {

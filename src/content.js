@@ -15,8 +15,8 @@
     loadArticleAdjacent: (url, signal) => globalThis.HikikomoriNoteArticles.adjacent(url, fetch,
       signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000)),
     copyArticle: (article, publishedAt) => navigator.clipboard.writeText(globalThis.HikikomoriNoteArticles.copyText(article, publishedAt)),
-    async bulkAddTags(groupId, tags, pageUrl) {
-      const before = revision, result = await platform.bulkAddTags(groupId, tags, pageUrl);
+    async bulkAddTags(groupId, tags, pageUrl, position) {
+      const before = revision, result = await platform.bulkAddTags(groupId, tags, pageUrl, position);
       if (!stopped && revision === before) { settings = readView(result); checkHome(); }
       return { ...settings, bulkTagReport: result.bulkTagReport };
     },
