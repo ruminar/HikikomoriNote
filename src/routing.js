@@ -2,6 +2,7 @@
 (() => {
   "use strict";
   const core = globalThis.HikikomoriNote;
+  const singleAddTypes = ["ADD_TAG", "ADD_USER", "ADD_MAGAZINE", "ADD_MEMBERSHIP", "ADD_ARTICLE"];
   function rules(enabled, dashboardDisabled = false, mode = "normal") {
     if (!enabled) return [];
     const regexFilter = "^https://note\\.com/([?#].*)?$";
@@ -132,9 +133,11 @@
         return core.readSettings(next);
       }),
       tag: (operation, options = {}) => run(async () => {
-        if (!operation || !["ADD_TAGS", "ADD_TAG", "ADD_USER", "ADD_MAGAZINE", "ADD_MEMBERSHIP", "ADD_ARTICLE", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
-            Object.keys(operation).some(key => !["type", "tags", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "magazineId", "displayName", "articleId", "url", "title"].includes(key)) ||
+        if (!operation || ![...singleAddTypes, "ADD_TAGS", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
+            Object.keys(operation).some(key => !["type", "tags", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "magazineId", "displayName", "articleId", "url", "title", "position"].includes(key)) ||
             !core.groupIds.includes(operation.groupId)) throw new Error("グループを指定して画面を再読み込みしてください。");
+        if (Object.hasOwn(operation, "position") && (!singleAddTypes.includes(operation.type) ||
+            (operation.position !== undefined && !["start", "end"].includes(operation.position)))) throw new Error("お気に入りの追加位置を確認してください。");
         if (operation.type === "ADD_TAG") core.normalizeTag(operation.tag);
         if (operation.type === "ADD_TAGS" && (!Array.isArray(operation.tags) || !operation.tags.length || operation.tags.some(tag => typeof tag !== "string") || JSON.stringify(operation.tags).length > 1048576)) throw new Error("登録するタグ候補を確認してください（1,048,576文字以内）。");
         if (["REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG"].includes(operation.type)) core.favorite(operation.tag);
@@ -193,9 +196,10 @@
         const tag = operation.type === "ADD_ARTICLE" ? core.favoriteArticle({ type: "article", articleId: operation.articleId, url: operation.url, title: operation.title }) : operation.type === "ADD_MEMBERSHIP" ? core.favoriteMembership({ type: "membership", userId: operation.userId, displayName: operation.displayName }) : operation.type === "ADD_MAGAZINE" ? core.favoriteMagazine({ type: "magazine", userId: operation.userId, magazineId: operation.magazineId, displayName: operation.displayName }) : operation.type === "ADD_USER" ? core.favoriteUser({ type: "user", userId: operation.userId, displayName: operation.displayName }) : operation.type === "ADD_TAG" ? core.normalizeTag(operation.tag) : core.favorite(operation.tag);
         const tags = group.tags;
         const key = core.favoriteKey(tag), index = tags.findIndex(item => core.favoriteKey(item) === key);
-        if (["ADD_TAG", "ADD_USER", "ADD_MAGAZINE", "ADD_MEMBERSHIP", "ADD_ARTICLE"].includes(operation.type)) {
+        if (singleAddTypes.includes(operation.type)) {
           if (index >= 0 || (tag?.type === "article" && groups.some(g => g.tags.some(item => core.favoriteKey(item) === key)))) throw failure("このお気に入りは既に登録されています。", "CONFLICT");
-          tags.push(tag);
+          if (operation.position === "start") tags.unshift(tag);
+          else tags.push(tag);
         } else {
           if (index < 0) throw failure("対象タグが別の画面で削除されています。最新一覧を確認してください。", "CONFLICT");
           if (operation.type === "TRANSFER_TAG") {

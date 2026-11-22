@@ -64,7 +64,7 @@ port.onMessage((message, sender, respond) => {
         const userId = globalThis.HikikomoriNote.searchedAuthor(patch?.pageUrl);
         if (page?.type !== "search" || !userId || typeof patch?.userId !== "string" || userId.toLowerCase() !== patch.userId.toLowerCase() ||
             !Number.isSafeInteger(patch.selectionRevision) || patch.selectionRevision < 0) throw Object.assign(new Error("検索中の作者と選択グループを確認できません。"), { code: "CONFLICT" });
-        return controller.tag({ type: "ADD_USER", groupId: patch.groupId, userId, displayName: patch.displayName }, {
+        return controller.tag({ type: "ADD_USER", groupId: patch.groupId, userId, displayName: patch.displayName, position: patch.position }, {
           requireEnabled: true, currentUser: userId, selectionRevision: patch.selectionRevision, validateCurrent: async () => {
             const current = await port.currentMenuPage(sender, patch.pageUrl);
             return current?.type === "search" && globalThis.HikikomoriNote.searchedAuthor(patch.pageUrl)?.toLowerCase() === userId.toLowerCase();
@@ -74,7 +74,7 @@ port.onMessage((message, sender, respond) => {
       if (message.type === "add-current-article") {
         const patch = message.patch, page = await port.currentArticlePage(sender, patch?.pageUrl);
         if (!page || page.articleId !== patch?.articleId || page.url !== patch?.url) throw Object.assign(new Error("現在の記事を確認できません。"), { code: "CONFLICT" });
-        return controller.tag({ type: "ADD_ARTICLE", groupId: patch.groupId, articleId: patch.articleId, url: patch.url, title: patch.title }, { requireEnabled: true, currentArticleId: page.articleId, currentArticleUrl: page.url, validateCurrent: async () => {
+        return controller.tag({ type: "ADD_ARTICLE", groupId: patch.groupId, articleId: patch.articleId, url: patch.url, title: patch.title, position: patch.position }, { requireEnabled: true, currentArticleId: page.articleId, currentArticleUrl: page.url, validateCurrent: async () => {
           const current = await port.currentArticlePage(sender, patch.pageUrl);
           return current?.articleId === page.articleId && current.url === page.url;
         } });
@@ -82,7 +82,7 @@ port.onMessage((message, sender, respond) => {
       if (message.type === "add-current-membership") {
         const patch = message.patch, page = await port.currentMembershipPage(sender, patch?.pageUrl);
         if (page?.type !== "membership" || typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase()) throw Object.assign(new Error("現在のメンバーシップを確認できません。"), { code: "CONFLICT" });
-        return controller.tag({ type: "ADD_MEMBERSHIP", groupId: patch.groupId, userId: patch.userId, displayName: patch.displayName }, { requireEnabled: true, currentUser: page.user, currentMembership: true, validateCurrent: async () => {
+        return controller.tag({ type: "ADD_MEMBERSHIP", groupId: patch.groupId, userId: patch.userId, displayName: patch.displayName, position: patch.position }, { requireEnabled: true, currentUser: page.user, currentMembership: true, validateCurrent: async () => {
           const current = await port.currentMembershipPage(sender, patch.pageUrl);
           return current?.type === "membership" && current.user.toLowerCase() === page.user.toLowerCase();
         } });
@@ -90,7 +90,7 @@ port.onMessage((message, sender, respond) => {
       if (message.type === "add-current-magazine") {
         const patch = message.patch, page = await port.currentMagazinePage(sender, patch?.pageUrl);
         if (page?.type !== "magazine" || typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase() || page.magazineId !== patch.magazineId) throw Object.assign(new Error("現在のマガジンを確認できません。"), { code: "CONFLICT" });
-        return controller.tag({ type: "ADD_MAGAZINE", groupId: patch.groupId, userId: patch.userId, magazineId: patch.magazineId, displayName: patch.displayName }, { requireEnabled: true, currentUser: page.user, currentMagazineId: page.magazineId, validateCurrent: async () => {
+        return controller.tag({ type: "ADD_MAGAZINE", groupId: patch.groupId, userId: patch.userId, magazineId: patch.magazineId, displayName: patch.displayName, position: patch.position }, { requireEnabled: true, currentUser: page.user, currentMagazineId: page.magazineId, validateCurrent: async () => {
           const current = await port.currentMagazinePage(sender, patch.pageUrl);
           return current?.type === "magazine" && current.user.toLowerCase() === page.user.toLowerCase() && current.magazineId === page.magazineId;
         } });
@@ -98,7 +98,7 @@ port.onMessage((message, sender, respond) => {
       if (message.type === "add-current-user") {
         const patch = message.patch, page = await port.currentAuthorPage(sender, patch?.pageUrl);
         if (page?.type !== "profile" || typeof patch?.userId !== "string" || page.user.toLowerCase() !== patch.userId.toLowerCase()) throw Object.assign(new Error("現在の作者ページを確認できません。"), { code: "CONFLICT" });
-        return controller.tag({ type: "ADD_USER", groupId: patch.groupId, userId: patch.userId, displayName: patch.displayName }, { requireEnabled: true, currentUser: page.user, validateCurrent: async () => {
+        return controller.tag({ type: "ADD_USER", groupId: patch.groupId, userId: patch.userId, displayName: patch.displayName, position: patch.position }, { requireEnabled: true, currentUser: page.user, validateCurrent: async () => {
           const current = await port.currentAuthorPage(sender, patch.pageUrl);
           return current?.type === "profile" && current.user.toLowerCase() === page.user.toLowerCase();
         } });
@@ -124,7 +124,7 @@ port.onMessage((message, sender, respond) => {
       if (!Number.isSafeInteger(message.patch?.selectionRevision) || message.patch.selectionRevision < 0) {
         throw Object.assign(new Error("選択グループを再確認してください。"), { code: "CONFLICT" });
       }
-      return controller.tag({ type: "ADD_TAG", tag, groupId: message.patch?.groupId }, {
+      return controller.tag({ type: "ADD_TAG", tag, groupId: message.patch?.groupId, position: message.patch?.position }, {
         requireEnabled: true, selectionRevision: message.patch.selectionRevision,
         ...(page.type === "search" ? { validateCurrent: async () => {
           const current = await port.currentMenuPage(sender, message.patch.pageUrl);

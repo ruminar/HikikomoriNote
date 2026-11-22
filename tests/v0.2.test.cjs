@@ -675,7 +675,7 @@ test('モバイルでもグループ操作とタグ追加を既存処理へ送�
  const panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');
  f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]').fire('click');
  panel.querySelector('[data-group-id="group2"]').fire('click');await flush();assert.equal(selected,'group2');assert.equal(panel.hidden,false);
- panel.querySelector('[data-tag-add]').fire('click');await flush();assert.deepEqual(plain(added),['group1',0]);
+ panel.querySelector('[data-tag-add]').fire('click');await flush();assert.deepEqual(plain(added),['group1',0,'end']);
  f.ui.update(settings,'https://note.com/search?q=%23AI&context=user');assert.equal(panel.hidden,true);
  assert.equal(panel.querySelector('ul').querySelector('a').getAttribute('aria-current'),'page');
  assert.equal(panel.querySelector('[data-tag-add]'),null);
@@ -1198,7 +1198,7 @@ test('表示中の日本語タグを左メニューで追加し、二重クリ�
  const f=uiFixture(sidebarHtml,{async addCurrentTag(){calls++;await new Promise(resolve=>{complete=resolve;});settings=f.core.readSettings({...groups(),...groups(['みじんこ123'])});f.ui.update(settings,url);}});
  let settings=f.core.readSettings({...groups(),});f.ui.update(settings,url);
  const button=f.doc.querySelector('[data-tag-add]');assert.match(button.getAttribute('aria-label'),/みじんこ123/);assert.equal(button.disabled,false);
- assert.equal(button.textContent,'＃');assert.equal(button.getAttribute('title'),button.getAttribute('aria-label'));
+ assert.equal(button.textContent,'＃');assert.match(button.getAttribute('title'),/CtrlまたはShift/);
  const row=button.parentElement;assert.equal(row.className,'hikikomori-note-profile-actions');
  assert.equal(row.children[0],button);assert.equal(row.children[1].className,'hikikomori-note-navigation-following');
  button.onclick();button.onclick();assert.equal(calls,1);assert.equal(f.doc.querySelector('[data-tag-add]').disabled,true);
@@ -1277,7 +1277,7 @@ test('ホームの4番号・改名ドラフト・共通宛先による移動を�
 test('サイドバーのグループ選択はページ遷移せず保存結果を反映し、追加に選択IDとrevisionを送る',async()=>{
  let settings,added;const f=uiFixture(sidebarHtml,{async selectGroup(groupId){settings={...settings,tagSchemaVersion:2,selectedTagGroupId:groupId,groupSelectionRevision:1};f.ui.update(settings,'https://note.com/tag/A');},async addCurrentTag(...args){added=args;}});
  settings=f.core.readSettings({...groups(),});f.ui.update(settings,'https://note.com/tag/A');f.doc.querySelector('[data-group-id="group2"]').onclick();await flush();
- assert.equal(f.doc.querySelector('[data-group-id="group2"]').getAttribute('aria-pressed'),'true');f.doc.querySelector('[data-tag-add]').onclick();await flush();assert.deepEqual(added,['group2',1]);
+ assert.equal(f.doc.querySelector('[data-group-id="group2"]').getAttribute('aria-pressed'),'true');f.doc.querySelector('[data-tag-add]').onclick();await flush();assert.deepEqual(added,['group2',1,'end']);
 });
 
 test('ロゴ識別は公式headerのnote SVGだけ。本文内・通常ホームリンクは除外',()=>{
@@ -1977,14 +1977,14 @@ test('形式7は種類付き項目を順序通り往復し、旧形式4の明示
 test('作者ページの登録先は未選択から明示選択し、登録済み判定は選んだグループだけ。切替・OFFでも安全',async()=>{
  let settings,calls=[];
  // 実際の登録アクションを備えた同じプロフィールDOMを別fixtureで用意する。
- const p=uiFixture('<main id="main-content"><aside class="w-full lg:w-96"><div><h1>作者</h1><button data-name="avatar"></button><a href="https://note.com/creator/followings"></a></div></aside></main>',{async addCurrentUser(groupId,userId,displayName){calls.push([groupId,userId,displayName]);settings={...settings,tagSchemaVersion:3,tagGroups:settings.tagGroups.map(g=>({...g,tags:g.id===groupId?[...g.tags,{type:'user',userId,displayName}]:g.tags}))};p.ui.update(settings,'https://note.com/creator');},async refresh(){}});
+ const p=uiFixture('<main id="main-content"><aside class="w-full lg:w-96"><div><h1>作者</h1><button data-name="avatar"></button><a href="https://note.com/creator/followings"></a></div></aside></main>',{async addCurrentUser(groupId,userId,displayName,position){calls.push([groupId,userId,displayName,position]);settings={...settings,tagSchemaVersion:3,tagGroups:settings.tagGroups.map(g=>({...g,tags:g.id===groupId?[...g.tags,{type:'user',userId,displayName}]:g.tags}))};p.ui.update(settings,'https://note.com/creator');},async refresh(){}});
  p.doc.querySelector('h1').textContent='作者';settings=p.core.readSettings({...groups(['A']),selectedTagGroupId:'group3'});p.ui.update(settings,'https://note.com/creator');const block=p.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),select=block.querySelector('select'),button=block.querySelector('button');assert.equal(select.value,'');assert.equal(button.disabled,true);const toggle=p.doc.querySelector('[class="hikikomori-note-favorite-toggle"]');assert.equal(block.hidden,true);assert.equal(toggle.getAttribute('aria-expanded'),'false');assert.equal(toggle.parentElement.children[0],toggle);assert.equal(toggle.parentElement.children[1].href,'https://note.com/following');toggle.onclick();assert.equal(block.hidden,false);assert.equal(toggle.getAttribute('aria-expanded'),'true');
- select.value='group2';select.onchange();assert.equal(settings.selectedTagGroupId,'group3');assert.equal(button.disabled,false);await button.onclick();assert.equal(calls.length,1);assert.equal(button.textContent,'登録済み');assert.equal(button.disabled,true);assert.equal(settings.selectedTagGroupId,'group3');toggle.onclick();assert.equal(block.hidden,true);toggle.onclick();assert.equal(select.value,'group2');select.value='group1';select.onchange();assert.equal(button.disabled,false);
+ select.value='group2';select.onchange();assert.equal(settings.selectedTagGroupId,'group3');assert.equal(button.disabled,false);await button.onclick();assert.deepEqual(calls,[['group2','creator','作者','start']]);assert.match(block.textContent,/登録済み/);assert.equal(button.disabled,true);assert.equal(settings.selectedTagGroupId,'group3');toggle.onclick();assert.equal(block.hidden,true);toggle.onclick();assert.equal(select.value,'group2');select.value='group1';select.onchange();assert.equal(button.disabled,false);
  for(const patch of [{enabled:false},{mode:'social'},{mode:'severe'}]){p.ui.update({...settings,...patch},'https://note.com/creator');assert.equal(block.isConnected,false);}
 });
 test('作者登録の結果未確認は再確認まで再送せず、左メニューと設定管理でタグと作者を同じ順序で表示',async()=>{
  const user={type:'user',userId:'creator',displayName:'作者'},state={...groups(['A',user,'B']),tagSchemaVersion:3};let calls=0;
- const p=uiFixture('<aside class="w-full lg:w-96"><div><h1></h1><button data-name="avatar"></button><a href="https://note.com/creator/followings"></a></div></aside>',{async addCurrentUser(){calls++;throw Object.assign(Error('結果未確認'),{code:'UNCONFIRMED'});},async refresh(){}}),settings=p.core.readSettings(state);p.ui.update(settings,'https://note.com/creator');const block=p.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),select=block.querySelector('select'),button=block.querySelector('button');select.value='group2';select.onchange();await button.onclick();assert.equal(button.disabled,true);await button.onclick();assert.equal(calls,1);await block.querySelectorAll('button')[1].onclick();assert.equal(button.disabled,false);
+ const p=uiFixture('<aside class="w-full lg:w-96"><div><h1></h1><button data-name="avatar"></button><a href="https://note.com/creator/followings"></a></div></aside>',{async addCurrentUser(){calls++;throw Object.assign(Error('結果未確認'),{code:'UNCONFIRMED'});},async refresh(){}}),settings=p.core.readSettings(state);p.ui.update(settings,'https://note.com/creator');const block=p.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),select=block.querySelector('select'),button=block.querySelector('button');select.value='group2';select.onchange();await button.onclick();assert.equal(button.disabled,true);await button.onclick();assert.equal(calls,1);await block.querySelectorAll('button')[2].onclick();assert.equal(button.disabled,false);
  const menu=uiFixture(sidebarHtml);menu.ui.update(menu.core.readSettings(state),'https://note.com/following');const list=menu.doc.querySelector('[class="hikikomori-note-navigation"]').querySelector('ul');assert.deepEqual(list.children.map(li=>li.querySelector('a').textContent),['# A','＠作者','# B']);assert.equal(list.children[1].querySelector('a').href,menu.core.authorSearchUrl('creator'));assert.equal(list.children[1].querySelector('a').getAttribute('target'),'_self');assert.equal(list.children[1].querySelector('a').getAttribute('rel'),null);assert.equal(list.children[0].querySelector('a').getAttribute('target'),null);
  const home=homeFixture({state});await flush();const rows=home.nodes.get('edit-tags').children;assert.deepEqual(rows.map(row=>row.children[0].textContent),['# A','＠作者 (creator)','# B']);assert.equal(rows[1].children[0].tagName,'A');assert.equal(rows[1].children[0].href,'https://note.com/creator');assert.equal(rows[1].children[0].getAttribute('target'),'_self');assert.equal(rows[0].children[0].href,home.c.HikikomoriNote.tagUrl('A'));assert.equal(rows[0].children[0].getAttribute('target'),'_self');rows[1].querySelectorAll('button')[0].onclick();await flush();assert.deepEqual(home.state.tagGroups[0].tags,[user,'A','B']);
 });
@@ -1997,7 +1997,8 @@ test('作者お気に入りは実際の背景メッセージで現在ページ�
  const send=(body,sender={note:true})=>new Promise(resolve=>{if(handler(body,sender,resolve)===false)resolve(null);});
  assert.equal(await send({type:'add-current-user',patch},{home:true}),null);assert.equal(await send({type:'add-current-user',patch},{note:false}),null);
  let answer=await send({type:'add-current-user',patch:{...patch,userId:'other'}});assert.equal(answer.ok,false);assert.equal(f.writes,0);
- answer=await send({type:'add-current-user',patch});assert.equal(answer.ok,true);assert.deepEqual(f.stored.tagGroups[1].tags,[favoriteCreator]);assert.equal(f.stored.selectedTagGroupId,'group1');
+ f.stored.tagGroups[1].tags=['Existing'];
+ answer=await send({type:'add-current-user',patch:{...patch,position:'start'}});assert.equal(answer.ok,true);assert.deepEqual(f.stored.tagGroups[1].tags,[favoriteCreator,'Existing']);assert.equal(f.stored.selectedTagGroupId,'group1');
  checks=0;changeDuringSave=true;answer=await send({type:'add-current-user',patch:{...patch,groupId:'group3'}});assert.equal(answer.ok,false);assert.equal(f.writes,1);
  page={type:'article',user:'kinokoro'};checks=0;changeDuringSave=false;answer=await send({type:'add-current-user',patch});assert.equal(answer.ok,false);
 });
@@ -2061,10 +2062,10 @@ function favoriteMagazineUiFixture(actions={},paid=false){
 }
 
 test('本アイコンは公式フォローの隣で初期閉。選択先だけに登録し、公式操作・閲覧グループを変更しない',async()=>{
- let state,calls=[];const f=favoriteMagazineUiFixture({async addCurrentMagazine(groupId,userId,magazineId,displayName){calls.push([groupId,userId,magazineId,displayName]);state={...state,tagSchemaVersion:4,tagGroups:state.tagGroups.map(g=>({...g,tags:g.id===groupId?[...g.tags,favoriteMagazine]:g.tags}))};f.ui.update(state,magazineUrl);},async refresh(){}});state=f.core.readSettings({...groups([favoriteCreator]),tagSchemaVersion:3,selectedTagGroupId:'group3'});f.ui.update(state,magazineUrl);
+ let state,calls=[];const f=favoriteMagazineUiFixture({async addCurrentMagazine(groupId,userId,magazineId,displayName,position){calls.push([groupId,userId,magazineId,displayName,position]);state={...state,tagSchemaVersion:4,tagGroups:state.tagGroups.map(g=>({...g,tags:g.id===groupId?[...g.tags,favoriteMagazine]:g.tags}))};f.ui.update(state,magazineUrl);},async refresh(){}});state=f.core.readSettings({...groups([favoriteCreator]),tagSchemaVersion:3,selectedTagGroupId:'group3'});f.ui.update(state,magazineUrl);
  const toggle=f.doc.querySelector('[class~="hikikomori-note-magazine-toggle"]'),panel=f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]');assert.ok(toggle.querySelector('svg'));assert.equal(toggle.parentElement,f.doc.getElementById('desktop-row'));assert.equal(toggle.parentElement.children[0],toggle);assert.equal(panel.hidden,true);assert.equal(toggle.getAttribute('aria-expanded'),'false');assert.equal(f.doc.querySelector('[class="hikikomori-note-navigation"]'),null);
  const official=f.doc.getElementById('official-follow');assert.equal(official.getAttribute('aria-pressed'),'false');assert.equal(official.getAttribute('data-hikikomori-note-owned'),null);
- toggle.onclick();const select=panel.querySelector('select'),save=panel.querySelector('button');assert.equal(select.value,'');assert.equal(save.disabled,true);select.value='group1';select.onchange();assert.equal(save.disabled,false);await save.onclick();assert.deepEqual(calls,[['group1','kinokoro','m95cee8dfaa5e','きのころコミック']]);assert.equal(save.textContent,'登録済み');assert.equal(save.disabled,true);assert.equal(state.selectedTagGroupId,'group3');assert.equal(official.textContent,'フォロー');
+ toggle.onclick();const select=panel.querySelector('select'),save=panel.querySelector('button');assert.equal(select.value,'');assert.equal(save.disabled,true);select.value='group1';select.onchange();assert.equal(save.disabled,false);await panel.querySelectorAll('button')[1].onclick();assert.deepEqual(calls,[['group1','kinokoro','m95cee8dfaa5e','きのころコミック','end']]);assert.match(panel.textContent,/登録済み/);assert.equal(save.disabled,true);assert.equal(state.selectedTagGroupId,'group3');assert.equal(official.textContent,'フォロー');
  select.value='group2';select.onchange();assert.equal(save.disabled,false);select.focus();panel.fire('keydown',{key:'Escape'});assert.equal(panel.hidden,true);assert.equal(f.doc.activeElement,toggle);
 });
 
@@ -2081,7 +2082,7 @@ test('マガジンの未知DOM・別作者・本文・モード/OFF・停止で�
 });
 
 test('マガジン登録の未確認は再確認まで再送せず、別マガジン移動で欄を作り直す',async()=>{
- let calls=0;const f=favoriteMagazineUiFixture({async addCurrentMagazine(){calls++;throw Object.assign(Error('結果未確認'),{code:'UNCONFIRMED'});},async refresh(){}}),state=f.core.readSettings({...groups()});f.ui.update(state,magazineUrl);const panel=f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),select=panel.querySelector('select'),save=panel.querySelector('button');select.value='group1';select.onchange();await save.onclick();await save.onclick();assert.equal(calls,1);assert.equal(save.disabled,true);await panel.querySelectorAll('button')[1].onclick();assert.equal(save.disabled,false);
+ let calls=0;const f=favoriteMagazineUiFixture({async addCurrentMagazine(){calls++;throw Object.assign(Error('結果未確認'),{code:'UNCONFIRMED'});},async refresh(){}}),state=f.core.readSettings({...groups()});f.ui.update(state,magazineUrl);const panel=f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),select=panel.querySelector('select'),save=panel.querySelector('button');select.value='group1';select.onchange();await save.onclick();await save.onclick();assert.equal(calls,1);assert.equal(save.disabled,true);await panel.querySelectorAll('button')[2].onclick();assert.equal(save.disabled,false);
  f.ui.update(state,magazineUrl.replace('m95cee8dfaa5e','mOther'));assert.equal(panel.isConnected,false);assert.equal(f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]'),null);f.doc.querySelector('[data-id="NavigationItem"]').href=magazineUrl.replace('m95cee8dfaa5e','mOther');f.ui.update(state,magazineUrl.replace('m95cee8dfaa5e','mOther'));assert.equal(f.doc.querySelector('[class~="hikikomori-note-favorite-profile"]').hidden,true);
 });
 
@@ -2107,7 +2108,8 @@ test('マガジン登録メッセージは現在のタブ・保存直前・フ�
  const patch={...favoriteMagazine,groupId:'group2',pageUrl:magazineUrl};delete patch.type;
  const send=(patch,sender={note:true},type='add-current-magazine')=>new Promise(resolve=>{if(handler({type,patch},sender,resolve)===false)resolve(null);});
  assert.equal(await send(patch,{home:true}),null);assert.equal(await send(patch,{note:false}),null);assert.equal((await send({...patch,magazineId:'mOther'})).ok,false);assert.equal((await send({...patch,userId:'other'})).ok,false);assert.equal(f.writes,0);
- const answer=await send(patch);assert.equal(answer.ok,true,JSON.stringify(answer));assert.deepEqual(f.stored.tagGroups[1].tags,[favoriteMagazine]);checks=0;change=true;assert.equal((await send({...patch,groupId:'group3'})).ok,false);assert.equal(f.writes,1);
+ f.stored.tagGroups[1].tags=['Existing'];
+ const answer=await send({...patch,position:'start'});assert.equal(answer.ok,true,JSON.stringify(answer));assert.deepEqual(f.stored.tagGroups[1].tags,[favoriteMagazine,'Existing']);checks=0;change=true;assert.equal((await send({...patch,groupId:'group3'})).ok,false);assert.equal(f.writes,1);
  assert.equal((await send(addMagazine('group3'),{home:true},'tag-operation')).ok,false);assert.equal(f.writes,1);
 });
 
@@ -2130,7 +2132,7 @@ test('作者表示の保存・解除で欄を再生成しても、開いてい�
 });
 
 test('お気に入り保存・グループ更新・再描画でも3領域の順序と作者表示の入力を保持',async()=>{
- let state;const f=uiFixture(profileLayoutHtml,{async addCurrentUser(groupId,userId,displayName){state={...state,tagSchemaVersion:3,tagGroups:state.tagGroups.map(g=>({...g,tags:g.id===groupId?[{type:'user',userId,displayName}]:g.tags}))};f.ui.update(state,'https://note.com/creator');}});f.doc.querySelector('h1').textContent='作者';state=f.core.readSettings({...groups(),noteUserId:'me'});f.ui.update(state,'https://note.com/creator');const root=assertProfileOrder(f),panel=profilePanel(f),authorSelect=root.children[2].querySelector('select');authorSelect.value='hide';panel.querySelector('select').value='group3';panel.querySelector('select').onchange();await panel.querySelector('button').onclick();assert.equal(panel.querySelector('button').textContent,'登録済み');assert.equal(authorSelect.value,'hide');assert.equal(assertProfileOrder(f),root);
+ let state;const f=uiFixture(profileLayoutHtml,{async addCurrentUser(groupId,userId,displayName){state={...state,tagSchemaVersion:3,tagGroups:state.tagGroups.map(g=>({...g,tags:g.id===groupId?[{type:'user',userId,displayName}]:g.tags}))};f.ui.update(state,'https://note.com/creator');}});f.doc.querySelector('h1').textContent='作者';state=f.core.readSettings({...groups(),noteUserId:'me'});f.ui.update(state,'https://note.com/creator');const root=assertProfileOrder(f),panel=profilePanel(f),authorSelect=root.children[2].querySelector('select');authorSelect.value='hide';panel.querySelector('select').value='group3';panel.querySelector('select').onchange();await panel.querySelector('button').onclick();assert.match(panel.textContent,/登録済み/);assert.equal(authorSelect.value,'hide');assert.equal(assertProfileOrder(f),root);
  state={...state,tagGroups:state.tagGroups.map(g=>({...g,name:'変更後'}))};for(let i=0;i<3;i++){f.ui.invalidatePaidCards();f.ui.update(state,'https://note.com/creator');assert.equal(assertProfileOrder(f),root);assert.equal(authorSelect.value,'hide');}f.ui.stop();assert.equal(profileRoot(f),null);assert.equal(f.doc.querySelector('h1').isConnected,true);
 });
 
@@ -2180,7 +2182,7 @@ test('形式7で4種類を往復し、形式5の旧データにも対応。不�
 });
 
 test('人のSVGは作者名の下で初期閉。参加操作に触れず登録先だけに追加し、Escapeで閉じる',async()=>{
- const b=fixture({...groups(),selectedTagGroupId:'group3',noteUserId:'akb428'});let calls=[];const f=memberUi({async addCurrentMembership(groupId,userId,displayName){calls.push([groupId,userId,displayName]);const state=await b.controller.tag(memberOperation(groupId,{type:'membership',userId,displayName}),memberOptions());f.ui.update(state,memberUrl);}});f.ui.update(f.core.readSettings(b.stored),memberUrl);const mount=f.doc.querySelector('[class="hikikomori-note-membership-controls"]'),toggle=mount.children[0],panel=mount.children[1];assert.equal(mount.parentElement.children.at(-1),mount);assert.equal(mount.parentElement.children[1].getAttribute('id'),'membership-creator');assert.ok(toggle.querySelector('svg'));assert.equal(toggle.getAttribute('aria-label'),'このメンバーシップをお気に入りに追加');assert.equal(panel.hidden,true);toggle.onclick();assert.equal(panel.hidden,false);const select=panel.querySelector('select'),save=panel.querySelector('button');assert.equal(save.disabled,true);select.value='group2';select.onchange();await save.onclick();assert.deepEqual(calls,[['group2','akb428','AI活用実践ラボ']]);assert.equal(save.textContent,'登録済み');assert.equal(save.disabled,true);assert.equal(b.stored.selectedTagGroupId,'group3');assert.equal(f.doc.getElementById('join-membership').textContent,'参加手続きへ');assert.equal(f.doc.getElementById('join-membership').getAttribute('data-hikikomori-note-owned'),null);
+ const b=fixture({...groups(),selectedTagGroupId:'group3',noteUserId:'akb428'});let calls=[];const f=memberUi({async addCurrentMembership(groupId,userId,displayName,position){calls.push([groupId,userId,displayName,position]);const state=await b.controller.tag(memberOperation(groupId,{type:'membership',userId,displayName}),memberOptions());f.ui.update(state,memberUrl);}});f.ui.update(f.core.readSettings(b.stored),memberUrl);const mount=f.doc.querySelector('[class="hikikomori-note-membership-controls"]'),toggle=mount.children[0],panel=mount.children[1];assert.equal(mount.parentElement.children.at(-1),mount);assert.equal(mount.parentElement.children[1].getAttribute('id'),'membership-creator');assert.ok(toggle.querySelector('svg'));assert.equal(toggle.getAttribute('aria-label'),'このメンバーシップをお気に入りに追加');assert.equal(panel.hidden,true);toggle.onclick();assert.equal(panel.hidden,false);const select=panel.querySelector('select'),save=panel.querySelector('button');assert.equal(save.disabled,true);select.value='group2';select.onchange();await save.onclick();assert.deepEqual(calls,[['group2','akb428','AI活用実践ラボ','start']]);assert.match(panel.textContent,/登録済み/);assert.equal(save.disabled,true);assert.equal(b.stored.selectedTagGroupId,'group3');assert.equal(f.doc.getElementById('join-membership').textContent,'参加手続きへ');assert.equal(f.doc.getElementById('join-membership').getAttribute('data-hikikomori-note-owned'),null);
  select.value='group1';select.onchange();assert.equal(save.disabled,false);select.focus();panel.fire('keydown',{key:'Escape'});assert.equal(panel.hidden,true);assert.equal(f.doc.activeElement,toggle);f.win.wide=false;f.ui.update(f.core.readSettings(b.stored),memberUrl);assert.equal(mount.isConnected,true);assert.equal(select.value,'group1');assert.equal(f.doc.querySelectorAll('[class="hikikomori-note-membership-controls"]').length,1);
 });
 
@@ -2193,7 +2195,7 @@ test('join画面でも登録し、DOM差し替え・別作者・モード/OFF・
 });
 
 test('メンバーシップ登録の未確認結果は再確認まで自動再送しない',async()=>{
- let calls=0;const f=memberUi({async addCurrentMembership(){calls++;throw Object.assign(Error('結果不明'),{code:'UNCONFIRMED'});},async refresh(){}});f.ui.update(f.core.readSettings({...groups()}),memberUrl);const panel=profilePanel(f),select=panel.querySelector('select'),save=panel.querySelector('button');select.value='group2';select.onchange();await save.onclick();await save.onclick();assert.equal(calls,1);assert.equal(save.disabled,true);await panel.querySelectorAll('button')[1].onclick();assert.equal(save.disabled,false);
+ let calls=0;const f=memberUi({async addCurrentMembership(){calls++;throw Object.assign(Error('結果不明'),{code:'UNCONFIRMED'});},async refresh(){}});f.ui.update(f.core.readSettings({...groups()}),memberUrl);const panel=profilePanel(f),select=panel.querySelector('select'),save=panel.querySelector('button');select.value='group2';select.onchange();await save.onclick();await save.onclick();assert.equal(calls,1);assert.equal(save.disabled,true);await panel.querySelectorAll('button')[2].onclick();assert.equal(save.disabled,false);
 });
 
 test('メンバーシップは左メニューで人SVGと新しいタブ、設定で同じタブのリンクと共通管理',async()=>{
@@ -2204,7 +2206,7 @@ test('メンバーシップは左メニューで人SVGと新しいタブ、設�
 
 test('メンバーシップ登録メッセージは現在URL・pendingUrl・フレームと保存直前を照合',async()=>{
  let tab={url:memberUrl+'/join'};const c=vm.createContext({URL,location:{href:tab.url},chrome:{runtime:{id:'self',sendMessage:async m=>({ok:true,settings:m})},tabs:{get:async()=>tab}}});for(const file of ['src/common.js','src/platform/browser-api.js'])vm.runInContext(source(file),c);const check=c.HikikomoriNoteBackgroundPlatform.currentMembershipPage,sender={id:'self',frameId:0,tab:{id:1},url:memberUrl};assert.equal((await check(sender,tab.url)).user,'akb428');assert.equal(await check(sender,memberUrl),null);tab.pendingUrl='https://note.com/other/membership';assert.equal(await check(sender,tab.url),null);delete tab.pendingUrl;for(const bad of [{...sender,frameId:1},{...sender,id:'other'},{...sender,url:'https://evil.test'}])assert.equal(await check(bad,tab.url),null);const sent=await c.HikikomoriNotePlatform.addCurrentMembership('group2','akb428','ラボ');assert.equal(sent.patch.pageUrl,tab.url);
- const b=fixture();let handler,checks=0,change=false;const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:s=>s.home===true,isNoteSender:s=>s.note===true,currentMembershipPage:async()=>({type:'membership',user:change&&++checks>1?'other':'akb428'})};const bg=vm.createContext({console,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>b.controller}});vm.runInContext(source('src/background.js'),bg);await flush();const patch={groupId:'group2',userId:'akb428',displayName:'AI活用実践ラボ',pageUrl:memberUrl};const send=(patch,sender={note:true},type='add-current-membership')=>new Promise(resolve=>{if(handler({type,patch},sender,resolve)===false)resolve(null);});assert.equal(await send(patch,{home:true}),null);assert.equal(await send(patch,{note:false}),null);assert.equal((await send({...patch,userId:'other'})).ok,false);assert.equal((await send(patch)).ok,true);assert.deepEqual(b.stored.tagGroups[1].tags,[memberFavorite]);change=true;assert.equal((await send({...patch,groupId:'group3'})).ok,false);assert.equal(b.writes,1);assert.equal((await send(memberOperation(),{home:true},'tag-operation')).ok,false);
+ const b=fixture();let handler,checks=0,change=false;const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:s=>s.home===true,isNoteSender:s=>s.note===true,currentMembershipPage:async()=>({type:'membership',user:change&&++checks>1?'other':'akb428'})};const bg=vm.createContext({console,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>b.controller}});vm.runInContext(source('src/background.js'),bg);await flush();const patch={groupId:'group2',userId:'akb428',displayName:'AI活用実践ラボ',pageUrl:memberUrl};const send=(patch,sender={note:true},type='add-current-membership')=>new Promise(resolve=>{if(handler({type,patch},sender,resolve)===false)resolve(null);});assert.equal(await send(patch,{home:true}),null);assert.equal(await send(patch,{note:false}),null);assert.equal((await send({...patch,userId:'other'})).ok,false);b.stored.tagGroups[1].tags=['Existing'];assert.equal((await send({...patch,position:'start'})).ok,true);assert.deepEqual(b.stored.tagGroups[1].tags,[memberFavorite,'Existing']);change=true;assert.equal((await send({...patch,groupId:'group3'})).ok,false);assert.equal(b.writes,1);assert.equal((await send(memberOperation(),{home:true},'tag-operation')).ok,false);
 });
 test('メンバーシップ画面は残存する作者用DOMに登録・表示管理を差し込まず、メンバーシップだけを扱う',()=>{
  const f=memberUi({async addCurrentMembership(){},async addCurrentUser(){}}),aside=f.doc.createElement('aside');aside.className='w-full lg:w-96';const identity=f.doc.createElement('div'),h=f.doc.createElement('h1'),avatar=f.doc.createElement('button'),a=f.doc.createElement('a');avatar.setAttribute('data-name','avatar');a.href='https://note.com/akb428/followings';identity.append(h,avatar,a);aside.append(identity);f.doc.root.append(aside);f.ui.update(f.core.readSettings({...groups(),noteUserId:'me'}),memberUrl);assert.ok(f.doc.querySelector('[class="hikikomori-note-membership-controls"]'));assert.equal(f.doc.querySelector('[class="hikikomori-note-profile-controls"]'),null);assert.equal(f.doc.querySelector('button[data-author-save]'),null);
@@ -2822,15 +2824,15 @@ test('お気に入りの移動中と成功時は右側だけ通知し、左メ�
 const searchedFavoriteUrl='https://note.com/search?q=from%3A%40sample_author+&context=note&mode=search&sort=new';
 const searchedFavorite={type:'user',userId:'sample_author',displayName:'Sample'};
 test('作者検索の＠はTL直前の同じ行。作者名と選択グループを明示し、保存後に消える',async()=>{
- const back=fixture(),calls=[];let settings;
- const f=uiFixture(categorySidebarHtml,{async addSearchedUser(groupId,selectionRevision,userId,displayName){calls.push({groupId,selectionRevision,userId,displayName});settings=await back.controller.tag({type:'ADD_USER',groupId,userId,displayName},{requireEnabled:true,currentUser:userId,selectionRevision,validateCurrent:async()=>true});f.ui.update(settings,searchedFavoriteUrl);}});
+ const back=fixture(groups(['Existing'])),calls=[];let settings;
+ const f=uiFixture(categorySidebarHtml,{async addSearchedUser(groupId,selectionRevision,userId,displayName,position){calls.push({groupId,selectionRevision,userId,displayName,position});settings=await back.controller.tag({type:'ADD_USER',groupId,userId,displayName,position},{requireEnabled:true,currentUser:userId,selectionRevision,validateCurrent:async()=>true});f.ui.update(settings,searchedFavoriteUrl);}});
  settings=f.core.readSettings(back.stored);appendSearchAvatar(f,'sample_author','Sample');f.ui.update(settings,searchedFavoriteUrl);
  const button=f.doc.querySelector('[data-author-search-add]'),row=button.parentElement;
  assert.equal(button.textContent,'＠');assert.equal(row.children[0],button);assert.equal(row.children[1].textContent,'フォロー中のTL');assert.equal(row.className,'hikikomori-note-profile-actions');
- assert.equal(button.getAttribute('title'),'Sampleを① グループ1に追加');assert.equal(button.getAttribute('aria-label'),button.getAttribute('title'));
- button.onclick();await flush();assert.deepEqual(calls,[{groupId:'group1',selectionRevision:0,...searchedFavorite}].map(({type,...value})=>value));
- assert.deepEqual(back.stored.tagGroups[0].tags,[searchedFavorite]);assert.equal(f.doc.querySelector('[data-author-search-add]'),null);assert.match(f.doc.querySelector('[role="status"]').textContent,/Sampleを① グループ1に追加/);
- const exported=f.core.inspectSettingsImport(f.core.exportSettings(settings));assert.deepEqual(plain(exported.settings.tagGroups[0].tags),[searchedFavorite]);
+ assert.equal(button.getAttribute('aria-label'),'Sampleを① グループ1に追加');assert.match(button.getAttribute('title'),/CtrlまたはShift/);
+ button.onclick();await flush();assert.deepEqual(calls,[{groupId:'group1',selectionRevision:0,userId:'sample_author',displayName:'Sample',position:'end'}]);
+ assert.deepEqual(back.stored.tagGroups[0].tags,['Existing',searchedFavorite]);assert.equal(f.doc.querySelector('[data-author-search-add]'),null);assert.match(f.doc.querySelector('[role="status"]').textContent,/Sampleを① グループ1に追加/);
+ const exported=f.core.inspectSettingsImport(f.core.exportSettings(settings));assert.deepEqual(plain(exported.settings.tagGroups[0].tags),['Existing',searchedFavorite]);
 });
 test('作者は選択中のグループだけを重複判定し、他グループへも追加できる',async()=>{
  const initial={...groups([{...searchedFavorite,userId:'SAMPLE_AUTHOR'}]),tagSchemaVersion:3},back=fixture(initial);let settings;
@@ -2844,8 +2846,11 @@ test('作者検索の追加は2段の⑧と狭幅でも利用でき、作者情�
  const back=fixture({...eightGroups(),mode:'normal-double',selectedTagGroupId:'group8'}),calls=[];
  const f=uiFixture(logoHeaderHtml+categorySidebarHtml,{async addSearchedUser(...args){calls.push(args);}});f.doc.getElementById('category-sidebar').width=0;f.win.wide=false;
  f.ui.update(f.core.readSettings(back.stored),searchedFavoriteUrl);const panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]'),button=panel.querySelector('[data-author-search-add]');
- assert.equal(button.getAttribute('title'),'sample_authorを⑧ グループ8に追加');assert.equal(panel.querySelector('[data-hikikomori-note-author-card]').querySelector('img'),null);
- button.onclick();await flush();assert.deepEqual(calls,[['group8',0,'sample_author','']]);
+ assert.equal(button.getAttribute('aria-label'),'sample_authorを⑧ グループ8に追加');assert.equal(panel.querySelector('[data-hikikomori-note-author-card]').querySelector('img'),null);
+ for(const event of [{ctrlKey:true},{shiftKey:true}]){
+  panel.querySelector('[data-author-search-add]').fire('click',event);await flush();
+ }
+ assert.deepEqual(calls,[['group8',0,'sample_author','','start'],['group8',0,'sample_author','','start']]);
 });
 test('保存中の連打・グループ操作を抑止し、失敗では作者追加ボタンを残す',async()=>{
  let release,count=0;const f=uiFixture(categorySidebarHtml,{addSearchedUser:()=>{count++;return new Promise((resolve,reject)=>{release=()=>reject(Error('保存失敗'));});},selectGroup:async()=>{throw Error('must not select');}}),settings=f.core.readSettings(groups());
@@ -2866,23 +2871,23 @@ test('作者追加は作者を識別できない検索・対象外モードで�
  f.ui.update(settings,searchedFavoriteUrl);assert.equal(f.doc.querySelector('[data-author-search-add]').disabled,false);
 });
 test('検索作者追加メッセージは現在の検索URL・作者・選択リビジョン・送信元を検証する',async()=>{
- const back=fixture();let handler,checks=0,changeDuringSave=false;
+ const back=fixture(groups(['Existing']));let handler,checks=0,changeDuringSave=false;
  const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:s=>s.home===true,isNoteSender:s=>s.note===true,currentMenuPage:async(sender,pageUrl)=>{checks++;return pageUrl===searchedFavoriteUrl&&!(changeDuringSave&&checks>1)?{type:'search'}:null;}};
  const c=vm.createContext({console,HikikomoriNote:back.core,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>back.controller}});vm.runInContext(source('src/background.js'),c);await flush();
  const patch={groupId:'group1',selectionRevision:0,userId:'sample_author',displayName:'Sample',pageUrl:searchedFavoriteUrl};
  const send=(p=patch,sender={note:true})=>new Promise(resolve=>{if(handler({type:'add-searched-user',patch:p},sender,resolve)===false)resolve(null);});
  assert.equal(await send(patch,{home:true}),null);assert.equal(await send(patch,{}),null);
- for(const invalid of [{userId:'other'},{selectionRevision:undefined},{selectionRevision:1},{groupId:'group2'},{pageUrl:'https://note.com/sample_author'}]){assert.equal((await send({...patch,...invalid})).ok,false);}
+ for(const invalid of [{userId:'other'},{selectionRevision:undefined},{selectionRevision:1},{groupId:'group2'},{pageUrl:'https://note.com/sample_author'},{position:'middle'}]){assert.equal((await send({...patch,...invalid})).ok,false);}
  checks=0;changeDuringSave=true;assert.equal((await send()).ok,false);assert.equal(back.writes,0);
- checks=0;changeDuringSave=false;assert.equal((await send()).ok,true);assert.deepEqual(back.stored.tagGroups[0].tags,[searchedFavorite]);
+ checks=0;changeDuringSave=false;assert.equal((await send({...patch,position:'start'})).ok,true);assert.deepEqual(back.stored.tagGroups[0].tags,[searchedFavorite,'Existing']);
  assert.equal((await send()).ok,false);assert.equal(back.writes,1);
  const selected=await back.controller.tag({type:'SELECT_TAG_GROUP',groupId:'group2'});assert.equal((await send()).ok,false);
  assert.equal((await send({...patch,groupId:'group2',selectionRevision:selected.groupSelectionRevision})).ok,true);assert.deepEqual(back.stored.tagGroups[1].tags,[searchedFavorite]);
 });
 test('検索作者追加はブラウザAPIで現在URLと選択リビジョンを送り、既存プロフィール追加を変更しない',async()=>{
  const requests=[],page=searchedFavoriteUrl,c=vm.createContext({location:{href:page},HikikomoriNote:{settingsKey:'settings'},browser:{runtime:{id:'self',sendMessage:async message=>{requests.push(plain(message));return{ok:true,settings:{enabled:true}};}}}});
- vm.runInContext(source('src/platform/browser-api.js'),c);await c.HikikomoriNotePlatform.addSearchedUser('group3',8,'sample_author','Sample');
- assert.deepEqual(requests,[{type:'add-searched-user',patch:{groupId:'group3',selectionRevision:8,userId:'sample_author',displayName:'Sample',pageUrl:page}}]);
+ vm.runInContext(source('src/platform/browser-api.js'),c);await c.HikikomoriNotePlatform.addSearchedUser('group3',8,'sample_author','Sample','start');
+ assert.deepEqual(requests,[{type:'add-searched-user',patch:{groupId:'group3',selectionRevision:8,userId:'sample_author',displayName:'Sample',position:'start',pageUrl:page}}]);
  await c.HikikomoriNotePlatform.addCurrentUser('group1','sample_author','Sample');assert.equal(requests[1].type,'add-current-user');assert.equal(Object.hasOwn(requests[1].patch,'selectionRevision'),false);
 });
 
@@ -2913,14 +2918,38 @@ test('SPAで単一検索語を変更するとタグ追加ボタンの表示と�
  }
 });
 
+test('タグ追加の＃はCtrlかShift付きで先頭、通常クリックで末尾を指定する',async()=>{
+ const calls=[];
+ const f=uiFixture(logoHeaderHtml+sidebarHtml,{async addCurrentTag(...args){calls.push(args);}});
+ const settings=f.core.readSettings(groups(['Existing']));
+ f.ui.update(settings,'https://note.com/search?q=NewTag&context=note');
+ f.doc.querySelector('[data-tag-add]').fire('click',{ctrlKey:true});
+ await flush();
+ f.win.wide=false;
+ f.doc.querySelector('aside').width=0;
+ f.ui.update(settings,'https://note.com/tag/NewTag');
+ f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]').fire('click');
+ const panel=f.doc.querySelector('[class="hikikomori-note-mobile-panel"]');
+ panel.querySelector('[data-tag-add]').fire('click',{shiftKey:true});
+ await flush();
+ panel.querySelector('[data-tag-add]').fire('click');
+ await flush();
+ assert.deepEqual(calls,[['group1',0,'start'],['group1',0,'start'],['group1',0,'end']]);
+});
+
 test('背景処理は確認済み検索URLの単一語だけをタグとして登録する',async()=>{
  const f=fixture();let handler,current='https://note.com/search?q='+encodeURIComponent('恋愛小説');
  const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:()=>false,isNoteSender:()=>true,currentMenuPage:async(sender,url)=>url===current?{type:'search'}:null};
  const context=vm.createContext({console,HikikomoriNote:f.core,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>f.controller}});vm.runInContext(source('src/background.js'),context);await flush();
- let answer;const send=async(url)=>{handler({type:'add-current-tag',patch:{pageUrl:url,groupId:'group1',selectionRevision:0,tag:'偽タグ'}},{},value=>{answer=value;});await flush();return answer;};
+ let answer;const send=async(url,position)=>{handler({type:'add-current-tag',patch:{pageUrl:url,groupId:'group1',selectionRevision:0,tag:'偽タグ',position}},{},value=>{answer=value;});await flush();return answer;};
  assert.equal((await send(current)).ok,true);assert.deepEqual(f.stored.tagGroups[0].tags,['恋愛小説']);
  for(const q of ['from:@ruminar','恋愛 小説','']){current='https://note.com/search?q='+encodeURIComponent(q);assert.equal((await send(current)).code,'CONFLICT');}
  assert.equal((await send('https://note.com/search?q=other')).code,'CONFLICT');assert.deepEqual(f.stored.tagGroups[0].tags,['恋愛小説']);
+ current='https://note.com/search?q=NewTag';
+ assert.equal((await send(current,'unknown')).ok,false);
+ assert.deepEqual(f.stored.tagGroups[0].tags,['恋愛小説']);
+ assert.equal((await send(current,'start')).ok,true);
+ assert.deepEqual(f.stored.tagGroups[0].tags,['NewTag','恋愛小説']);
 });
 
 

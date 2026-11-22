@@ -303,6 +303,8 @@ form[data-hikikomori-note-search-clear-layout] > [data-name="Field"] { flex: 1; 
 .hikikomori-note-article-favorite-profile :is(select, option) { background: var(--color-surface-normal, Canvas); }
 .hikikomori-note-article-favorite-profile :is(select, button) { max-width: 100%; margin-inline: 0; }
 .hikikomori-note-article-favorite-profile select { width: 100%; }
+.hikikomori-note-favorite-add-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-width: 240px; }
+.hikikomori-note-favorite-add-buttons button { margin-inline: 0; padding-inline: 4px; }
 @media(max-width:1099px) { .hikikomori-note-article-following-row, .hikikomori-note-article-favorite-profile { display: none; } }
 .hikikomori-note-article-mobile > .hikikomori-note-article-following-row { position: static; display: flex; grid-column: 1 / -1; width: 100%; }
 .hikikomori-note-article-mobile > .hikikomori-note-article-favorite-profile { position: static; display: block; grid-column: 1 / -1; width: 100%; max-height: none; }

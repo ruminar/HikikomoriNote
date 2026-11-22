@@ -25,29 +25,29 @@
       if (!stopped) { settings = readView(value); checkHome(); }
       return settings;
     },
-    async addCurrentArticle(groupId, articleId, url, title) {
+    async addCurrentArticle(groupId, articleId, url, title, position) {
       const before = revision;
-      const value = await platform.addCurrentArticle(groupId, articleId, url, title);
+      const value = await platform.addCurrentArticle(groupId, articleId, url, title, position);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
-    async addCurrentMembership(groupId, userId, displayName) {
+    async addCurrentMembership(groupId, userId, displayName, position) {
       const before = revision;
-      const value = await platform.addCurrentMembership(groupId, userId, displayName);
+      const value = await platform.addCurrentMembership(groupId, userId, displayName, position);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
-    async addCurrentMagazine(groupId, userId, magazineId, displayName) {
+    async addCurrentMagazine(groupId, userId, magazineId, displayName, position) {
       const before = revision;
-      const value = await platform.addCurrentMagazine(groupId, userId, magazineId, displayName);
+      const value = await platform.addCurrentMagazine(groupId, userId, magazineId, displayName, position);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
-    async addCurrentUser(groupId, userId, displayName) {
+    async addCurrentUser(groupId, userId, displayName, position) {
       const before = revision;
-      const value = await platform.addCurrentUser(groupId, userId, displayName);
+      const value = await platform.addCurrentUser(groupId, userId, displayName, position);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
-    async addSearchedUser(groupId, selectionRevision, userId, displayName) {
+    async addSearchedUser(groupId, selectionRevision, userId, displayName, position) {
       const before = revision;
-      const value = await platform.addSearchedUser(groupId, selectionRevision, userId, displayName);
+      const value = await platform.addSearchedUser(groupId, selectionRevision, userId, displayName, position);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
     async setAuthor(operation, source) {
@@ -55,9 +55,9 @@
       const value = await platform.currentAuthor(operation, source);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
-    async addCurrentTag(groupId, selectionRevision) {
+    async addCurrentTag(groupId, selectionRevision, position) {
       const before = revision;
-      const value = await platform.addCurrentTag(groupId, selectionRevision);
+      const value = await platform.addCurrentTag(groupId, selectionRevision, position);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
     async selectGroup(groupId) {

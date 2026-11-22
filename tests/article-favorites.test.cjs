@@ -15,7 +15,7 @@ function articleUi(options={}){
  doc.getElementById('note-article').getBoundingClientRect=()=>({left:options.left??270,width:640});
  const win={AbortController,matchMedia:q=>({matches:q.includes('max-width')?options.wide===false:options.wide!==false}),getComputedStyle:n=>({display:n.hidden?'none':'block',visibility:'visible'})};let url=item.url,patch={},calls=[];
  const update=(next=url,nextPatch=patch)=>{url=next;patch=nextPatch;ui.update({...f.core.readSettings(f.state),...patch},url);};
- const ui=f.c.HikikomoriNoteUi.create(doc,win,{copyArticle:async()=>{},addCurrentArticle:async(groupId,articleId,canonical,title)=>{calls.push({groupId,articleId,url:canonical,title});if(options.unconfirmed)throw Object.assign(Error('unknown'),{code:'UNCONFIRMED'});await f.add(groupId,{type:'article',articleId,url:canonical,title});update();},refresh:async()=>{options.unconfirmed=false;}});update();
+ const ui=f.c.HikikomoriNoteUi.create(doc,win,{copyArticle:async()=>{},addCurrentArticle:async(groupId,articleId,canonical,title,position)=>{calls.push({groupId,articleId,url:canonical,title,position});if(options.unconfirmed)throw Object.assign(Error('unknown'),{code:'UNCONFIRMED'});await f.add(groupId,{type:'article',articleId,url:canonical,title,position});update();},refresh:async()=>{options.unconfirmed=false;}});update();
  return{...f,backend:f,doc,win,options,ui,update,calls,get block(){return doc.querySelector('[class~="hikikomori-note-article-favorite-profile"]');},get toggle(){return doc.querySelector('[class="hikikomori-note-article-following-row"]')?.querySelector('button');},get select(){return this.block?.querySelector('select');},get add(){return this.block?.querySelectorAll('button')[0];}};
 }
 
@@ -60,8 +60,29 @@ test('設定画面は&タイトルを安全に表示し、既存の削除・並�
 });
 test('記事ページの&はTLの前、4グループから登録して本文を保存せず登録済みになる',async()=>{
  const f=articleUi();assert.equal(f.toggle.textContent,'&');assert.equal(f.toggle.parentElement.children[0],f.toggle);assert.equal(f.block.hidden,true);f.toggle.onclick();assert.equal(f.block.hidden,false);assert.equal(f.toggle.getAttribute('aria-expanded'),'true');assert.equal(f.select.children.length,5);
- f.select.value='group3';f.select.onchange();assert.equal(f.add.disabled,false);await f.add.onclick();assert.deepEqual(f.backend.state.tagGroups[2].tags,[item]);assert.ok(!JSON.stringify(f.backend.state).includes('ARTICLE_BODY_MUST_NOT_BE_STORED'));assert.equal(f.add.disabled,true);assert.match(f.add.textContent,/登録済み/);assert.equal(f.calls.length,1);
+ f.select.value='group3';f.select.onchange();assert.equal(f.add.disabled,false);await f.add.onclick();assert.deepEqual(f.backend.state.tagGroups[2].tags,[item]);assert.ok(!JSON.stringify(f.backend.state).includes('ARTICLE_BODY_MUST_NOT_BE_STORED'));assert.equal(f.add.disabled,true);assert.match(f.block.textContent,/登録済み/);assert.equal(f.calls.length,1);
  f.block.fire('keydown',{key:'Escape'});assert.equal(f.block.hidden,true);
+});
+test('記事の追加位置を選べ、保存中と登録済みは両方のボタンを無効にする',async()=>{
+ for(const [wide,buttonIndex,position,expected] of [[true,0,'start',[item,'First','Last']],[false,1,'end',['First','Last',item]]]){
+  const f=articleUi({wide});
+  f.backend.state.tagGroups[1].tags=['First','Last'];
+  if(!wide)f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]').onclick();
+  f.toggle.onclick();
+  const buttons=f.block.querySelectorAll('button').slice(0,2);
+  assert.deepEqual(buttons.map(button=>button.textContent),['先頭に追加','末尾に追加']);
+  assert.ok(buttons.every(button=>button.disabled));
+  f.select.value='group2';f.select.onchange();
+  assert.ok(buttons.every(button=>!button.disabled));
+  const saving=buttons[buttonIndex].onclick();
+  assert.ok(buttons.every(button=>button.disabled));
+  await buttons[1-buttonIndex].onclick();
+  await saving;
+  assert.equal(f.calls.length,1);
+  assert.equal(f.calls[0].position,position);
+  assert.deepEqual(f.backend.state.tagGroups[1].tags,expected);
+  assert.ok(buttons.every(button=>button.disabled));
+ }
 });
 test('記事登録フォームは狭幅でも&＋TLの先頭行に置き、幅変更で選択・開閉を維持する',()=>{
  const options={wide:false},f=articleUi(options),toggle=f.toggle,block=f.block;f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]').onclick();toggle.onclick();f.select.value='group2';f.select.onchange();assert.equal(f.toggle,toggle);assert.equal(block.parentElement.className,'hikikomori-note-article-mobile');assert.equal(block.parentElement.children[0],toggle.parentElement);
@@ -72,7 +93,7 @@ test('非記事・プレビュー・URL/DOM不一致・タイトル不明・OFF�
  f.doc.getElementById('title').textContent='';f.update(item.url,{});assert.equal(Boolean(f.block),false);f.doc.getElementById('title').textContent=item.title;f.update();assert.ok(f.block);f.ui.stop();assert.equal(Boolean(f.block),false);assert.equal(Boolean(f.toggle),false);
 });
 test('保存結果不明は自動再送せず状態再確認を出し、リトライ後に登録できる',async()=>{
- const options={unconfirmed:true},f=articleUi(options);f.toggle.onclick();f.select.value='group1';f.select.onchange();await f.add.onclick();assert.equal(f.add.disabled,true);assert.equal(f.calls.length,1);await f.add.onclick();assert.equal(f.calls.length,1);const refresh=f.block.querySelectorAll('button')[1];assert.equal(refresh.hidden,false);await refresh.onclick();assert.equal(f.add.disabled,false);await f.add.onclick();assert.equal(f.backend.writes,1);
+ const options={unconfirmed:true},f=articleUi(options);f.toggle.onclick();f.select.value='group1';f.select.onchange();await f.add.onclick();assert.equal(f.add.disabled,true);assert.equal(f.calls.length,1);await f.add.onclick();assert.equal(f.calls.length,1);const refresh=f.block.querySelectorAll('button')[2];assert.equal(refresh.hidden,false);await refresh.onclick();assert.equal(f.add.disabled,false);await f.add.onclick();assert.equal(f.backend.writes,1);
 });
 
 
@@ -87,7 +108,10 @@ test('記事登録メッセージはIDと正規URLを検証し、保存直前の
  const c=vm.createContext({console,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>f.controller}});vm.runInContext(source('src/background.js'),c);await flush();
  const patch={groupId:'group1',articleId:item.articleId,url:item.url,title:item.title,pageUrl:item.url};const send=(p=patch,sender={note:true},type='add-current-article')=>new Promise(resolve=>{if(handler({type,patch:p},sender,resolve)===false)resolve(null);});
  assert.equal(await send(patch,{home:true}),null);assert.equal(await send(patch,{note:false}),null);assert.equal((await send({...patch,articleId:'nOther'})).ok,false);assert.equal((await send({...patch,url:'https://note.com/another/n/n123'})).ok,false);assert.equal(f.writes,0);
- checks=0;changed=true;assert.equal((await send()).ok,false);assert.equal(f.writes,0);checks=0;changed=false;assert.equal((await send()).ok,true);assert.equal(f.writes,1);
+ checks=0;changed=true;assert.equal((await send()).ok,false);assert.equal(f.writes,0);
+ checks=0;changed=false;assert.equal((await send({...patch,position:'middle'})).ok,false);assert.equal(f.writes,0);
+ f.state.tagGroups[0].tags=['Tag'];
+ assert.equal((await send({...patch,position:'start'})).ok,true);assert.equal(f.writes,1);assert.deepEqual(f.state.tagGroups[0].tags,[item,'Tag']);
  const fresh=backend();const options={requireEnabled:true,currentArticleId:item.articleId,currentArticleUrl:item.url,validateCurrent:async()=>false};await assert.rejects(fresh.add('group1',item,options));assert.equal(fresh.writes,0);
  assert.equal((await send({type:'ADD_ARTICLE',groupId:'group2',articleId:item.articleId,url:item.url,title:item.title},{home:true},'tag-operation')).ok,false);
 });
@@ -107,7 +131,7 @@ test('別グループへの同時登録も書込キューで1件だけ保存す�
 });
 test('記事タイトル変更を次の登録に反映し、追跡パラメータや本文は保存しない',async()=>{
  const f=articleUi();f.doc.getElementById('title').textContent='Updated title';f.update(item.url+'?tracking=secret#section');f.toggle.onclick();f.select.value='group1';f.select.onchange();await f.add.onclick();assert.equal(f.calls[0].title,'Updated title');assert.equal(f.calls[0].url,item.url);assert.ok(!JSON.stringify(f.backend.state).includes('secret'));
- f.select.value='group4';f.select.onchange();assert.equal(f.add.disabled,true);assert.match(f.add.textContent,/グループ1に登録済み/);
+ f.select.value='group4';f.select.onchange();assert.equal(f.add.disabled,true);assert.match(f.block.textContent,/グループ1に登録済み/);
 });
 
 
