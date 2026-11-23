@@ -500,12 +500,13 @@
     return { settings, applied, ignored };
   }
   function parseSettingsExport(text, current = defaultSettings()) { return inspectSettingsImport(text, current).settings; }
+  function favoriteClickPosition(event) { return event?.ctrlKey || event?.shiftKey ? "start" : "end"; }
   function settingsToken(settings) {
     return JSON.stringify([transferSettings(settings), settings.groupSelectionRevision, settings.tagGroupsRevision, settings.authorDisplayRevision ?? 0]);
   }
   globalThis.HikikomoriNote = Object.freeze({ settingsKey, isHome, isDashboard, shouldRedirect, normalizeUserId, readSettings, profileUrl,
     modeOf, operationModes, availableGroups, selectedGroupId, groupSymbols, themeOf, usesTags, usesFollowing, usesLogoBack,
     exportSettings, parseSettingsExport, inspectSettingsImport, settingsToken, authorId, authorName, isSelf, authorRule, authorLabel, sortAuthors,
-    favorite, favoriteKey, favoriteLabel, favoriteUrl, authorSearchUrl, searchedAuthor, favoriteUser, favoriteMagazine, favoriteMembership, favoriteArticle, articleAddress, favoriteSchema, bookIconPath, membershipIconPath, membershipPage, questionPage,
+    favorite, favoriteKey, favoriteLabel, favoriteUrl, favoriteClickPosition, authorSearchUrl, searchedAuthor, favoriteUser, favoriteMagazine, favoriteMembership, favoriteArticle, articleAddress, favoriteSchema, bookIconPath, membershipIconPath, membershipPage, questionPage,
     normalizeTag, normalizeTagCandidates, addableTag, inspectTags, tagUrl, articleSearchTabUrl, pageKind, hasFavoriteMenu, isArticle, isPreviewArticle, groupIds, groupName, normalizeGroupName, selectedGroup, defaultSettings });
 })();

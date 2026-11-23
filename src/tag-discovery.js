@@ -78,15 +78,15 @@
     const count = doc.createElement("p"), status = doc.createElement("p");
     count.setAttribute("aria-live", "polite"); status.setAttribute("role", "status");
     const tools = doc.createElement("div"); tools.className = "hikikomori-note-tag-tools";
-    const all = doc.createElement("button"), none = doc.createElement("button"), addFirst = doc.createElement("button"), addLast = doc.createElement("button"), close = doc.createElement("button"), refresh = doc.createElement("button");
-    for (const button of [all, none, addFirst, addLast, close, refresh]) button.type = "button";
+    const all = doc.createElement("button"), none = doc.createElement("button"), save = doc.createElement("button"), close = doc.createElement("button"), refresh = doc.createElement("button");
+    for (const button of [all, none, save, close, refresh]) button.type = "button";
     all.textContent = "すべてON"; none.textContent = "すべてOFF"; close.textContent = "閉じる"; refresh.textContent = "状態を再確認"; refresh.hidden = true;
-    addFirst.textContent = "先頭に追加"; addLast.textContent = "末尾に追加";
+    save.setAttribute("title", "CtrlまたはShift＋クリックで先頭に追加");
     tools.append(all, none);
     const label = doc.createElement("label"), select = doc.createElement("select");
     label.textContent = "登録先グループ"; select.setAttribute("aria-label", "タグの一括登録先グループ"); label.append(select);
-    const controls = doc.createElement("div"); controls.className = "hikikomori-note-tag-tools"; controls.append(addFirst, addLast, close, refresh);
-    dialog.append(title, tools, list, label, count, controls, status);
+    const controls = doc.createElement("div"); controls.className = "hikikomori-note-tag-tools"; controls.append(save, close, refresh);
+    dialog.append(title, tools, list, count, label, status, controls);
     let state, selected = new Set(), candidates = [], busy = false, uncertain = false, opened = false, focusBefore, generation = 0, groupSignature;
     function update(value) {
       state = value;
@@ -109,8 +109,9 @@
         button.setAttribute("aria-pressed", String(selected.has(tag))); button.disabled = blocked;
         button.setAttribute("title", registered.has(tag) ? "登録済み（再登録はしません）" : `#${tag}`);
       }
-      count.textContent = `選択した${selected.size}件`;
-      addFirst.disabled = addLast.disabled = blocked || !group || !selected.size;
+      count.textContent = `${selected.size} / ${candidates.length}件選択`;
+      save.textContent = `選択した${selected.size}件を登録`;
+      save.disabled = blocked || !group || !selected.size;
       all.disabled = none.disabled = select.disabled = blocked;
       close.disabled = busy; refresh.disabled = busy;
       if (!core.usesTags(state)) status.textContent = "ひとみしりモードでお気に入りに登録できます。";
@@ -135,8 +136,9 @@
       catch (error) { status.textContent = error.message || "状態を確認できません。"; }
       finally { busy = false; update(state); }
     };
-    async function save(position) {
-      if (addFirst.disabled || !opened) return;
+    save.onclick = async event => {
+      if (save.disabled || !opened) return;
+      const position = core.favoriteClickPosition(event);
       const tags = candidates.filter(tag => selected.has(tag)), groupId = select.value, before = generation;
       busy = true; status.textContent = "保存中…"; update(state);
       try {
@@ -153,9 +155,7 @@
         refresh.hidden = !uncertain || !actions.refresh;
         status.textContent = error.message || "保存できませんでした。";
       } finally { busy = false; if (before === generation) update(state); }
-    }
-    addFirst.onclick = () => save("start");
-    addLast.onclick = () => save("end");
+    };
     return Object.freeze({
       open(tags, value) {
         if (busy) return false;

@@ -63,25 +63,25 @@ test('記事ページの&はTLの前、4グループから登録して本文を�
  f.select.value='group3';f.select.onchange();assert.equal(f.add.disabled,false);await f.add.onclick();assert.deepEqual(f.backend.state.tagGroups[2].tags,[item]);assert.ok(!JSON.stringify(f.backend.state).includes('ARTICLE_BODY_MUST_NOT_BE_STORED'));assert.equal(f.add.disabled,true);assert.match(f.block.textContent,/登録済み/);assert.equal(f.calls.length,1);
  f.block.fire('keydown',{key:'Escape'});assert.equal(f.block.hidden,true);
 });
-test('記事の追加位置を選べ、保存中と登録済みは両方のボタンを無効にする',async()=>{
- for(const [wide,buttonIndex,position,expected] of [[true,0,'start',[item,'First','Last']],[false,1,'end',['First','Last',item]]]){
+test('記事の追加ボタンは1つで、修飾キーで先頭、通常クリックで末尾に追加する',async()=>{
+ for(const [wide,event,position,expected] of [[true,{ctrlKey:true},'start',[item,'First','Last']],[false,{},'end',['First','Last',item]]]){
   const f=articleUi({wide});
   f.backend.state.tagGroups[1].tags=['First','Last'];
   if(!wide)f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]').onclick();
   f.toggle.onclick();
-  const buttons=f.block.querySelectorAll('button').slice(0,2);
-  assert.deepEqual(buttons.map(button=>button.textContent),['先頭に追加','末尾に追加']);
-  assert.ok(buttons.every(button=>button.disabled));
+  const button=f.add;
+  assert.deepEqual(f.block.querySelectorAll('button').filter(b=>!b.hidden).map(b=>b.textContent),['この記事を追加']);
+  assert.equal(button.disabled,true);
   f.select.value='group2';f.select.onchange();
-  assert.ok(buttons.every(button=>!button.disabled));
-  const saving=buttons[buttonIndex].onclick();
-  assert.ok(buttons.every(button=>button.disabled));
-  await buttons[1-buttonIndex].onclick();
+  assert.equal(button.disabled,false);
+  const saving=button.onclick(event);
+  assert.equal(button.disabled,true);
+  await button.onclick();
   await saving;
   assert.equal(f.calls.length,1);
   assert.equal(f.calls[0].position,position);
   assert.deepEqual(f.backend.state.tagGroups[1].tags,expected);
-  assert.ok(buttons.every(button=>button.disabled));
+  assert.equal(button.disabled,true);
  }
 });
 test('記事登録フォームは狭幅でも&＋TLの先頭行に置き、幅変更で選択・開閉を維持する',()=>{
@@ -93,7 +93,7 @@ test('非記事・プレビュー・URL/DOM不一致・タイトル不明・OFF�
  f.doc.getElementById('title').textContent='';f.update(item.url,{});assert.equal(Boolean(f.block),false);f.doc.getElementById('title').textContent=item.title;f.update();assert.ok(f.block);f.ui.stop();assert.equal(Boolean(f.block),false);assert.equal(Boolean(f.toggle),false);
 });
 test('保存結果不明は自動再送せず状態再確認を出し、リトライ後に登録できる',async()=>{
- const options={unconfirmed:true},f=articleUi(options);f.toggle.onclick();f.select.value='group1';f.select.onchange();await f.add.onclick();assert.equal(f.add.disabled,true);assert.equal(f.calls.length,1);await f.add.onclick();assert.equal(f.calls.length,1);const refresh=f.block.querySelectorAll('button')[2];assert.equal(refresh.hidden,false);await refresh.onclick();assert.equal(f.add.disabled,false);await f.add.onclick();assert.equal(f.backend.writes,1);
+ const options={unconfirmed:true},f=articleUi(options);f.toggle.onclick();f.select.value='group1';f.select.onchange();await f.add.onclick();assert.equal(f.add.disabled,true);assert.equal(f.calls.length,1);await f.add.onclick();assert.equal(f.calls.length,1);const refresh=f.block.querySelectorAll('button')[1];assert.equal(refresh.hidden,false);await refresh.onclick();assert.equal(f.add.disabled,false);await f.add.onclick();assert.equal(f.backend.writes,1);
 });
 
 

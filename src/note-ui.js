@@ -712,12 +712,10 @@
         toggle.setAttribute("aria-expanded", "false"); toggle.setAttribute("aria-controls", block.id);
         const label = doc.createElement("label"); label.textContent = "お気に入りに追加　登録先";
         const select = doc.createElement("select"); select.setAttribute("aria-label", "お気に入りの登録先グループ"); label.append(select);
-        const button = doc.createElement("button"); button.type = "button"; button.textContent = "末尾に追加";
-        const firstButton = doc.createElement("button"); firstButton.type = "button"; firstButton.textContent = "先頭に追加";
-        const registeredNotice = doc.createElement("p");
+        const button = doc.createElement("button"); button.type = "button";
         const status = doc.createElement("p"); status.setAttribute("role", "status");
         const refresh = doc.createElement("button"); refresh.type = "button"; refresh.textContent = "状態を再確認"; refresh.hidden = true;
-        const context = { block, toggle, select, button, firstButton, registeredNotice, status, refresh, owner, groupId: "", busy: false, uncertain: false };
+        const context = { block, toggle, select, button, status, refresh, owner, groupId: "", busy: false, uncertain: false };
         toggle.onclick = () => {
           if (favoriteProfile !== context) return;
           block.hidden = !block.hidden; toggle.setAttribute("aria-expanded", String(!block.hidden));
@@ -727,8 +725,9 @@
           if (event.key === "Escape") { event.preventDefault(); block.hidden = true; toggle.setAttribute("aria-expanded", "false"); toggle.focus(); }
         };
         select.onchange = () => { context.groupId = select.value; status.textContent = ""; repaint(); };
-        const addFavorite = async (control, position) => {
-          if (favoriteProfile !== context || context.busy || context.uncertain || control.disabled) return;
+        button.onclick = async event => {
+          if (favoriteProfile !== context || context.busy || context.uncertain || button.disabled) return;
+          const position = core.favoriteClickPosition(event);
           context.busy = true; const groupId = context.groupId, user = context.owner; status.textContent = "保存しています…"; repaint();
           try {
             if (article) await actions.addCurrentArticle(groupId, user.articleId, user.url, user.title, position);
@@ -740,8 +739,6 @@
           catch (error) { context.uncertain = error.code === "UNCONFIRMED"; if (favoriteProfile === context) status.textContent = `${error.message || "保存できませんでした。"} 「状態を再確認」で確認してください。`; refresh.hidden = false; }
           finally { context.busy = false; repaint(); }
         };
-        button.onclick = () => addFavorite(button, "end");
-        firstButton.onclick = () => addFavorite(firstButton, "start");
         refresh.onclick = async () => {
           if (context.busy || favoriteProfile !== context) return;
           context.busy = true; repaint();
@@ -749,9 +746,7 @@
           catch { status.textContent = "状態を確認できませんでした。"; }
           finally { context.busy = false; repaint(); }
         };
-        const buttons = doc.createElement("div"); buttons.className = "hikikomori-note-favorite-add-buttons";
-        buttons.append(firstButton, button);
-        block.append(label, buttons, registeredNotice, status, refresh);
+        block.append(label, button, status, refresh);
         // 記事フォームは記事メニューの配置確定後に移す。
         if (membership) {
           const mount = doc.createElement("div"); mount.setAttribute(owned, ""); mount.className = "hikikomori-note-membership-controls";
@@ -773,9 +768,10 @@
       const registeredGroup = article ? settings.tagGroups.find(g => g.tags.some(item => core.favoriteKey(item) === key)) : null;
       const registered = article ? Boolean(registeredGroup) : group?.tags.some(item => core.favoriteKey(item) === key);
       context.button.disabled = !group || registered || context.busy || context.uncertain || Boolean(settings.tagWarning);
-      context.firstButton.disabled = context.button.disabled;
-      context.registeredNotice.hidden = !registered;
-      context.registeredNotice.textContent = registeredGroup ? `${core.groupName(registeredGroup)}に登録済み` : registered ? "登録済み" : "";
+      const addLabel = article ? "この記事を追加" : membership ? "このメンバーシップを追加" : magazine ? "このマガジンを追加" : "この作者を追加";
+      context.button.textContent = context.busy ? "保存中…" : registeredGroup ? `${core.groupName(registeredGroup)}に登録済み` : registered ? "登録済み" : addLabel;
+      if (registered) context.button.removeAttribute("title");
+      else context.button.setAttribute("title", "CtrlまたはShift＋クリックで先頭に追加");
       context.select.disabled = context.busy || context.uncertain || Boolean(settings.tagWarning);
       context.refresh.disabled = context.busy || !actions.refresh;
     }
@@ -848,7 +844,6 @@
       syncHeaderSidebars(targets, url);
     }
     function repaint() { if (!disposed && currentSettings) update(currentSettings, currentUrl); }
-    function favoriteClickPosition(event) { return event?.ctrlKey || event?.shiftKey ? "start" : "end"; }
     async function addTag(tag, position) {
       if (adding || uncertain || !currentSettings?.enabled || !core.usesTags(currentSettings) ||
           currentSettings.tagWarning || core.addableTag(currentUrl) !== tag) return;
@@ -2272,7 +2267,7 @@
             const label = `${authorCard.name || activeAuthor}を${core.groupSymbols[core.groupIds.indexOf(group.id)]} ${core.groupName(group)}に追加`;
             add.setAttribute("aria-label", label); add.setAttribute("title", `${label}（CtrlまたはShift＋クリックで先頭に追加）`);
             add.disabled = adding || uncertain || Boolean(settings.tagWarning) || Boolean(settings.groupSelectionInvalid);
-            add.onclick = event => { void addSearchedUser(activeAuthor, favoriteClickPosition(event)); };
+            add.onclick = event => { void addSearchedUser(activeAuthor, core.favoriteClickPosition(event)); };
             row.append(add, following); menu.append(row);
           } else menu.append(following);
           if (activeAuthor) {
@@ -2302,7 +2297,7 @@
                 button.setAttribute("aria-label", label); button.setAttribute("title", `${label}（CtrlまたはShift＋クリックで先頭に追加）`);
                 button.disabled = !normalized || adding || uncertain || Boolean(settings.tagWarning) || settings.groupSelectionInvalid || !actions.addCurrentTag;
                 button.setAttribute("data-tag-add", "");
-                button.onclick = event => { void addTag(addableTag, favoriteClickPosition(event)); };
+                button.onclick = event => { void addTag(addableTag, core.favoriteClickPosition(event)); };
                 const row = doc.createElement("div"); row.className = "hikikomori-note-profile-actions";
                 row.append(button, following); menu.prepend(row);
               }

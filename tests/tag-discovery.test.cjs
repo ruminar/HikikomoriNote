@@ -46,27 +46,27 @@ test('一括保存の同時操作・失敗・非表示グループ・モード�
 test('共通ダイアログは全OFFで開き選択・全ON/OFF・登録数と保存結果を表示する',async()=>{
  const initial=runtime().core.defaultSettings();initial.tagGroups[0].tags=['X','Y'];
  const f=dialogFixture({initial});const count=f.doc.querySelector('[aria-live="polite"]');
- assert.equal(count.textContent,'選択した0件');assert.equal(f.find('先頭に追加').disabled,true);assert.equal(f.find('末尾に追加').disabled,true);
+ assert.equal(count.textContent,'0 / 2件選択');assert.equal(f.find('選択した0件を登録').disabled,true);assert.equal(f.find('先頭に追加'),undefined);assert.equal(f.find('末尾に追加'),undefined);
  const candidates=f.doc.querySelectorAll('[data-tag-candidate]');assert.ok(candidates.every(b=>b.getAttribute('aria-pressed')==='false'));
- candidates[1].onclick();assert.equal(count.textContent,'選択した1件');assert.equal(f.find('末尾に追加').disabled,false);
- f.find('すべてON').onclick();assert.equal(count.textContent,'選択した2件');f.find('すべてOFF').onclick();assert.equal(f.find('末尾に追加').disabled,true);
+ candidates[1].onclick();assert.equal(count.textContent,'1 / 2件選択');assert.equal(f.find('選択した1件を登録').disabled,false);
+ f.find('すべてON').onclick();assert.equal(count.textContent,'2 / 2件選択');f.find('すべてOFF').onclick();assert.equal(f.find('選択した0件を登録').disabled,true);
  candidates[1].onclick();candidates[0].onclick();
- await f.find('先頭に追加').onclick();
+ await f.find('選択した2件を登録').onclick({ctrlKey:true});
  assert.equal(f.writes,1);assert.deepEqual(f.raw.tagGroups[0].tags,['A','B','X','Y']);assert.match(f.doc.querySelector('[role="status"]').textContent,/2件追加/);
- assert.equal(count.textContent,'選択した0件');assert.equal(f.find('先頭に追加').disabled,true);
- assert.equal(f.find('末尾に追加').disabled,true);f.dialog.open(['C'],f.core.readSettings(f.raw));assert.equal(f.doc.querySelectorAll('dialog').length,1);assert.equal(f.doc.querySelector('[data-tag-candidate]').getAttribute('aria-pressed'),'false');
+ assert.equal(count.textContent,'0 / 2件選択');assert.equal(f.find('選択した0件を登録').disabled,true);
+ f.dialog.open(['C'],f.core.readSettings(f.raw));assert.equal(f.doc.querySelectorAll('dialog').length,1);assert.equal(f.doc.querySelector('[data-tag-candidate]').getAttribute('aria-pressed'),'false');
 });
 test('ダイアログは連打を止め、結果不明では再確認まで再送せず、無効な保存先を選べない',async()=>{
  let release;const options={gate:new Promise(r=>release=r),unconfirmed:true},f=dialogFixture(options);
- f.find('すべてON').onclick();const save=f.find('末尾に追加'),first=f.find('先頭に追加'),pending=save.onclick();first.onclick();assert.equal(f.calls,1);assert.equal(save.disabled,true);assert.equal(first.disabled,true);release();await pending;
- assert.equal(save.disabled,true);assert.equal(first.disabled,true);assert.equal(f.find('状態を再確認').hidden,false);options.unconfirmed=false;await f.find('状態を再確認').onclick();assert.equal(save.disabled,false);
- await save.onclick();assert.equal(f.calls,2);f.dialog.update({...f.core.readSettings(f.raw),mode:'social'});assert.equal(f.find('末尾に追加').disabled,true);
+ f.find('すべてON').onclick();const save=f.find('選択した2件を登録'),pending=save.onclick();save.onclick({shiftKey:true});assert.equal(f.calls,1);assert.equal(save.disabled,true);release();await pending;
+ assert.equal(save.disabled,true);assert.equal(f.find('状態を再確認').hidden,false);options.unconfirmed=false;await f.find('状態を再確認').onclick();assert.equal(save.disabled,false);
+ await save.onclick();assert.equal(f.calls,2);f.dialog.update({...f.core.readSettings(f.raw),mode:'social'});assert.equal(f.find('選択した0件を登録').disabled,true);
 });
 test('設定のタグ登録支援は同じダイアログで保存し、プロンプトをクリップボードだけにコピーする',async()=>{
  const initial=runtime().core.defaultSettings();initial.tagGroups[0].tags=['既存タグ'];
  const f=homeFixture({state:initial});await flush();const n=f.nodes;n.get('nav-discovery').onclick();assert.equal(n.get('panel-discovery').hidden,false);
  n.get('tag-discovery-text').value='[#茶道][#散歩]';n.get('tag-discovery-check').onclick();const doc=f.document;
- doc.querySelectorAll('button').find(b=>b.textContent==='すべてON').onclick();await doc.querySelectorAll('button').find(b=>b.textContent==='先頭に追加').onclick();
+ doc.querySelectorAll('button').find(b=>b.textContent==='すべてON').onclick();await doc.querySelectorAll('button').find(b=>b.textContent==='選択した2件を登録').onclick({shiftKey:true});
  assert.deepEqual(f.state.tagGroups[0].tags,['茶道','散歩','既存タグ']);assert.ok(n.get('edit-tags').querySelectorAll('a').length>=2);
  await n.get('tag-discovery-copy').onclick();assert.match(f.copies.at(-1),/\[#茶道\]/);assert.deepEqual(f.moves,[]);
  doc.querySelectorAll('button').find(b=>b.textContent==='閉じる').onclick();n.get('tag-discovery-text').value='普通の文章';n.get('tag-discovery-check').onclick();assert.match(n.get('tag-discovery-status').textContent,/\[#タグ名\]/);
@@ -107,7 +107,7 @@ test('記事ボタンは全文取得の直下、共通ダイアログから追�
  const button=f.doc.querySelector('[data-hikikomori-note-article-tags]'),siblings=button.parentElement.children;
  assert.equal(siblings[siblings.indexOf(button)-1].textContent,'記事全文を取得');button.onclick();assert.equal(f.doc.querySelector('dialog').hidden,false);
  assert.equal(f.doc.querySelector('[data-tag-candidate]').textContent,'#AI');assert.equal(f.doc.querySelector('[data-tag-candidate]').getAttribute('aria-pressed'),'false');
- f.doc.querySelector('[data-tag-candidate]').onclick();await f.doc.querySelectorAll('button').find(b=>b.textContent==='末尾に追加').onclick();
+ f.doc.querySelector('[data-tag-candidate]').onclick();await f.doc.querySelectorAll('button').find(b=>b.textContent==='選択した1件を登録').onclick();
  assert.deepEqual(calls,[[f.url,'end']]);assert.deepEqual(back.raw.tagGroups[0].tags,['Existing','AI']);
  f.ui.update({...settings,enabled:false},f.url);assert.equal(f.doc.querySelector('dialog').hidden,true);f.ui.update(settings,f.url);f.doc.querySelector('[data-hikikomori-note-article-tags]').onclick();
  f.ui.update(settings,'https://note.com/test/n/n456');assert.equal(f.doc.querySelector('dialog').hidden,true);f.ui.stop();assert.equal(f.doc.querySelector('dialog'),null);
@@ -132,10 +132,10 @@ test('背景メッセージは専用ホームと現在記事だけを許可し�
 test('共通ダイアログは8グループ・外部変更・閉じた後の保存結果を扱い、安全に文字描画する',async()=>{
  const r=runtime(),initial=r.core.readSettings({...r.core.defaultSettings(),mode:'normal-double'}),f=dialogFixture({initial,tags:['<img src=x onerror=alert(1)>']});
  assert.equal(f.doc.querySelector('select').children.length,8);assert.equal(f.doc.querySelector('[data-tag-candidate]').textContent,'#<img src=x onerror=alert(1)>');assert.equal(f.doc.querySelector('img'),null);
- const select=f.doc.querySelector('select');select.value='group8';select.onchange();f.find('すべてON').onclick();await f.find('末尾に追加').onclick();assert.deepEqual(f.raw.tagGroups[7].tags,['<img src=x onerror=alert(1)>']);
+ const select=f.doc.querySelector('select');select.value='group8';select.onchange();f.find('すべてON').onclick();await f.find('選択した1件を登録').onclick();assert.deepEqual(f.raw.tagGroups[7].tags,['<img src=x onerror=alert(1)>']);
  f.dialog.update({...f.core.readSettings(f.raw),mode:'normal'});assert.equal(select.children.length,4);assert.equal(select.value,'group1');
  f.dialog.update({...f.core.readSettings(f.raw),tagWarning:'破損'});assert.equal(f.find('すべてON').disabled,true);
- let release;const g=dialogFixture({gate:new Promise(r=>release=r)});g.find('すべてON').onclick();const pending=g.find('末尾に追加').onclick();g.dialog.close();release();await pending;assert.equal(g.doc.querySelector('dialog').hidden,true);
+ let release;const g=dialogFixture({gate:new Promise(r=>release=r)});g.find('すべてON').onclick();const pending=g.find('選択した2件を登録').onclick();g.dialog.close();release();await pending;assert.equal(g.doc.querySelector('dialog').hidden,true);
 });
 test('一括結果は入力内の重複と不正候補も件数に反映し、無効化・競合では変更しない',async()=>{
  const f=storage(),result=await f.controller.tag({type:'ADD_TAGS',groupId:'group1',tags:['A','#A','  ','B']});assert.deepEqual(plain(result.bulkTagReport),{added:2,duplicates:1,skipped:1});
