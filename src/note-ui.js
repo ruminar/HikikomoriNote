@@ -214,6 +214,53 @@
     let host, menu, signature, favoriteScrollHost;
     const favoriteScroll = "data-hikikomori-note-favorite-scroll", favoriteScrollList = "data-hikikomori-note-favorite-scroll-list";
     const favoriteScrollContainer = "data-hikikomori-note-favorite-scroll-host";
+    const favoriteScrollKey = "hikikomori-note:favorites-scroll";
+    const favoritePositions = new Map();
+    let renderedFavorites, lastFavoriteGroupId;
+    try {
+      const saved = JSON.parse(win.sessionStorage?.getItem(favoriteScrollKey) || "{}");
+      for (const id of core.groupIds) {
+        const top = saved?.[id];
+        if (Number.isFinite(top) && top >= 0) favoritePositions.set(id, top);
+      }
+    } catch { /* セッション領域を使えない場合は同じ文書内で保持する。 */ }
+    function rememberFavoritePosition() {
+      if (!renderedFavorites || renderedFavorites.pending) return;
+      const { list, groupId } = renderedFavorites;
+      if (list.isConnected && list.clientHeight > 0) favoritePositions.set(groupId, Math.max(0, list.scrollTop));
+    }
+    function saveFavoritePositions() {
+      rememberFavoritePosition();
+      if (!favoritePositions.size) return;
+      try { win.sessionStorage?.setItem(favoriteScrollKey, JSON.stringify(Object.fromEntries(favoritePositions))); }
+      catch { /* 同じ文書内の復元は続ける。 */ }
+    }
+    win.addEventListener?.("pagehide", saveFavoritePositions);
+    function restoreFavoritePosition() {
+      if (!renderedFavorites?.pending || !(renderedFavorites.list.clientHeight > 0)) return;
+      const { list, groupId, reveal } = renderedFavorites;
+      renderedFavorites.pending = false;
+      list.scrollTop = favoritePositions.get(groupId) ?? 0;
+      const active = reveal && list.querySelector('[aria-current="page"]');
+      if (active) {
+        // scrollIntoViewはページ本体まで移動させるので、一覧だけを調整する。
+        const top = list.getBoundingClientRect().top + list.clientTop;
+        const bottom = top + list.clientHeight;
+        const rect = active.getBoundingClientRect();
+        if (rect.top < top) list.scrollTop += rect.top - top;
+        else if (rect.bottom > bottom) list.scrollTop += rect.bottom - bottom;
+      }
+    }
+    function trackFavoriteList(list, groupId) {
+      renderedFavorites = {
+        list, groupId, pending: true,
+        reveal: !favoritePositions.has(groupId) || (lastFavoriteGroupId !== undefined && lastFavoriteGroupId !== groupId)
+      };
+      lastFavoriteGroupId = groupId;
+      list.addEventListener("scroll", () => {
+        if (renderedFavorites?.list === list) rememberFavoritePosition();
+      }, { passive: true });
+    }
     function syncFavoriteScroll() {
       const list = menu?.querySelector(`[${favoriteScrollList}]`);
       const next = list ? host : undefined;
@@ -1901,6 +1948,7 @@
     }
     function restore() {
       clearMenuFavoriteDrag();
+      rememberFavoritePosition(); renderedFavorites = undefined;
       favoriteScrollHost?.removeAttribute(favoriteScrollContainer); favoriteScrollHost = undefined;
       menu?.remove(); menu = undefined; host = undefined; signature = undefined;
       for (const element of originals) element.removeAttribute(hidden);
@@ -1938,12 +1986,18 @@
     function closeMobile(focus = false) {
       clearMenuFavoriteDrag();
       if (!mobile) return;
+      if (host === mobile.panel && !mobile.panel.hidden && renderedFavorites && !renderedFavorites.pending) {
+        rememberFavoritePosition();
+        renderedFavorites.pending = true;
+        renderedFavorites.reveal = false;
+      }
       mobile.panel.hidden = true; mobile.button.setAttribute("aria-expanded", "false");
       if (focus) mobile.button.focus();
     }
     function removeMobile() {
       clearMenuFavoriteDrag();
       if (!mobile) return;
+      if (host === mobile.panel) rememberFavoritePosition();
       const focusInside = mobile.panel.contains(doc.activeElement) || doc.activeElement === mobile.button;
       mobile.button.remove(); mobile.panel.remove(); mobile.parent.removeAttribute("data-hikikomori-note-mobile-logo");
       if (focusInside && mobile.logo.isConnected) mobile.logo.focus();
@@ -1967,6 +2021,7 @@
         button.onclick = () => {
           if (!panel.hidden) { closeMobile(); return; }
           panel.hidden = false; button.setAttribute("aria-expanded", "true");
+          restoreFavoritePosition();
         };
         const escape = event => { if (event.key === "Escape") { event.preventDefault(); closeMobile(true); } };
         button.onkeydown = escape; panel.onkeydown = escape;
@@ -2195,6 +2250,7 @@
       }
       if (signature !== nextSignature) {
         clearMenuFavoriteDrag();
+        rememberFavoritePosition(); renderedFavorites = undefined;
         menu.replaceChildren();
         if (severe) {
           const profile = doc.createElement("a"), destination = core.profileUrl(settings.noteUserId);
@@ -2275,6 +2331,7 @@
             menu.append(selector);
             const name = doc.createElement("div"); name.className = "hikikomori-note-group-name"; name.textContent = core.groupName(group); name.setAttribute("title", name.textContent); menu.append(name);
             const list = doc.createElement("ul"); list.setAttribute(favoriteScrollList, ""); menu.append(list);
+            trackFavoriteList(list, group.id);
             if (menuFavoriteDropEnabled) bindMenuFavoriteListDrop(list);
             for (const tag of group.tags) {
               const item = doc.createElement("li"), link = doc.createElement("a");
@@ -2313,6 +2370,7 @@
         }
       }
       for (const element of originals) if (!element.isConnected || element.parentElement !== host) { element.removeAttribute(hidden); originals.delete(element); }
+      restoreFavoritePosition();
       pruneProfileLayout();
     }
     return Object.freeze({
@@ -2333,6 +2391,7 @@
         profilePromotionsDirty = true;
       },
       stop() {
+        win.removeEventListener?.("pagehide", saveFavoritePositions);
         syncSearchArticleFilter({ enabled: false }, currentUrl);
         clearRelatedTopics(); relatedSearchKey = undefined; relatedOpen = false;
         syncRelatedRoot(false);

@@ -14,6 +14,28 @@ async function fixture(patch = {}, options = {}) {
   const core = c.HikikomoriNote; let stored = { ...settingsData(plain(items)), tagSchemaVersion: 6, ...patch }, state = core.readSettings(stored);
   let url = options.url || "https://note.com/following", handler, writes = 0, checks = 0;
   const calls = [], doc = documentFromHtml(html), win = { wide: !options.mobile, matchMedia: q => ({ matches: q.includes("max-width") ? !win.wide : win.wide }), getComputedStyle: () => ({ display: "block" }) };
+  const windowEvents = new Map();
+  win.addEventListener = (type, listener) => windowEvents.set(type, listener);
+  win.removeEventListener = type => windowEvents.delete(type);
+  win.sessionStorage = options.sessionStorage;
+  if (options.scrollLayout) {
+    const create = doc.createElement.bind(doc);
+    doc.createElement = function(tag) {
+      const element = create(tag);
+      if (tag === "ul") {
+        element.scrollTop = element.clientTop = 0;
+        Object.defineProperty(element, "clientHeight", { get: () => element.closest('[class="hikikomori-note-mobile-panel"]')?.hidden ? 0 : 120 });
+        element.getBoundingClientRect = () => ({ top: 100, bottom: 220 });
+      }
+      if (tag === "a") element.getBoundingClientRect = () => {
+        const row = element.parentElement, list = row?.parentElement;
+        if (list?.tagName !== "UL") return { width: 180 };
+        const top = 100 + list.children.indexOf(row) * 40 - list.scrollTop;
+        return { top, bottom: top + 40, width: 180 };
+      };
+      return element;
+    };
+  }
   if (options.mobile) doc.getElementById("sidebar").width = 0;
   c.HikikomoriNoteBackgroundPlatform = {
     load: async () => stored, store: async value => { await options.saveGate; if (options.saveError) throw Error("save failed"); stored = plain(value); writes++; }, setRules: async () => {},
@@ -45,7 +67,7 @@ async function fixture(patch = {}, options = {}) {
   const group = id => menu()?.querySelector(`[data-group-id="${id}"]`);
   const rows = () => menu()?.querySelectorAll('[data-menu-favorite-item]') || [];
   const drag = (index = 0) => { const row = rows()[index], dataTransfer = { setData() {} }; const event = row.fire("dragstart", { dataTransfer }); return { row, dataTransfer, event }; };
-  return { c, core, doc, win, ui, options, calls, send, menu, group, rows, drag,
+  return { c, core, doc, win, ui, options, calls, send, menu, group, rows, drag, windowEvents,
     get state() { return stored; }, get writes() { return writes; }, get checks() { return checks; },
     update() { ui.update(state, url); }, set url(value) { url = value; },
     changed(patch) { stored = { ...stored, ...patch }; state = core.readSettings(stored); ui.update(state, url); }
@@ -259,4 +281,66 @@ test("スクロール用の外枠属性はモード変更・OFF・停止・メ�
  assert.match(css,/\[data-hikikomori-note-favorite-scroll-host\] \{ overflow-y: hidden !important/);
  assert.match(css,/ul\[data-hikikomori-note-favorite-scroll-list\][\s\S]*?overflow-y: auto/);
  assert.match(css,/mobile-panel > \.hikikomori-note-navigation\[data-hikikomori-note-favorite-scroll\][^}]*max-height: none/);
+});
+
+const favoriteList = f => f.menu().querySelector("[data-hikikomori-note-favorite-scroll-list]");
+function longFavoriteGroups() {
+  const { tagGroups } = settingsData();
+  tagGroups[0].tags = Array.from({ length: 16 }, (_, i) => `Tag${i}`);
+  tagGroups[1].tags = Array.from({ length: 16 }, (_, i) => `Other${i}`);
+  return tagGroups;
+}
+test("タグを開いたとき一覧の位置を復元し、同じタブの新しい文書へも引き継ぐ", async () => {
+  const data = new Map(), sessionStorage = { getItem: key => data.get(key), setItem: (key, value) => data.set(key, value) };
+  const f = await fixture({ tagGroups: longFavoriteGroups() }, { scrollLayout: true, sessionStorage });
+  const list = favoriteList(f);
+  list.scrollTop = 270;
+  list.fire("scroll");
+  const target = list.children[8].querySelector("a");
+  f.url = target.href;
+  f.update();
+  assert.notEqual(favoriteList(f), list);
+  assert.equal(favoriteList(f).scrollTop, 270);
+  assert.equal(favoriteList(f).querySelector('[aria-current="page"]').textContent, "# Tag8");
+  assert.equal(data.size, 0);
+  f.windowEvents.get("pagehide")();
+  assert.deepEqual(JSON.parse([...data.values()][0]), { group1: 270 });
+  const next = await fixture({ tagGroups: longFavoriteGroups() }, { url: target.href, scrollLayout: true, sessionStorage });
+  assert.equal(favoriteList(next).scrollTop, 270);
+  next.ui.stop();
+  assert.equal(next.windowEvents.has("pagehide"), false);
+});
+
+test("検索したまま別グループから戻ると、元の位置を使いハイライトが見切れる場合だけ調整する", async () => {
+  const f = await fixture({ tagGroups: longFavoriteGroups() }, { scrollLayout: true });
+  f.url = f.core.tagUrl("Tag8");
+  f.update();
+  favoriteList(f).scrollTop = 270;
+  f.group("group2").onclick(); await flush();
+  assert.equal(favoriteList(f).scrollTop, 0);
+  assert.equal(favoriteList(f).querySelector('[aria-current="page"]'), null);
+  favoriteList(f).scrollTop = 135;
+  f.group("group1").onclick(); await flush();
+  assert.equal(favoriteList(f).scrollTop, 270);
+  assert.equal(favoriteList(f).querySelector('[aria-current="page"]').textContent, "# Tag8");
+  favoriteList(f).scrollTop = 12;
+  f.group("group2").onclick(); await flush();
+  assert.equal(favoriteList(f).scrollTop, 135);
+  f.group("group1").onclick(); await flush();
+  assert.equal(favoriteList(f).scrollTop, 240);
+});
+
+test("ハンバーガーは閉じている間に一覧の位置を上書きせず、タグ遷移後に開くと復元する", async () => {
+  const f = await fixture({ tagGroups: longFavoriteGroups() }, { mobile: true, scrollLayout: true });
+  const toggle = f.doc.querySelector('[class="hikikomori-note-mobile-toggle"]');
+  toggle.onclick();
+  favoriteList(f).scrollTop = 305;
+  favoriteList(f).fire("scroll");
+  f.url = favoriteList(f).children[8].querySelector("a").href;
+  f.update();
+  assert.equal(f.menu().parentElement.hidden, true);
+  assert.equal(favoriteList(f).scrollTop, 0);
+  toggle.onclick();
+  assert.equal(favoriteList(f).scrollTop, 305);
+  assert.equal(favoriteList(f).querySelector('[aria-current="page"]').textContent, "# Tag8");
 });
