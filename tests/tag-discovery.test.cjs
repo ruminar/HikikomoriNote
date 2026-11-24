@@ -72,6 +72,34 @@ test('設定のタグ登録支援は同じダイアログで保存し、プロ�
  doc.querySelectorAll('button').find(b=>b.textContent==='閉じる').onclick();n.get('tag-discovery-text').value='普通の文章';n.get('tag-discovery-check').onclick();assert.match(n.get('tag-discovery-status').textContent,/\[#タグ名\]/);
  f.options.copyError=true;await n.get('tag-discovery-copy').onclick();assert.match(n.get('tag-discovery-status').textContent,/コピーできません/);
 });
+test('専用ホームは対象外モードでタグ登録支援を隠し、開いていた一括登録を閉じる',async()=>{
+ for(const [mode,panel] of [['severe','intro'],['social','settings']]){
+  const initial=homeFixture({hash:'#discovery',state:{mode}});await flush();
+  assert.equal(initial.nodes.get('nav-discovery').hidden,true);
+  initial.nodes.get('nav-discovery').onclick();
+  assert.equal(initial.nodes.get('panel-discovery').hidden,true);
+  assert.equal(initial.nodes.get('panel-'+panel).hidden,false);
+
+  const f=homeFixture(),n=f.nodes;await flush();
+  n.get('nav-discovery').onclick();
+  n.get('tag-discovery-text').value='[#茶道]';
+  n.get('tag-discovery-check').focus();
+  n.get('tag-discovery-check').onclick();
+  const dialog=f.document.querySelector('[class="hikikomori-note-tag-dialog"]');
+  assert.equal(dialog.hidden,false);
+  f.changed({mode});
+  assert.equal(dialog.hidden,true);
+  assert.equal(n.get('nav-discovery').hidden,true);
+  assert.equal(n.get('panel-discovery').hidden,true);
+  assert.equal(n.get('panel-'+panel).hidden,false);
+  assert.equal(f.document.activeElement,n.get('nav-settings'));
+  f.changed({mode:'normal-double'});
+  assert.equal(n.get('nav-discovery').hidden,false);
+  n.get('nav-discovery').onclick();
+  assert.equal(n.get('panel-discovery').hidden,false);
+  assert.equal(n.get('tag-discovery-text').value,'[#茶道]');
+ }
+});
 function articleFixture(bulkAddTags=async()=>{throw Error('not used');}){
  const f=runtime(),doc=documentFromHtml('<link rel="canonical" href="https://note.com/test/n/n123"><article id="note-article"><div data-note-key="n123"><h1></h1><div id="note-body"><p></p><ul data-testid="hashtag-list"><li><a data-name="Tag" href="/hashtag/body" id="body-tag"></a></li></ul></div></div><div id="hashtag-accordion"><ul data-testid="hashtag-list" id="real-tags"><li><a data-name="Tag" href="/hashtag/AI" id="real-tag"></a></li></ul></div><section><a href="/hashtag/contest" id="contest"></a></section></article><aside><ul data-testid="hashtag-list"><li><a data-name="Tag" href="/hashtag/other"></a></li></ul></aside>');
  doc.body=doc.root;doc.querySelector('h1').textContent='題';doc.getElementById('real-tag').textContent='#AI';doc.getElementById('body-tag').textContent='#body';doc.getElementById('contest').textContent='#contest';doc.getElementById('note-article').getBoundingClientRect=()=>({left:240,width:700});
@@ -111,6 +139,27 @@ test('記事ボタンは全文取得の直下、共通ダイアログから追�
  assert.deepEqual(calls,[[f.url,'end']]);assert.deepEqual(back.raw.tagGroups[0].tags,['Existing','AI']);
  f.ui.update({...settings,enabled:false},f.url);assert.equal(f.doc.querySelector('dialog').hidden,true);f.ui.update(settings,f.url);f.doc.querySelector('[data-hikikomori-note-article-tags]').onclick();
  f.ui.update(settings,'https://note.com/test/n/n456');assert.equal(f.doc.querySelector('dialog').hidden,true);f.ui.stop();assert.equal(f.doc.querySelector('dialog'),null);
+});
+test('記事メニューは対象外モードでタグ確認だけを外し、開いていたダイアログを閉じる',()=>{
+ const f=articleFixture(),settings=f.core.defaultSettings();
+ const tagButton=()=>f.doc.querySelector('[data-hikikomori-note-article-tags]');
+ f.ui.update({...settings,mode:'severe'},f.url);
+ assert.equal(tagButton(),null);
+ const copy=f.doc.querySelectorAll('button').find(b=>b.textContent==='記事全文を取得');
+ assert.ok(copy);
+ for(const mode of ['social','severe']){
+  f.ui.update({...settings,mode:'normal-double'},f.url);
+  const button=tagButton();
+  assert.ok(button);button.onclick();
+  const dialog=f.doc.querySelector('dialog');
+  assert.equal(dialog.hidden,false);
+  f.ui.update({...settings,mode},f.url);
+  assert.equal(tagButton(),null);
+  assert.equal(dialog.hidden,true);
+  assert.equal(copy.isConnected,true);
+  button.onclick();
+  assert.equal(dialog.hidden,true);
+ }
 });
 test('背景メッセージは専用ホームと現在記事だけを許可し、保存直前の遷移も拒否する',async()=>{
  const f=storage();let handler,current=true,checks=0,changeDuringSave=false;

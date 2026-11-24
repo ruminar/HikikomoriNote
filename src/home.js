@@ -107,7 +107,7 @@
   function selectView(name, focus = false) {
     if (dragTag) clearFavoriteDrag();
     if (!state && name !== "settings") return;
-    selected = state && !core.usesTags(state) && name === "tags" ? (core.modeOf(state) === "severe" ? "intro" : "settings") : name;
+    selected = state && !core.usesTags(state) && (name === "tags" || name === "discovery") ? (core.modeOf(state) === "severe" ? "intro" : "settings") : name;
     for (const view of views) {
       const button = byId(`nav-${view}`);
       if (view === selected) button.setAttribute("aria-current", "page");
@@ -131,10 +131,11 @@
     for (const row of byId("edit-tags").children) row.draggable = !tagBlocked;
     byId("retry").disabled = busy;
     byId("nav-transfer").disabled = !state;
-    byId("nav-discovery").disabled = !state;
-    byId("tag-discovery-check").disabled = blocked || !discovery;
-    byId("tag-discovery-clear").disabled = blocked || copyingPrompt;
-    byId("tag-discovery-copy").disabled = blocked || copyingPrompt || !discovery || Boolean(state?.tagWarning);
+    const discoveryBlocked = blocked || !core.usesTags(state);
+    byId("nav-discovery").disabled = !state || !core.usesTags(state);
+    byId("tag-discovery-check").disabled = discoveryBlocked || !discovery;
+    byId("tag-discovery-clear").disabled = discoveryBlocked || copyingPrompt;
+    byId("tag-discovery-copy").disabled = discoveryBlocked || copyingPrompt || !discovery || Boolean(state?.tagWarning);
     byId("nav-authors").disabled = !state;
     const authorBlocked = blocked || !state?.noteUserId || Boolean(state?.authorWarning);
     for (const id of ["authors-hidden", "authors-allowed"]) for (const button of byId(id).querySelectorAll("button")) {
@@ -292,12 +293,14 @@
     if (previous !== group.id) { dragTag = null; byId("favorite-operation-status").textContent = ""; }
     byId("group-name").value = currentDraft.nameDirty ? currentDraft.name : group.name;
     byId("group-name-form").hidden = !core.usesTags(state);
+    tagDialog?.update(state);
     const active = document.activeElement;
     const hiddenFocus = (!core.usesTags(state) &&
-      (byId("panel-tags").contains(active) || active === byId("nav-tags"))) ||
+      (byId("panel-tags").contains(active) || active === byId("nav-tags") ||
+        byId("panel-discovery").contains(active) || active === byId("nav-discovery"))) ||
       (!core.usesFollowing(state) && active === byId("following")) ||
       (core.modeOf(state) !== "social" && active === byId("official-home"));
-    if (!core.usesTags(state) && ((firstLoad && !["#settings", "#authors"].includes(location.hash)) || selected === "tags")) selected = core.modeOf(state) === "severe" ? "intro" : "settings";
+    if (!core.usesTags(state) && firstLoad && !["#settings", "#authors"].includes(location.hash)) selected = core.modeOf(state) === "severe" ? "intro" : "settings";
     if (core.modeOf(state) === "social" && selected === "intro") selected = "settings";
     if (core.usesTags(state) && selected === "intro") selected = "tags";
     for (const [field, id] of Object.entries(fields)) {
@@ -307,6 +310,7 @@
     }
     byId("home-menu").hidden = false;
     byId("nav-tags").hidden = !core.usesTags(state);
+    byId("nav-discovery").hidden = !core.usesTags(state);
     byId("page-links").hidden = false;
     byId("following").hidden = !core.usesFollowing(state);
     byId("official-home").hidden = core.modeOf(state) !== "social";
@@ -321,7 +325,7 @@
     const warning = state.tagWarning || (state.groupSelectionInvalid ? "保存済みの選択に異常があります。グループを選び直してください。" : "");
     byId("tag-warning").hidden = !warning; byId("tag-warning").textContent = warning;
     selectView(selected, hiddenFocus);
-    renderTags(); renderAuthors(); controls(); tagDialog?.update(state);
+    renderTags(); renderAuthors(); controls();
   }
   async function refresh() {
     if (busy) return;

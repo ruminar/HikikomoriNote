@@ -158,7 +158,7 @@
     };
     return Object.freeze({
       open(tags, value) {
-        if (busy) return false;
+        if (busy || !core.usesTags(value)) return false;
         candidates = core.normalizeTagCandidates(tags);
         if (!candidates.length) return false;
         if (!dialog.isConnected) (doc.body || doc.root).append(dialog);
@@ -174,7 +174,11 @@
         if (typeof dialog.showModal === "function") { if (!dialog.open) dialog.showModal(); } else dialog.setAttribute("open", "");
         (list.children[0] || close).focus(); return true;
       },
-      update(value) { if (opened) update(value); },
+      update(value) {
+        if (!opened) return;
+        if (!core.usesTags(value)) finish(true);
+        else update(value);
+      },
       close: () => finish(true),
       dispose() { finish(true); dialog.remove(); }
     });

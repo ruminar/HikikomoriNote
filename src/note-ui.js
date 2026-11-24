@@ -1581,6 +1581,26 @@
       }
       return dates.size === 1 ? [...dates][0] : "";
     }
+    function syncArticleTagAction(wrapper) {
+      const existing = wrapper.querySelector("[data-hikikomori-note-article-tags]");
+      if (!tagDialog || !core.usesTags(currentSettings)) { existing?.remove(); return; }
+      if (existing) return;
+      const status = wrapper.querySelector('span[role="status"]');
+      const tags = doc.createElement("button"); tags.type = "button"; tags.textContent = "記事タグを確認";
+      tags.setAttribute("data-hikikomori-note-article-tags", "");
+      tags.onclick = () => {
+        if (disposed || !currentSettings?.enabled || !core.usesTags(currentSettings) || !tags.isConnected) return;
+        try {
+          const url = win.location?.href || currentUrl;
+          const articles = globalThis.HikikomoriNoteArticles;
+          if (articles.page(url).url !== articles.page(currentUrl).url) throw new Error("現在の記事を確認してください。");
+          const candidates = discovery.articleTags(doc, url);
+          status.textContent = candidates.length ? "" : "この記事のタグはありません。";
+          if (candidates.length) { discoveryUrl = url; tagDialog.open(candidates, currentSettings); }
+        } catch (error) { status.textContent = error.message || "記事タグを取得できませんでした。"; }
+      };
+      wrapper.append(tags, status);
+    }
     function syncArticleActions(show, url) {
       if (!show || !core.isArticle(url) || typeof actions.copyArticle !== "function" || !globalThis.HikikomoriNoteArticles) { clearArticleActions(); return; }
       let key;
@@ -1593,6 +1613,7 @@
       if (articleActions?.isConnected) {
         if (core.usesFollowing(currentSettings)) articleActions.removeAttribute("data-hikikomori-note-actions-only");
         else articleActions.setAttribute("data-hikikomori-note-actions-only", "");
+        syncArticleTagAction(articleActions);
         syncArticleAdjacent(articleActions, url); return;
       }
       const wrapper = doc.createElement("div"), copy = doc.createElement("button"), status = doc.createElement("span");
@@ -1628,23 +1649,9 @@
         };
         wrapper.append(link);
       }
-      wrapper.append(copy);
-      if (tagDialog) {
-        const tags = doc.createElement("button"); tags.type = "button"; tags.textContent = "記事タグを確認";
-        tags.setAttribute("data-hikikomori-note-article-tags", "");
-        tags.onclick = () => {
-          if (disposed || !currentSettings?.enabled || !wrapper.isConnected) return;
-          try {
-            const url = win.location?.href || currentUrl;
-            if (articles.page(url).url !== articles.page(currentUrl).url) throw new Error("現在の記事を確認してください。");
-            const candidates = discovery.articleTags(doc, url);
-            status.textContent = candidates.length ? "" : "この記事のタグはありません。";
-            if (candidates.length) { discoveryUrl = url; tagDialog.open(candidates, currentSettings); }
-          } catch (error) { status.textContent = error.message || "記事タグを取得できませんでした。"; }
-        };
-        wrapper.append(tags);
-      }
-      wrapper.append(status); doc.body.append(wrapper); articleActions = wrapper;
+      wrapper.append(copy, status);
+      syncArticleTagAction(wrapper);
+      doc.body.append(wrapper); articleActions = wrapper;
       syncArticleAdjacent(wrapper, url);
     }
     function syncArticleFollowing(settings, url) {
