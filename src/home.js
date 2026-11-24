@@ -124,6 +124,7 @@
     for (const id of ["normal", "save"]) byId(id).disabled = blocked;
     for (const id of Object.values(fields)) byId(id).disabled = !state || uncertain || (busy && ["settings", "import"].includes(pendingState));
     byId("favorite-destination").disabled = tagBlocked;
+    byId("clear-favorite-group").disabled = tagBlocked || !core.selectedGroup(state).tags.length;
     byId("group-name").disabled = !state || uncertain || !core.usesTags(state) || Boolean(state.tagWarning) || (busy && pendingState === "import");
     byId("save-group-name").disabled = tagBlocked;
     for (const id of ["edit-groups"]) byId(id).querySelectorAll("button").forEach(button => { button.disabled = blocked || (state && !core.usesTags(state)) || Boolean(state?.tagWarning); });
@@ -153,6 +154,7 @@
     const group = core.selectedGroup(state), tags = group.tags;
     const destinations = core.availableGroups(state).filter(item => item.id !== group.id);
     if (!destinations.some(item => item.id === favoriteDestination)) favoriteDestination = "";
+    byId("clear-favorite-group").textContent = `${core.groupSymbols[core.groupIds.indexOf(group.id)]}の項目を全削除`;
     const destination = byId("favorite-destination"); destination.replaceChildren();
     const placeholder = document.createElement("option"); placeholder.value = ""; placeholder.textContent = "移動先を選択"; destination.append(placeholder);
     for (const item of destinations) {
@@ -401,6 +403,22 @@
     const value = byId("favorite-destination").value;
     favoriteDestination = core.availableGroups(state).some(group => group.id === value && group.id !== state.selectedTagGroupId) ? value : "";
     byId("favorite-destination").value = favoriteDestination; controls();
+  };
+  byId("clear-favorite-group").onclick = async () => {
+    if (byId("clear-favorite-group").disabled || byId("confirm-dialog").open) return;
+    const group = core.selectedGroup(state);
+    const symbol = core.groupSymbols[core.groupIds.indexOf(group.id)];
+    const operation = {
+      type: "CLEAR_TAG_GROUP",
+      groupId: group.id,
+      expectedTagGroupsRevision: state.tagGroupsRevision,
+      expectedGroupSelectionRevision: state.groupSelectionRevision
+    };
+    if (!await confirmChange(`${symbol} ${core.groupName(group)}の${group.tags.length}件をすべて削除しますか？`)) return;
+    await mutateTag(operation, {
+      successMessage: `${symbol}の項目をすべて削除しました。`,
+      focusFavorite: { index: 0 }
+    });
   };
   byId("edit-tags").ondragover = event => { if (favoriteDragValid()) event.preventDefault(); };
   byId("edit-tags").ondrop = event => {

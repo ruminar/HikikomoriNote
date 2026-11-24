@@ -18,6 +18,42 @@ function fixture(initial={},options={}) {
  return {core:context.HikikomoriNote,controller:restart(),restart,options,get stored(){return stored;},get rules(){return rules;},get writes(){return writes;}};
 }
 function eightGroups(tags=[]){return {tagSchemaVersion:7,tagGroups:Array.from({length:8},(_,i)=>({id:`group${i+1}`,name:'',tags:i===7?tags:[]})),selectedTagGroupId:'group1',groupSelectionRevision:0,tagGroupsRevision:0};}
+test('お気に入りの全削除は選択中の番号と件数を確認し、承認後にその項目だけを削除する', async () => {
+ const favorites = eightGroups(['Tag', {type:'user', userId:'writer', displayName:'作者'}]);
+ favorites.tagGroups[0].tags = ['Keep'];
+ favorites.tagGroups[7].name = '読みたいもの';
+ const h = homeFixture({hash:'#tags', state:{...favorites, mode:'normal-double'}, confirm:() => false});
+ await flush();
+ const clear = h.nodes.get('clear-favorite-group');
+ assert.equal(clear.textContent, '①の項目を全削除');
+ h.nodes.get('edit-groups').querySelector('[data-group-id="group8"]').onclick();
+ await flush();
+ assert.equal(clear.textContent, '⑧の項目を全削除');
+ const destination = h.nodes.get('favorite-destination');
+ destination.value = 'group1';
+ destination.onchange();
+ await clear.onclick();
+ assert.match(h.confirmations.at(-1), /⑧ 読みたいものの2件/);
+ assert.deepEqual(h.state.tagGroups, favorites.tagGroups);
+ h.options.confirm = () => true;
+ await clear.onclick();
+ assert.deepEqual(h.state.tagGroups, favorites.tagGroups.map(group => group.id === 'group8' ? {...group, tags:[]} : group));
+ assert.equal(h.state.selectedTagGroupId, 'group8');
+ assert.equal(clear.disabled, true);
+ assert.match(h.nodes.get('favorite-operation-status').textContent, /⑧の項目をすべて削除/);
+});
+test('お気に入りの全削除は確認後に項目やグループ選択が変わった場合に保存しない', async () => {
+ const f = fixture(groups(['Keep']));
+ const operation = {type:'CLEAR_TAG_GROUP', groupId:'group1', expectedTagGroupsRevision:0, expectedGroupSelectionRevision:0};
+ await f.controller.tag({type:'ADD_TAG', groupId:'group1', tag:'New'});
+ await assert.rejects(f.controller.tag(operation), {code:'CONFLICT'});
+ const currentOperation = {...operation, expectedTagGroupsRevision:f.stored.tagGroupsRevision};
+ await f.controller.tag({type:'SELECT_TAG_GROUP', groupId:'group2'});
+ await f.controller.tag({type:'SELECT_TAG_GROUP', groupId:'group1'});
+ await assert.rejects(f.controller.tag({...currentOperation, expectedTagGroupsRevision:f.stored.tagGroupsRevision}), {code:'CONFLICT'});
+ assert.equal(f.writes, 3);
+ assert.deepEqual(f.stored.tagGroups[0].tags, ['Keep', 'New']);
+});
 test('2段モード保存で旧4グループを8へ一度だけ補完し、初期状態と読取のみは変更しない',async()=>{
  const f=fixture({...groups(['Keep'])});
  assert.equal(f.core.defaultSettings().mode,'normal');assert.equal(f.core.defaultSettings().tagGroups.length,4);

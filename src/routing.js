@@ -133,8 +133,8 @@
         return core.readSettings(next);
       }),
       tag: (operation, options = {}) => run(async () => {
-        if (!operation || ![...singleAddTypes, "ADD_TAGS", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP"].includes(operation.type) ||
-            Object.keys(operation).some(key => !["type", "tags", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "magazineId", "displayName", "articleId", "url", "title", "position"].includes(key)) ||
+        if (!operation || ![...singleAddTypes, "ADD_TAGS", "REMOVE_TAG", "MOVE_TAG", "TRANSFER_TAG", "SELECT_TAG_GROUP", "RENAME_TAG_GROUP", "CLEAR_TAG_GROUP"].includes(operation.type) ||
+            Object.keys(operation).some(key => !["type", "tags", "tag", "beforeTag", "groupId", "targetGroupId", "name", "expectedName", "userId", "magazineId", "displayName", "articleId", "url", "title", "position", "expectedTagGroupsRevision", "expectedGroupSelectionRevision"].includes(key)) ||
             !core.groupIds.includes(operation.groupId)) throw new Error("グループを指定して画面を再読み込みしてください。");
         if (Object.hasOwn(operation, "position") && (operation.type !== "ADD_TAGS" && !singleAddTypes.includes(operation.type) ||
             (operation.position !== undefined && !["start", "end"].includes(operation.position)))) throw new Error("お気に入りの追加位置を確認してください。");
@@ -195,6 +195,16 @@
           const name = core.normalizeGroupName(operation.name);
           if (name === group.name) return settings;
           group.name = name; return storeGroups();
+        }
+        if (operation.type === "CLEAR_TAG_GROUP") {
+          if (settings.selectedTagGroupId !== group.id ||
+              operation.expectedTagGroupsRevision !== settings.tagGroupsRevision ||
+              operation.expectedGroupSelectionRevision !== settings.groupSelectionRevision) {
+            throw failure("グループの内容や選択が変わりました。もう一度確認してください。", "CONFLICT");
+          }
+          if (!group.tags.length) return settings;
+          group.tags = [];
+          return storeGroups();
         }
         const tag = operation.type === "ADD_ARTICLE" ? core.favoriteArticle({ type: "article", articleId: operation.articleId, url: operation.url, title: operation.title }) : operation.type === "ADD_MEMBERSHIP" ? core.favoriteMembership({ type: "membership", userId: operation.userId, displayName: operation.displayName }) : operation.type === "ADD_MAGAZINE" ? core.favoriteMagazine({ type: "magazine", userId: operation.userId, magazineId: operation.magazineId, displayName: operation.displayName }) : operation.type === "ADD_USER" ? core.favoriteUser({ type: "user", userId: operation.userId, displayName: operation.displayName }) : operation.type === "ADD_TAG" ? core.normalizeTag(operation.tag) : core.favorite(operation.tag);
         const tags = group.tags;
