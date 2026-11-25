@@ -278,6 +278,46 @@ function accountMenuFixture(html=accountMenuHtml){
  return f;
 }
 const accountHidden='data-hikikomori-note-account-menu-hidden';
+test('アカウントメニューの本人検索はダッシュボード非表示のときだけ設定の左に出る',()=>{
+ const html=accountMenuHtml.replace(
+  '<a href="/sample"><span data-name="avatar"></span></a><a href="https://note.com/settings/account"></a>',
+  '<ul><li><a href="/sample"><span data-name="avatar"><img alt="サンプルさん"></span>クリエイターページ</a></li></ul><div id="account-controls"><a href="https://note.com/dashboard">ダッシュボード</a><a href="https://note.com/settings/account">設定</a></div>'
+ );
+ const f=accountMenuFixture(html),url='https://note.com/following';
+ const settings=f.core.readSettings({...groups(),noteUserId:'different_id',dashboardDisabled:true,hidePaidArticles:false,hideArticleRecommendations:false});
+ const row=f.doc.getElementById('account-controls'), profile=f.doc.querySelector('a[href="/sample"]');
+ const shortcut=()=>f.doc.querySelector('[class~="hikikomori-note-account-search"]');
+ f.ui.update({...settings,dashboardDisabled:false},url);
+ assert.equal(shortcut(),null);
+ f.ui.update(settings,url);
+ const link=shortcut();
+ assert.equal(row.children[0],link);
+ assert.equal(row.children[2].href,'https://note.com/settings/account');
+ assert.equal(link.textContent,'＠サンプルさん');
+ assert.equal(link.href,f.core.authorSearchUrl('sample'));
+ assert.equal(link.getAttribute('title'),'自分の記事を新着順で検索');
+ assert.equal(profile.href,'https://note.com/sample');
+ const refresh=()=>{f.ui.invalidatePaidCards();f.ui.update(settings,url);};
+ profile.href='/second_user';
+ profile.querySelector('img').setAttribute('alt','別の名前');
+ refresh();
+ assert.equal(shortcut(),link);
+ assert.equal(link.href,f.core.authorSearchUrl('second_user'));
+ assert.equal(link.textContent,'＠別の名前');
+ const root=f.doc.getElementById('account-menu');
+ root.remove();refresh();
+ assert.equal(link.parentElement,null);
+ f.doc.root.append(root);refresh();
+ assert.equal(f.doc.querySelectorAll('[class~="hikikomori-note-account-search"]').length,1);
+ f.ui.update({...settings,enabled:false},url);
+ assert.equal(shortcut(),null);
+ f.ui.update(settings,url);
+ f.ui.update({...settings,dashboardDisabled:false},url);
+ assert.equal(shortcut(),null);
+ f.ui.update(settings,url);
+ f.ui.stop();
+ assert.equal(shortcut(),null);
+});
 test('アカウントメニューは有料非表示とおすすめ非表示を個別に適用し、全モードで履歴・ヘルプ・ログアウトを残す',()=>{
  for(const mode of ['normal','normal-double','social','severe'])for(const paid of [false,true])for(const recommendations of [false,true]){
   const f=accountMenuFixture(),settings=f.core.readSettings({...groups(),mode,hidePaidArticles:paid,hideArticleRecommendations:recommendations});f.ui.update(settings,'https://note.com/search');

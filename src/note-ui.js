@@ -893,25 +893,60 @@
     const recommendations = new Set();
     const sidebarRoots = new Set();
     const accountMenuHidden = "data-hikikomori-note-account-menu-hidden", accountMenuTargets = new Set();
+    const accountSearchLinks = new Map();
     let accountMenuDirty = true, accountMenuSignature;
+    function syncAccountSearch(row, settingsLink, profile) {
+      const image = profile?.querySelector("img");
+      if (!image) return false;
+      let id, href;
+      try {
+        id = core.normalizeUserId(profile.href);
+        href = core.authorSearchUrl(id);
+      } catch { return false; }
+      const name = image.getAttribute("alt")?.trim() || id;
+      let link = accountSearchLinks.get(row);
+      if (!link) {
+        link = doc.createElement("a");
+        link.setAttribute(owned, "");
+        link.setAttribute("title", "自分の記事を新着順で検索");
+        link.append(doc.createElement("span"));
+        accountSearchLinks.set(row, link);
+      }
+      const className = `${settingsLink.className} hikikomori-note-account-search`;
+      if (link.className !== className) link.className = className;
+      if (link.href !== href) link.href = href;
+      if (link.textContent !== `＠${name}`) link.children[0].textContent = `＠${name}`;
+      if (row.children[0] !== link) row.prepend(link);
+      return true;
+    }
     function syncAccountMenu(settings) {
       const paid = settings.enabled && settings.hidePaidArticles === true;
       const recommendations = settings.enabled && settings.hideArticleRecommendations === true;
-      const signature = `${Boolean(paid)}:${Boolean(recommendations)}`;
+      const search = settings.enabled && settings.dashboardDisabled === true;
+      const signature = `${Boolean(paid)}:${Boolean(recommendations)}:${Boolean(search)}`;
       if (!accountMenuDirty && signature === accountMenuSignature) return;
       accountMenuDirty = false; accountMenuSignature = signature;
       const targets = new Set();
+      const searchRows = new Set();
       const isLink = (link, origin, path) => {
         try { const address = new URL(link.href); return address.origin === origin && !address.username && !address.password && address.pathname === path; }
         catch { return false; }
       };
-      if (paid || recommendations) for (const root of doc.querySelectorAll('div[class~="min-w-[262px]"]')) {
+      if (paid || recommendations || search) for (const root of doc.querySelectorAll('div[class~="min-w-[262px]"]')) {
         if (!hasClasses(root, ["py-6", "md:py-0"]) || root.closest("article") || root.closest('[id="note-body"]') || root.closest(`[${owned}]`)) continue;
         const links = [...root.querySelectorAll("a[href]")];
+        const settingsLink = links.find(a => isLink(a, "https://note.com", "/settings/account"));
         if (!root.querySelector('[data-name="avatar"]') ||
-            !links.some(a => isLink(a, "https://note.com", "/settings/account")) ||
+            !settingsLink ||
             !links.some(a => isLink(a, "https://note.com", "/logout") && a.textContent.trim() === "ログアウト")) continue;
         const sectionOf = element => [...root.children].find(section => section.contains(element) && hasClasses(section, ["border-border-weak", "border-t"]));
+        if (search) {
+          const row = settingsLink.parentElement, section = sectionOf(row);
+          if (section && links.some(a => a.parentElement === row && core.isDashboard(a.href))) {
+            const profile = [...section.querySelectorAll("a[href]")].find(a => a.querySelector('[data-name="avatar"]'));
+            if (syncAccountSearch(row, settingsLink, profile)) searchRows.add(row);
+          }
+        }
         for (const link of links) {
           if (paid && isLink(link, "https://note.com", "/settings/point_history") && link.querySelector('svg[aria-label="所持noteポイント"]')) {
             const row = link.parentElement, section = sectionOf(row);
@@ -938,6 +973,11 @@
       for (const target of accountMenuTargets) if (!targets.has(target)) target.removeAttribute(accountMenuHidden);
       accountMenuTargets.clear();
       for (const target of targets) { if (!target.hasAttribute(accountMenuHidden)) target.setAttribute(accountMenuHidden, ""); accountMenuTargets.add(target); }
+      for (const [row, link] of accountSearchLinks) {
+        if (searchRows.has(row)) continue;
+        link.remove();
+        accountSearchLinks.delete(row);
+      }
     }
     const notificationTitles = new Map();
     let notificationTitlesDirty = true, notificationRules, notificationEnabled;
@@ -2400,6 +2440,8 @@
         tagDialog?.dispose();
         for (const target of accountMenuTargets) target.removeAttribute(accountMenuHidden);
         accountMenuTargets.clear();
+        for (const link of accountSearchLinks.values()) link.remove();
+        accountSearchLinks.clear();
         for (const [button, state] of notificationTitles) restoreNotificationTitle(button, state);
         notificationTitles.clear();
         clearQuestionAuthor();
