@@ -2899,6 +2899,48 @@ test('お気に入りの移動中と成功時は右側だけ通知し、左メ�
 
 const searchedFavoriteUrl='https://note.com/search?q=from%3A%40sample_author+&context=note&mode=search&sort=new';
 const searchedFavorite={type:'user',userId:'sample_author',displayName:'Sample'};
+test('作者検索は結果の本人名が出るまで待ち、同じ検索ページで補完を連打しない',async()=>{
+ const unnamed={...searchedFavorite,displayName:''},calls=[];
+ const f=uiFixture(categorySidebarHtml,{async completeFavoriteUserName(...args){calls.push(args);}});
+ const settings=f.core.readSettings({...groups([unnamed]),tagSchemaVersion:3});
+ const refresh=()=>{f.ui.invalidatePaidCards();f.ui.update(settings,searchedFavoriteUrl);};
+ appendSearchAvatar(f,'other','別人');
+ const outside=appendSearchAvatar(f,'sample_author','検索結果の外');
+ f.doc.root.append(outside);
+ refresh();assert.deepEqual(calls,[]);
+ appendSearchAvatar(f,'SAMPLE_AUTHOR','Sample');
+ refresh();refresh();await flush();
+ assert.deepEqual(calls,[['sample_author','Sample',searchedFavoriteUrl]]);
+});
+test('表示名の補完は現在の検索作者の空欄だけを一度に更新し、別名・非表示グループ・順序を保持する',async()=>{
+ const unnamed={...searchedFavorite,displayName:''},initial=eightGroups([unnamed]);
+ initial.tagGroups[0].tags=['Before',{...unnamed,userId:'SAMPLE_AUTHOR'},'After'];
+ initial.tagGroups[1].tags=[{...searchedFavorite,displayName:'既存の名前'}];
+ initial.tagGroups[2].tags=[unnamed];
+ const back=fixture(initial);let handler,checks=0,changedPage=false;
+ const port={onInstalled(){},onStartup(){},onAction(){},onMessage(fn){handler=fn;},isHomeSender:s=>s.home===true,isNoteSender:s=>s.note===true,
+  currentMenuPage:async(sender,url)=>{checks++;return url===searchedFavoriteUrl&&!(changedPage&&checks>1)?{type:'search'}:null;}};
+ const context=vm.createContext({console,HikikomoriNote:back.core,HikikomoriNoteBackgroundPlatform:port,HikikomoriNoteRouting:{createController:()=>back.controller}});
+ vm.runInContext(source('src/background.js'),context);await flush();
+ const patch={userId:'sample_author',displayName:'Sample',pageUrl:searchedFavoriteUrl};
+ const send=(value=patch,sender={note:true})=>new Promise(resolve=>{
+  if(handler({type:'complete-favorite-user-name',patch:value},sender,resolve)===false)resolve(null);
+ });
+ assert.equal(await send(patch,{home:true}),null);
+ assert.equal((await send({...patch,userId:'other'})).ok,false);
+ assert.equal((await send({...patch,displayName:''})).ok,false);
+ checks=0;changedPage=true;
+ assert.equal((await send()).code,'CONFLICT');
+ assert.equal(back.writes,0);
+ changedPage=false;
+ assert.equal((await send()).ok,true);
+ assert.equal((await send({...patch,displayName:'上書きしない'})).ok,true);
+ assert.equal(back.writes,1);
+ assert.deepEqual(back.stored.tagGroups[0].tags,['Before',{...searchedFavorite,userId:'SAMPLE_AUTHOR'},'After']);
+ assert.deepEqual(back.stored.tagGroups[1].tags,initial.tagGroups[1].tags);
+ assert.deepEqual(back.stored.tagGroups[2].tags,[searchedFavorite]);
+ assert.deepEqual(back.stored.tagGroups[7].tags,[unnamed]);
+});
 test('作者検索の＠はTL直前の同じ行。作者名と選択グループを明示し、保存後に消える',async()=>{
  const back=fixture(groups(['Existing'])),calls=[];let settings;
  const f=uiFixture(categorySidebarHtml,{async addSearchedUser(groupId,selectionRevision,userId,displayName,position){calls.push({groupId,selectionRevision,userId,displayName,position});settings=await back.controller.tag({type:'ADD_USER',groupId,userId,displayName,position},{requireEnabled:true,currentUser:userId,selectionRevision,validateCurrent:async()=>true});f.ui.update(settings,searchedFavoriteUrl);}});

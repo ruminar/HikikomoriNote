@@ -20,6 +20,45 @@ test('提案文は角括弧・通常表記・隣接・改行・日本語・重�
  assert.deepEqual(plain(discovery.extract('```text\n[#茶道][#散歩]\n```')),['茶道','散歩']);
  assert.throws(()=>discovery.extract('a'.repeat(1048577)),/以内/);
 });
+test('ユーザーIDは明示形式からだけ抽出し、タグと混ぜても入力順を保つ',()=>{
+ const {discovery}=runtime();
+ assert.deepEqual(plain(discovery.extract('#先頭 [@First_ID][#小説]\n[@first_id]\n[@Second]\n@bare [@not valid] [@settings] [@日本語] [@link](https://note.com/link)')),[
+  '先頭',{type:'user',userId:'First_ID',displayName:''},'小説',{type:'user',userId:'Second',displayName:''}
+ ]);
+});
+test('共有テキストは同じタグに戻せる候補だけを元の順序で出力する',()=>{
+ const {discovery}=runtime();
+ const result=discovery.shareList(['長い タグ','途中]まで','(括弧あり)','C++','改行\nタグ','www.example.test','x'.repeat(1048576),'小説'],'tag');
+ assert.equal(result.skipped,5);
+ assert.equal(result.count,3);
+ assert.deepEqual(plain(discovery.extract(result.text)),['長い タグ','C++','小説']);
+});
+test('お気に入りのコピーは選択中のグループと種類に限り、空欄とコピー失敗を扱う',async()=>{
+ const initial=runtime().core.defaultSettings();
+ initial.tagSchemaVersion=4;
+ initial.tagGroups[0].tags=['Tag','その他',{type:'user',userId:'example',displayName:'共有しない名前'},{type:'magazine',userId:'mag_owner',magazineId:'m123',displayName:'マガジン'}];
+ initial.tagGroups[1].tags=[{type:'user',userId:'second',displayName:''}];
+ const f=homeFixture({state:initial,hash:'#tags'});await flush();
+ const tags=f.nodes.get('copy-group-tags'),users=f.nodes.get('copy-group-users'),status=f.nodes.get('favorite-operation-status');
+ assert.equal(tags.disabled,false);
+ assert.equal(users.disabled,false);
+ assert.equal(tags.getAttribute('title'),'このグループのタグをコピー');
+ await tags.onclick();
+ assert.equal(status.textContent,'タグを2件クリップボードにコピーしました。');
+ await users.onclick();
+ assert.deepEqual(f.copies,['[#Tag]\n[#その他]','[@example]']);
+ f.nodes.get('edit-groups').querySelector('[data-group-id="group2"]').onclick();
+ await flush();
+ assert.equal(tags.disabled,true);
+ await tags.onclick();
+ await users.onclick();
+ assert.deepEqual(f.copies,['[#Tag]\n[#その他]','[@example]','[@second]']);
+ f.options.copyError=true;
+ await users.onclick();
+ assert.equal(users.disabled,false);
+ assert.match(status.textContent,/コピーできませんでした/);
+ assert.deepEqual(f.state.tagGroups,plain(initial.tagGroups));
+});
 test('プロンプトは保存済み全グループのタグだけを含み、空でも追記して使える',()=>{
  const {discovery,core}=runtime(),settings=core.defaultSettings();
  settings.tagGroups[0].tags=['AI',{type:'user',userId:'secret_user',displayName:'秘密作者'}];
@@ -55,6 +94,19 @@ test('共通ダイアログは全OFFで開き選択・全ON/OFF・登録数と�
  assert.equal(f.writes,1);assert.deepEqual(f.raw.tagGroups[0].tags,['A','B','X','Y']);assert.match(f.doc.querySelector('[role="status"]').textContent,/2件追加/);
  assert.equal(count.textContent,'0 / 2件選択');assert.equal(f.find('選択した0件を登録').disabled,true);
  f.dialog.open(['C'],f.core.readSettings(f.raw));assert.equal(f.doc.querySelectorAll('dialog').length,1);assert.equal(f.doc.querySelector('[data-tag-candidate]').getAttribute('aria-pressed'),'false');
+});
+test('384件の候補があっても全選択・登録先・登録・閉じるは候補一覧より前にある',async()=>{
+ const tags=Array.from({length:384},(_,i)=>`候補${i+1}`), f=dialogFixture({tags});
+ const dialog=f.doc.querySelector('dialog'),list=f.doc.querySelector('[class="hikikomori-note-tag-candidates"]');
+ const select=f.doc.querySelector('select'),count=f.doc.querySelector('[aria-live="polite"]'),close=f.find('閉じる');
+ const all=f.find('すべてON'),save=f.find('選択した0件を登録');
+ assert.equal(dialog.children.at(-1),list);
+ for(const control of [select,count,close,all,save,f.doc.querySelector('[role="status"]')]) assert.equal(list.contains(control),false);
+ assert.equal(f.doc.activeElement,all);
+ all.onclick();assert.equal(count.textContent,'384 / 384件選択');
+ select.value='group2';select.onchange();await save.onclick();
+ assert.deepEqual(f.raw.tagGroups[1].tags,tags);
+ close.onclick();assert.equal(dialog.hidden,true);
 });
 test('ダイアログは連打を止め、結果不明では再確認まで再送せず、無効な保存先を選べない',async()=>{
  let release;const options={gate:new Promise(r=>release=r),unconfirmed:true},f=dialogFixture(options);
@@ -99,6 +151,32 @@ test('専用ホームは対象外モードでタグ登録支援を隠し、開�
   assert.equal(n.get('panel-discovery').hidden,false);
   assert.equal(n.get('tag-discovery-text').value,'[#茶道]');
  }
+});
+test('設定からタグとユーザーを同じグループに一括登録し、既存の名前とJSON形式を維持する',async()=>{
+ const initial=runtime().core.defaultSettings();
+ const savedUser={type:'user',userId:'Owner',displayName:'保存済み'};
+ initial.tagSchemaVersion=3;
+ initial.tagGroups[1].tags=['既存タグ',savedUser];
+ const f=homeFixture({state:initial,hash:'#discovery'});await flush();
+ const n=f.nodes,doc=f.document;
+ n.get('tag-discovery-text').value='[@new_user][#小説][@owner][@other_user]';
+ n.get('tag-discovery-check').onclick();
+ const dialog=doc.querySelector('[class="hikikomori-note-tag-dialog"]');
+ const candidates=dialog.querySelectorAll('[data-tag-candidate], [data-user-candidate]');
+ assert.deepEqual(candidates.map(button=>button.textContent),['＠new_user','#小説','＠owner','＠other_user']);
+ assert.ok(candidates.every(button=>button.getAttribute('aria-pressed')==='false'));
+ const select=dialog.querySelector('select');select.value='group2';select.onchange();
+ const button=text=>dialog.querySelectorAll('button').find(item=>item.textContent===text);
+ button('すべてON').onclick();
+ await button('選択した4件を登録').onclick({ctrlKey:true});
+ const expected=[{type:'user',userId:'new_user',displayName:''},'小説',{type:'user',userId:'other_user',displayName:''},'既存タグ',savedUser];
+ assert.deepEqual(f.state.tagGroups[1].tags,expected);
+ assert.deepEqual(f.state.tagGroups[0].tags,[]);
+ assert.match(dialog.querySelector('[role="status"]').textContent,/3件追加・1件登録済み/);
+ const core=f.c.HikikomoriNote;
+ assert.deepEqual(plain(core.parseSettingsExport(core.exportSettings(core.readSettings(f.state))).tagGroups[1].tags),expected);
+ await n.get('tag-discovery-copy').onclick();
+ assert.doesNotMatch(f.copies.at(-1),/new_user|other_user|Owner/);
 });
 function articleFixture(bulkAddTags=async()=>{throw Error('not used');}){
  const f=runtime(),doc=documentFromHtml('<link rel="canonical" href="https://note.com/test/n/n123"><article id="note-article"><div data-note-key="n123"><h1></h1><div id="note-body"><p></p><ul data-testid="hashtag-list"><li><a data-name="Tag" href="/hashtag/body" id="body-tag"></a></li></ul></div></div><div id="hashtag-accordion"><ul data-testid="hashtag-list" id="real-tags"><li><a data-name="Tag" href="/hashtag/AI" id="real-tag"></a></li></ul></div><section><a href="/hashtag/contest" id="contest"></a></section></article><aside><ul data-testid="hashtag-list"><li><a data-name="Tag" href="/hashtag/other"></a></li></ul></aside>');

@@ -35,7 +35,7 @@ port.onMessage((message, sender, respond) => {
     else if (message?.type === "select-tag-group") operation = controller.tag({ type: "SELECT_TAG_GROUP", groupId: message.patch?.groupId });
     else return false;
   } else {
-    if (!["bulk-add-tags", "menu-favorite-drop", "add-searched-user", "select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "add-current-article", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
+    if (!["bulk-add-tags", "menu-favorite-drop", "add-searched-user", "complete-favorite-user-name", "select-tag-group", "add-current-tag", "add-current-user", "add-current-magazine", "add-current-membership", "add-current-article", "current-author-operation"].includes(message?.type) || !port.isNoteSender?.(sender)) return false;
     operation = (async () => {
       if (message.type === "bulk-add-tags") {
         const patch = message.patch;
@@ -69,6 +69,16 @@ port.onMessage((message, sender, respond) => {
             const current = await port.currentMenuPage(sender, patch.pageUrl);
             return current?.type === "search" && globalThis.HikikomoriNote.searchedAuthor(patch.pageUrl)?.toLowerCase() === userId.toLowerCase();
           }
+        });
+      }
+      if (message.type === "complete-favorite-user-name") {
+        const patch = message.patch, userId = globalThis.HikikomoriNote.searchedAuthor(patch?.pageUrl);
+        const validateCurrent = async () => (await port.currentMenuPage(sender, patch.pageUrl))?.type === "search";
+        if (!patch || Object.keys(patch).some(key => !["pageUrl", "userId", "displayName"].includes(key)) ||
+            !userId || typeof patch.userId !== "string" || patch.userId.toLowerCase() !== userId.toLowerCase() ||
+            !await validateCurrent()) throw Object.assign(new Error("検索中の作者を確認できません。"), { code: "CONFLICT" });
+        return controller.tag({ type: "COMPLETE_USER_NAME", userId, displayName: patch.displayName }, {
+          requireEnabled: true, currentUser: userId, validateCurrent
         });
       }
       if (message.type === "add-current-article") {

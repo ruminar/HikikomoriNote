@@ -42,6 +42,8 @@ footer { font-size: 13px; color: var(--muted); margin-top: 24px; }
 .tag-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .tag-form label { width: 100%; margin-bottom: 0; }
 .tag-form input { flex: 1 1 220px; min-width: 0; }
+.group-name-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.group-copy { min-width: 44px; padding-inline: 8px; }
 .tag-editor { list-style: none; padding: 0 0 24px; min-height: 48px; }
 .tag-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .tag-row[draggable="true"] { cursor: grab; }

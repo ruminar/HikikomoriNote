@@ -39,8 +39,8 @@
         </section>
         <section id="panel-discovery" aria-labelledby="discovery-heading" hidden>
           <h2 id="discovery-heading">タグ登録支援</h2>
-          <label for="tag-discovery-text">タグ提案文</label>
-          <textarea id="tag-discovery-text" rows="8" placeholder="[#タグ名] や #タグ名 を含む提案文を貼り付けてください"></textarea>
+          <label for="tag-discovery-text">タグ提案文・ユーザーIDリスト</label>
+          <textarea id="tag-discovery-text" rows="8" placeholder="例  [#小説] [@example_user]"></textarea>
           <div class="settings-actions">
             <button type="button" id="tag-discovery-check">確認</button>
             <button type="button" id="tag-discovery-clear" class="secondary">クリア</button>
@@ -54,7 +54,11 @@
           <form id="group-name-form" class="tag-form">
             <label for="group-name">グループ名</label>
             <input id="group-name" type="text" autocomplete="off" disabled>
-            <button id="save-group-name" type="submit" disabled>名前を保存</button>
+            <div class="group-name-actions">
+              <button id="save-group-name" type="submit" disabled>名前を保存</button>
+              <button id="copy-group-tags" class="secondary group-copy" type="button" title="このグループのタグをコピー" aria-label="このグループのタグをコピー" disabled>＃</button>
+              <button id="copy-group-users" class="secondary group-copy" type="button" title="このグループのユーザをコピー" aria-label="このグループのユーザをコピー" disabled>＠</button>
+            </div>
           </form>
           <p class="muted">削除・移動・並べ替えは操作ごとに保存します。ドラッグ、または上下ボタンで並べ替えできます。項目を別のグループ番号へドロップすると移動、現在のグループ番号（ドラッグ中は🗑）へドロップすると削除します。</p>
           <div class="favorite-transfer-toolbar">

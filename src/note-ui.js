@@ -407,26 +407,35 @@
     let articleFollowing, articleActions, articleActionsKey, articleAdjacentState, articleMobile, articleRow;
     let articleAuthor, articleAuthorSearch, authorSignature;
     let questionFollowing, questionAuthor, questionSelf, questionAuthorSignature;
-    let searchAuthorInfo, searchAuthorDirty = true;
+    let searchAuthorInfo, searchAuthorDirty = true, favoriteNameAttempted = false;
     function searchAuthor(userId, settings) {
-      if (!searchAuthorDirty && searchAuthorInfo?.userId === userId.toLowerCase() && searchAuthorInfo.groups === settings.tagGroups) return searchAuthorInfo.value;
-      const favorite = settings.tagGroups.flatMap(group => group.tags).find(item => item?.type === "user" && item.userId.toLowerCase() === userId.toLowerCase());
-      let name = favorite?.displayName || "", image = "";
+      const userKey = userId.toLowerCase(), mode = core.modeOf(settings);
+      if (!searchAuthorDirty && searchAuthorInfo?.userId === userKey && searchAuthorInfo.groups === settings.tagGroups && searchAuthorInfo.mode === mode) return searchAuthorInfo.value;
+      const sameUser = item => item?.type === "user" && item.userId.toLowerCase() === userKey;
+      const favorite = settings.tagGroups.flatMap(group => group.tags).find(sameUser);
+      const needsName = actions.completeFavoriteUserName && core.availableGroups(settings).some(group => group.tags.some(item => sameUser(item) && !item.displayName));
+      let name = favorite?.displayName || "", image = "", observedName = "";
       for (const avatar of doc.querySelectorAll('a[data-name="avatar"]')) {
         if (avatar.closest(`[${owned}]`) || avatar.closest('[id="note-body"]')) continue;
-        try { if (core.authorId(avatar.href).toLowerCase() !== userId.toLowerCase()) continue; } catch { continue; }
+        try { if (core.authorId(avatar.href).toLowerCase() !== userKey) continue; } catch { continue; }
         const label = avatar.getAttribute("aria-label") || "", suffix = "のプロフィールへのリンク";
         if (label.endsWith(suffix)) {
-          try { name = core.authorName(label.slice(0, -suffix.length)) || name; } catch { /* 不明な表示名は保存済み名へ */ }
+          try {
+            const labelName = core.authorName(label.slice(0, -suffix.length));
+            if (labelName) {
+              name = labelName;
+              if (needsName && avatar.closest("main") && labelName.toLowerCase() !== userKey && labelName.toLowerCase() !== `@${userKey}`) observedName = labelName;
+            }
+          } catch { /* 不明な表示名は保存済み名へ */ }
         }
         try {
           const source = new URL(avatar.querySelector("img")?.getAttribute("src"));
           if (source.protocol === "https:" && source.hostname === "assets.st-note.com" && !source.username && !source.password) image = source.href;
         } catch { /* 確認できない画像は使わない */ }
-        if (name || image) break;
+        if (observedName || (!needsName && (name || image))) break;
       }
-      const value = { name, image };
-      searchAuthorInfo = { userId: userId.toLowerCase(), groups: settings.tagGroups, value }; searchAuthorDirty = false;
+      const value = { name, image, observedName };
+      searchAuthorInfo = { userId: userKey, mode, groups: settings.tagGroups, value }; searchAuthorDirty = false;
       return value;
     }
     let currentSettings, currentUrl, adding = false, uncertain = false, actionMessage = "", disposed = false;
@@ -2231,7 +2240,7 @@
       prepareSidebar(url, settings);
       if ((core.addableTag(currentUrl) !== core.addableTag(url) || core.searchedAuthor(currentUrl) !== core.searchedAuthor(url)) && !uncertain && !adding) actionMessage = "";
       if (currentUrl !== url || Boolean(currentSettings?.enabled) !== Boolean(settings.enabled)) followingLinksDirty = true;
-      if (currentUrl !== url || !settings.enabled) tagDialog?.close();
+      if (currentUrl !== url || !settings.enabled) { tagDialog?.close(); favoriteNameAttempted = false; }
       currentSettings = settings; currentUrl = url;
       tagDialog?.update(settings);
       if (menuFavoriteDrag && !menuFavoriteDragValid()) clearMenuFavoriteDrag();
@@ -2262,6 +2271,12 @@
       syncProfilePromotions(settings, url);
       if (core.isArticle(url) || core.isPreviewArticle(url)) { restore(); pruneProfileLayout(); return; }
       if (!settings.enabled || !page || core.membershipPage(url) || page.type === "magazine" || !(page.type === "profile" ? core.usesFollowing(settings) : core.modeOf(settings) !== "social")) { removeMobile(); restore(); pruneProfileLayout(); return; }
+      const activeAuthor = core.searchedAuthor(url);
+      const authorCard = core.usesTags(settings) && activeAuthor ? searchAuthor(activeAuthor, settings) : null;
+      if (authorCard?.observedName && !favoriteNameAttempted && !settings.tagWarning && !settings.groupSelectionInvalid) {
+        favoriteNameAttempted = true;
+        void actions.completeFavoriteUserName(activeAuthor, authorCard.observedName, url).catch(() => { /* 名前が取れなければ次の検索までID表示を保つ。 */ });
+      }
       const common = core.hasFavoriteMenu(url);
       const officialAside = common && (navigationSidebars(doc)[0] || [...doc.querySelectorAll("aside")].find(a => a.classList.contains("w-[11.375rem]") && a.classList.contains("sticky")));
       const compact = common && (officialAside ? !visible(officialAside) : win.matchMedia("(max-width: 1023px)").matches);
@@ -2276,8 +2291,6 @@
       const severe = core.modeOf(settings) === "severe";
       const group = severe ? null : core.selectedGroup(settings);
       const activeTag = selectedTag(page, url);
-      const activeAuthor = core.searchedAuthor(url);
-      const authorCard = !severe && activeAuthor ? searchAuthor(activeAuthor, settings) : null;
       const registeredAuthor = activeAuthor && group?.tags.some(item => core.favoriteKey(item) === `user:${activeAuthor.toLowerCase()}`);
       const menuFavoriteDropEnabled = common && Boolean(actions.menuFavoriteDrop);
       const nextSignature = JSON.stringify([page, activeTag, core.addableTag(url), activeAuthor, authorCard, core.modeOf(settings), settings.noteUserId, settings.tagGroups, settings.tagGroupsRevision, settings.selectedTagGroupId, settings.groupSelectionRevision, settings.groupSelectionInvalid, settings.noteLogoBrowserBack, settings.tagWarning, adding, uncertain, actionMessage]);

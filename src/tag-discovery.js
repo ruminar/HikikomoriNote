@@ -2,25 +2,41 @@
 (() => {
   "use strict";
   const core = globalThis.HikikomoriNote;
-  const emptyMessage = "タグ候補がありません。[#タグ名] の形式で入力してください。";
+  const emptyMessage = "候補がありません。[#タグ名] または [@ユーザーID] の形式で入力してください。";
+  const inputLimit = 1048576;
   function extract(text) {
-    if (typeof text !== "string" || text.length > 1048576) throw new Error("提案文は1,048,576文字以内で入力してください。");
+    if (typeof text !== "string" || text.length > inputLimit) throw new Error("提案文は1,048,576文字以内で入力してください。");
     // URL・コード・Markdownリンク先は候補ではない。見出しの # + 空白も拾わない。
     const mask = value => " ".repeat(value.length);
     const input = text.replace(/!?\[[^\]\n]*\]\([^\s)]*\)/g, mask)
       .replace(/(?:https?:\/\/|www\.)[^\s<>]+/gi, mask);
-    const matches = [], explicit = /\[#([^\]\r\n]+)\]/g;
+    const matches = [], explicit = /\[(#|@)([^\]\r\n]+)\]/g;
     // AIがコード枠で列挙した明示形式も読める。通常のコード中の # は推測しない。
-    for (const match of input.matchAll(explicit)) matches.push({ index: match.index, raw: match[1].trim() });
+    for (const match of input.matchAll(explicit)) matches.push({ index: match.index, kind: match[1], raw: match[2].trim() });
     const prose = input.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)/g, mask)
       .replace(/`[^`\n]*`/g, mask).replace(explicit, mask);
     const pattern = /(^|[\s\[（(「『【、。，,;；:：!?！？・])#([^\s#\[\]（）()「」『』【】、。，,;；:：!?！？<>`"'。]+)/gmu;
     for (const match of prose.matchAll(pattern)) matches.push({ index: match.index, raw: match[2] });
-    const tags = matches.sort((a, b) => a.index - b.index).flatMap(({ raw }) => {
+    const items = matches.sort((a, b) => a.index - b.index).flatMap(({ kind, raw }) => {
+      if (kind === "@") return /^[a-zA-Z0-9_]+$/.test(raw) ? [{ type: "user", userId: raw, displayName: "" }] : [];
       const tag = raw.replace(/^[（(「『【]+|[）)」』】]+$/g, "").trim();
       return tag && !/^[#@&]/.test(tag) && !/[<>]/.test(tag) ? [tag] : [];
     });
-    return core.normalizeTagCandidates(tags);
+    return core.bulkFavoriteCandidates(items);
+  }
+  function shareList(items, type) {
+    const lines = [];
+    let length = 0, skipped = 0;
+    for (const item of items) {
+      if ((typeof item === "string" ? "tag" : item.type) !== type) continue;
+      const line = type === "tag" ? `[#${item}]` : `[@${item.userId}]`;
+      const nextLength = length + line.length + (lines.length ? 1 : 0);
+      // 貼り戻したときに別のタグとして読まれる表記をコピーしない。
+      const parsed = type === "tag" && nextLength <= inputLimit ? extract(line) : null;
+      if (nextLength > inputLimit || (parsed && (parsed.length !== 1 || parsed[0] !== item))) { skipped++; continue; }
+      lines.push(line); length = nextLength;
+    }
+    return { text: lines.join("\n"), count: lines.length, skipped };
   }
   function prompt(settings) {
     const tags = core.normalizeTagCandidates(settings.tagGroups.flatMap(group => group.tags.filter(item => typeof item === "string")));
@@ -82,11 +98,11 @@
     for (const button of [all, none, save, close, refresh]) button.type = "button";
     all.textContent = "すべてON"; none.textContent = "すべてOFF"; close.textContent = "閉じる"; refresh.textContent = "状態を再確認"; refresh.hidden = true;
     save.setAttribute("title", "CtrlまたはShift＋クリックで先頭に追加");
-    tools.append(all, none);
+    tools.append(all, none, count);
     const label = doc.createElement("label"), select = doc.createElement("select");
     label.textContent = "登録先グループ"; select.setAttribute("aria-label", "タグの一括登録先グループ"); label.append(select);
     const controls = doc.createElement("div"); controls.className = "hikikomori-note-tag-tools"; controls.append(save, close, refresh);
-    dialog.append(title, tools, list, count, label, status, controls);
+    dialog.append(title, tools, label, controls, status, list);
     let state, selected = new Set(), candidates = [], busy = false, uncertain = false, opened = false, focusBefore, generation = 0, groupSignature;
     function update(value) {
       state = value;
@@ -103,12 +119,12 @@
       }
       const blocked = busy || uncertain || !state || !core.usesTags(state) || Boolean(state.tagWarning) || Boolean(state.groupSelectionInvalid);
       const group = groups.find(group => group.id === select.value);
-      const registered = new Set(group?.tags.filter(item => typeof item === "string") || []);
-      for (const button of list.children) {
-        const tag = button.getAttribute("data-tag-candidate");
-        button.setAttribute("aria-pressed", String(selected.has(tag))); button.disabled = blocked;
-        button.setAttribute("title", registered.has(tag) ? "登録済み（再登録はしません）" : `#${tag}`);
-      }
+      const registered = new Set(group?.tags.map(core.favoriteKey) || []);
+      candidates.forEach((item, index) => {
+        const button = list.children[index];
+        button.setAttribute("aria-pressed", String(selected.has(item))); button.disabled = blocked;
+        button.setAttribute("title", registered.has(core.favoriteKey(item)) ? "登録済み（再登録はしません）" : button.textContent);
+      });
       count.textContent = `${selected.size} / ${candidates.length}件選択`;
       save.textContent = `選択した${selected.size}件を登録`;
       save.disabled = blocked || !group || !selected.size;
@@ -139,10 +155,10 @@
     save.onclick = async event => {
       if (save.disabled || !opened) return;
       const position = core.favoriteClickPosition(event);
-      const tags = candidates.filter(tag => selected.has(tag)), groupId = select.value, before = generation;
+      const items = candidates.filter(item => selected.has(item)), groupId = select.value, before = generation;
       busy = true; status.textContent = "保存中…"; update(state);
       try {
-        const result = await actions.save(groupId, tags, position);
+        const result = await actions.save(groupId, items, position);
         actions.onSaved?.(result);
         if (before !== generation) return;
         const report = result.bulkTagReport;
@@ -157,22 +173,31 @@
       } finally { busy = false; if (before === generation) update(state); }
     };
     return Object.freeze({
-      open(tags, value) {
+      open(items, value) {
         if (busy || !core.usesTags(value)) return false;
-        candidates = core.normalizeTagCandidates(tags);
-        if (!candidates.length) return false;
+        const normalized = core.bulkFavoriteCandidates(items);
+        if (!normalized.length) return false;
+        candidates = normalized;
+        const includesUsers = candidates.some(item => typeof item !== "string");
+        title.textContent = includesUsers ? "タグ・ユーザーをまとめて登録" : "タグをまとめて登録";
+        dialog.setAttribute("aria-label", title.textContent);
+        list.setAttribute("aria-label", includesUsers ? "登録するタグ・ユーザー候補" : "登録するタグ候補");
+        select.setAttribute("aria-label", includesUsers ? "タグ・ユーザーの一括登録先グループ" : "タグの一括登録先グループ");
         if (!dialog.isConnected) (doc.body || doc.root).append(dialog);
         generation++; selected.clear(); refresh.hidden = !uncertain || !actions.refresh; status.textContent = uncertain ? "保存結果を確認できません。状態を再確認してください。" : ""; groupSignature = undefined;
         list.replaceChildren();
-        for (const tag of candidates) {
-          const button = doc.createElement("button"); button.type = "button"; button.textContent = `#${tag}`; button.setAttribute("data-tag-candidate", tag);
-          button.onclick = () => { if (button.disabled) return; if (selected.has(tag)) selected.delete(tag); else selected.add(tag); update(state); }; list.append(button);
+        for (const item of candidates) {
+          const button = doc.createElement("button"); button.type = "button";
+          if (typeof item === "string") { button.textContent = `#${item}`; button.setAttribute("data-tag-candidate", item); }
+          else { button.textContent = core.favoriteLabel(item); button.setAttribute("data-user-candidate", item.userId); }
+          button.onclick = () => { if (button.disabled) return; if (selected.has(item)) selected.delete(item); else selected.add(item); update(state); }; list.append(button);
         }
         update(value);
         if (core.availableGroups(value).some(group => group.id === value.selectedTagGroupId)) select.value = value.selectedTagGroupId;
         update(value); focusBefore = doc.activeElement; opened = true; dialog.hidden = false;
         if (typeof dialog.showModal === "function") { if (!dialog.open) dialog.showModal(); } else dialog.setAttribute("open", "");
-        (list.children[0] || close).focus(); return true;
+        list.scrollTop = 0; dialog.scrollTop = 0;
+        (all.disabled ? close : all).focus(); return true;
       },
       update(value) {
         if (!opened) return;
@@ -183,5 +208,5 @@
       dispose() { finish(true); dialog.remove(); }
     });
   }
-  globalThis.HikikomoriNoteTagDiscovery = Object.freeze({ extract, prompt, articleTags, createDialog, emptyMessage });
+  globalThis.HikikomoriNoteTagDiscovery = Object.freeze({ extract, shareList, prompt, articleTags, createDialog, emptyMessage });
 })();

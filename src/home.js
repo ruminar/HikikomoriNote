@@ -6,11 +6,11 @@
   const views = ["settings", "tags", "discovery", "authors", "transfer"];
   const discovery = globalThis.HikikomoriNoteTagDiscovery;
   const tagDialog = discovery?.createDialog(document, {
-    async save(groupId, tags, position) {
+    async save(groupId, items, position) {
       if (busy || uncertain) throw new Error("状態を再確認してから登録してください。");
       busy = true; controls(); const before = revision;
       try {
-        const result = await platform.bulkAddTags(groupId, tags, undefined, position);
+        const result = await platform.tag({ type: "ADD_FAVORITES", groupId, items, position });
         if (before === revision) show(result);
         return { ...state, bulkTagReport: result.bulkTagReport };
       } finally { busy = false; controls(); }
@@ -27,7 +27,7 @@
   const drafts = new Map();
   function draft(id) { if (!drafts.has(id)) drafts.set(id, { name: "", nameDirty: false, expectedName: "" }); return drafts.get(id); }
   const dirty = new Set();
-  let copying = false, copyingPrompt = false, parsedImport;
+  let copying = false, copyingPrompt = false, copyingFavorites = false, parsedImport;
   function renderImportReport(report, applied = false) {
     const lines = [`${applied ? "適用した項目" : "適用予定の項目"}（${report.applied.length}件）：`, ...report.applied.map(path => `・${path}`),
       `無視した項目（${report.ignored.length}件）：`, ...report.ignored.map(item => `・${item.path}：${item.reason}`)];
@@ -124,7 +124,10 @@
     for (const id of ["normal", "save"]) byId(id).disabled = blocked;
     for (const id of Object.values(fields)) byId(id).disabled = !state || uncertain || (busy && ["settings", "import"].includes(pendingState));
     byId("favorite-destination").disabled = tagBlocked;
-    byId("clear-favorite-group").disabled = tagBlocked || !core.selectedGroup(state).tags.length;
+    const items = tagBlocked ? [] : core.selectedGroup(state).tags;
+    byId("clear-favorite-group").disabled = !items.length;
+    byId("copy-group-tags").disabled = copyingFavorites || !discovery || !items.some(item => typeof item === "string");
+    byId("copy-group-users").disabled = copyingFavorites || !discovery || !items.some(item => item?.type === "user");
     byId("group-name").disabled = !state || uncertain || !core.usesTags(state) || Boolean(state.tagWarning) || (busy && pendingState === "import");
     byId("save-group-name").disabled = tagBlocked;
     for (const id of ["edit-groups"]) byId(id).querySelectorAll("button").forEach(button => { button.disabled = blocked || (state && !core.usesTags(state)) || Boolean(state?.tagWarning); });
@@ -436,6 +439,24 @@
     event.preventDefault(); const group = core.selectedGroup(state), value = draft(group.id);
     void perform(() => platform.tag({ type: "RENAME_TAG_GROUP", groupId: group.id, name: byId("group-name").value, expectedName: value.nameDirty ? value.expectedName : group.name }), { rename: { groupId: group.id, name: value.name } });
   };
+  async function copyGroupList(button, type, label) {
+    if (button.disabled) return;
+    const group = core.selectedGroup(state);
+    const { text, count, skipped } = discovery.shareList(group.tags, type);
+    const status = byId("favorite-operation-status");
+    if (!count) { status.textContent = `${label}${skipped}件を共有形式にできませんでした。`; return; }
+    copyingFavorites = true; controls();
+    let message;
+    try {
+      await navigator.clipboard.writeText(text);
+      message = `${label}を${count}件クリップボードにコピーしました。${skipped ? `共有形式にできなかった${skipped}件は省きました。` : ""}`;
+    } catch { message = `${label}をコピーできませんでした。`; }
+    finally { copyingFavorites = false; controls(); }
+    if (core.selectedGroup(state)?.id === group.id) status.textContent = message;
+  }
+  const copyGroupTags = byId("copy-group-tags"), copyGroupUsers = byId("copy-group-users");
+  copyGroupTags.onclick = () => copyGroupList(copyGroupTags, "tag", "タグ");
+  copyGroupUsers.onclick = () => copyGroupList(copyGroupUsers, "user", "ユーザーID");
   for (const name of views) byId(`nav-${name}`).onclick = () => selectView(name);
   byId("home-menu").onkeydown = event => {
     const visible = !state ? ["settings"] : !core.usesTags(state) ? ["settings", "authors", "transfer"] : views;
@@ -498,9 +519,9 @@
   byId("tag-discovery-check").onclick = () => {
     if (byId("tag-discovery-check").disabled) return;
     try {
-      const tags = discovery.extract(byId("tag-discovery-text").value);
-      byId("tag-discovery-status").textContent = tags.length ? "" : discovery.emptyMessage;
-      if (tags.length) tagDialog.open(tags, state);
+      const items = discovery.extract(byId("tag-discovery-text").value);
+      byId("tag-discovery-status").textContent = items.length ? "" : discovery.emptyMessage;
+      if (items.length) tagDialog.open(items, state);
     } catch (error) { byId("tag-discovery-status").textContent = error.message; }
   };
   byId("tag-discovery-clear").onclick = () => {

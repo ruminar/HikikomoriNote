@@ -50,6 +50,10 @@
       const value = await platform.addSearchedUser(groupId, selectionRevision, userId, displayName, position);
       if (!stopped && revision === before) { settings = readView(value); checkHome(); }
     },
+    async completeFavoriteUserName(userId, displayName, pageUrl) {
+      const before = revision, value = await platform.completeFavoriteUserName(userId, displayName, pageUrl);
+      if (!stopped && revision === before) { settings = readView(value); checkHome(); }
+    },
     async setAuthor(operation, source) {
       const before = revision;
       const value = await platform.currentAuthor(operation, source);
